@@ -3,13 +3,13 @@ name: Push esp_secure_cert_mgr to Espressif Component Service
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   upload_components:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v2
 
       - name: Upload esp_secure_cert_mgr to component service
         uses: espressif/github-actions/upload_components@master
