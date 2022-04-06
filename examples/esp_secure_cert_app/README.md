@@ -1,4 +1,4 @@
-# ESP secure certificate sample app
+# ESP Secure Certificate Application
 
 The sample app demonstrates the use of APIs from *esp_secure_cert_mgr* to retrieve the contents of the *esp_secure_cert* partition. The example can also be used to verify the validity of the contents from the *esp_secure_cert* partition.
 
@@ -69,7 +69,7 @@ I (581) sample_app: Successfully obtained the ds context
 I (831) sample_app: Ciphertext validated succcessfully
 ```
 
-## Addional configurations for `pre_prov` partition
+## Additional configurations for `pre_prov` partition
 Few of the modules which were pre-provisioned initially had the name of the pre-provisioning partition as `pre_prov`. For the modules which have pre-provisioning partition of name `esp_secure_cert` this part can be ignored.
 For modules with the `pre_prov` partition of type *cust_flash* the configuration remain the same as the `esp_secure_cert` partition which is listed above.
 
