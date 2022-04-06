@@ -1,0 +1,6 @@
+version: "1.0.0"
+description: "ESP Secure Cert manager"
+url: https://github.com/espressif/esp_secure_cert_mgr
+dependencies:
+  idf:
+    version: ">=4.3"
