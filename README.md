@@ -11,7 +11,7 @@ With the Espressif Pre-Provisioning Service, the ESP modules are pre-provisioned
 When a device is pre-provisioned that means the PKI credentials are generated for the device. The PKI credentials are then stored in a partition named
 *esp_secure_cert*.
 
-In future, It should also be possible to generate the `esp_secure_cert` partition through the [configure_ds.py](https://github.com/espressif/esp-idf/blob/master/examples/protocols/mqtt/ssl_ds/configure_ds.py) script present in the ESP-IDF.
+The `esp_secure_cert` partition can be generated on host with help of [configure_ds.py](./tools/configure_ds.py) utility, more details about the utility can be found in the [tools/README](./tools/README.md).
 
 For esp devices that support DS peripheral, the pre-provisioning is done by leveraging the security benefit of the DS peripheral. In that case, all of the data which is present in the *esp_secure_cert* partition is completely secure.
 
@@ -28,7 +28,7 @@ The `esp_secure_cert` partition can be of two types:
 
 
 ## How to use the `esp_secure_cert_mgr` in your project ?
-The *esp_secure_cert_mgr* provides the set of APIs that are required to access the contents of the `esp_secure_cert` partition. The information on using the *esp_secure_cert_mgr* component with help of the IDF component manager for your project can be found at [Using with a project](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/tools/idf-component-manager.html#using-with-a-project). A demo example has also been provided with the `esp_secure_cert_mgr`, more details can be found out in the [example README](examples/esp_secure_cert_app/README.md).
+The *esp_secure_cert_mgr* provides the set of APIs that are required to access the contents of the `esp_secure_cert` partition. The information on using the *esp_secure_cert_mgr* component with help of the IDF component manager for your project can be found at [Using with a project](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/tools/idf-component-manager.html#using-with-a-project). A demo example has also been provided with the `esp_secure_cert_mgr`, more details can be found out in the [example README](./examples/esp_secure_cert_app/README.md).
 
 To use *esp_secure_cert_mgr* in a project, some configurations related to the type of *esp_secure_cert* partition need to be done. The instruction to configure the project for two types of *esp_secure_cert* are given below.
 
