@@ -20,8 +20,10 @@
 #include "mbedtls/pk.h"
 #include "mbedtls/x509.h"
 #include "mbedtls/error.h"
+#include "esp_idf_version.h"
 
 #define TAG "esp_secure_cert_app"
+
 
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned char *dev_cert, size_t dev_cert_len)
@@ -49,7 +51,12 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         ESP_LOGE(TAG, "Failed to allocate memory for signature");
         goto exit;
     }
+
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+    ret = esp_ds_rsa_sign(NULL, NULL, NULL, 0, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
+#else
     ret = esp_ds_rsa_sign(NULL, NULL, NULL, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
+#endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %02X", ret);
         goto exit;
