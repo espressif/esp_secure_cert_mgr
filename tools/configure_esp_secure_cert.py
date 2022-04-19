@@ -160,8 +160,8 @@ ciphertext_size = {'esp32s2':1600,'esp32s3':1600,'esp32c3':1216}
 
 # @info
 #       This function generates the cust_flash partition of
-#       the encrypted private key parameters.
-def generate_cust_flash_partition(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, idf_target, op_file):
+#       the encrypted private key parameters when DS is enabled.
+def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, idf_target, op_file):
     # Following offsets have been calculated with help of esp_secure_cert_config.h
     METADATA_OFFSET = 0
     DEV_CERT_OFFSET = METADATA_OFFSET + 64
@@ -234,11 +234,98 @@ def generate_cust_flash_partition(c, iv, hmac_key_id, key_size, device_cert, ca_
         output_file.write(output_file_data)
         output_file.close()
 
+# @info
+#       This function generates the cust_flash partition of
+#       the encrypted private key parameters when DS is disabled.
+def generate_cust_flash_partition_no_ds(device_cert, ca_cert, cs_cert, priv_key, priv_key_pass, idf_target, op_file):
+    # Following offsets have been calculated with help of esp_secure_cert_config.h
+    METADATA_OFFSET = 0
+    DEV_CERT_OFFSET = METADATA_OFFSET + 64
+    CA_CERT_OFFSET = DEV_CERT_OFFSET + 2048
+    CS_CERT_OFFSET = CA_CERT_OFFSET + 4096
+    PRIV_KEY_OFFSET = CS_CERT_OFFSET + 2048
+
+    # cust_flash partition is of size 0x6000 i.e. 24576
+    with open(op_file, 'wb') as output_file:
+        output_file_data = bytearray(b'\xff' * 24576)
+        metadata = b'\x00'
+        with open(device_cert, 'rb') as cli_cert:
+            dev_cert = cli_cert.read()
+            # Write device cert at specific address
+            dev_cert = dev_cert + b'\0'
+            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET + len(dev_cert)] = dev_cert
+            # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
+            # The value `0xffffffff` corresponds to the starting value used at the time of calculation
+            metadata = struct.pack('<IH', zlib.crc32(dev_cert, 0xffffffff), len(dev_cert))
+            # Align to 32 bit, this is done to match the same operation done by the compiler
+            metadata = metadata + b'\x00' * 2
+
+        if ca_cert is not None:
+            with open(ca_cert, 'rb') as ca_cert:
+                ca_cert = ca_cert.read()
+                # Write ca cert at specific address
+                ca_cert = ca_cert + b'\0'
+                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET + len(ca_cert)] = ca_cert
+                metadata = metadata + struct.pack('<IH', zlib.crc32(ca_cert, 0xffffffff), len(ca_cert))
+        else:
+            output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
+            metadata = metadata + struct.pack('<IH', 0,0)
+
+        # Align to 32 bit
+        metadata = metadata + b'\x00' * 2
+
+        if cs_cert is not None:
+            with open(cs_cert, 'rb') as cs_cert:
+                cs_cert = cs_cert.read()
+                # Write cs cert at specific address
+                cs_cert = cs_cert + b'\0'
+                output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET + len(cs_cert)] = cs_cert
+                metadata = metadata + struct.pack('<IH', zlib.crc32(cs_cert, 0xffffffff), len(cs_cert))
+        else:
+            output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET] = b'\x00'
+            metadata = metadata + struct.pack('<IH', 0,0)
+
+        # Align to 32 bit
+        metadata = metadata + b'\x00' * 2
+
+        with open(priv_key, 'rb') as priv_key:
+            priv_key = priv_key.read()
+            # Write device cert at specific address
+            priv_key = priv_key + b'\0'
+            output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(priv_key)] = priv_key
+            # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
+            # The value `0xffffffff` corresponds to the starting value used at the time of calculation
+            metadata = metadata + struct.pack('<IH', zlib.crc32(priv_key, 0xffffffff), len(priv_key))
+            # Align to 32 bit, this is done to match the same operation done by the compiler
+            metadata = metadata + b'\x00' * 2
+
+        # private_key = load_privatekey(priv_key, priv_key_pass)
+
+        # private_key_pem = private_key.private_bytes(
+        #     encoding=serialization.Encoding.PEM,
+        #     format=serialization.PrivateFormat.TraditionalOpenSSL,
+        #     encryption_algorithm=serialization.NoEncryption())
+
+        
+        # # Write private key at specific address
+        # private_key_pem = private_key_pem + b'\0'
+        # output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(private_key_pem)] = private_key_pem
+        # metadata = struct.pack('<IH', zlib.crc32(private_key_pem, 0xffffffff), len(private_key_pem))
+        # # Align to 32 bit, this is done to match the same operation done by the compiler
+        # metadata = metadata + b'\x00' * 2
+
+        metadata = metadata + struct.pack('<I', 0x12345678)
+
+        # Add metadata to the binary
+        output_file_data[METADATA_OFFSET: METADATA_OFFSET + 64] = b'\x00' * 64
+        output_file_data[METADATA_OFFSET: METADATA_OFFSET + len(metadata)] = metadata
+        output_file.write(output_file_data)
+        output_file.close()
 
 # @info
-#       Generate a custom csv file of encrypted private key parameters.
+#       Generate a custom csv file of encrypted private key parameters when DS is enabled.
 #       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
-def generate_csv_file(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, csv_file):
+def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, csv_file):
 
     with open(csv_file, 'wt', encoding='utf8') as f:
         f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
@@ -254,6 +341,29 @@ def generate_csv_file(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cer
         f.write('ds_key_id,data,u8,{}\n'.format(hmac_key_id))
         f.write('iv,data,hex2bin,{}\n'.format(iv.hex()))
 
+# @info
+#       Generate a custom csv file of encrypted private key parameters when DS is disabled.
+#       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
+def generate_csv_file_no_ds(device_cert, ca_cert, cs_cert, priv_key, priv_key_pass, csv_file):
+
+    with open(csv_file, 'wt', encoding='utf8') as f:
+        f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
+        f.write('key,type,encoding,value\nesp_secure_cert,namespace,,\n')
+
+        if ca_cert is not None:
+            f.write('ca_cert,file,string,{}\n'.format(ca_cert))
+        if cs_cert is not None:
+            f.write('cs_cert,file,string,{}\n'.format(ca_cert))
+        f.write('dev_cert,file,string,{}\n'.format(device_cert))
+
+        private_key = load_privatekey(priv_key, priv_key_pass)
+
+        private_key_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption())
+
+        f.write('priv_key,data,string,{}\n'.format(private_key_pem.decode()))
 
 class DefineArgs(object):
     def __init__(self, attributes):
@@ -439,6 +549,11 @@ def main():
         help='Provide this option to print efuse summary of the chip')
 
     parser.add_argument(
+        '--configure_ds',
+        dest='configure_ds',action='store_true',
+        help='Provide this option to configure the DS peripheral.')
+
+    parser.add_argument(
         '--efuse_key_id',
         dest='efuse_key_id', type=int, choices=range(1,6),
         metavar='[key_id] ',
@@ -486,15 +601,6 @@ def main():
     if (os.path.exists(esp_ds_data_dir) is False):
         os.makedirs(esp_ds_data_dir)
 
-    # Burn hmac_key on the efuse block (if it is empty) or read it
-    # from the efuse block (if the efuse block already contains a key).
-    hmac_key_read = configure_efuse_key_block(args, idf_target)
-    if hmac_key_read is None:
-        sys.exit(-1)
-
-    # Calculate the encrypted private key data along with all other parameters
-    c, iv, key_size = calculate_ds_parameters(args.privkey, args.priv_key_pass, hmac_key_read, idf_target)
-
     # Provide CA cert path only if it exists
     ca_cert = None
     if (os.path.exists(args.ca_cert) is True):
@@ -504,11 +610,33 @@ def main():
     if (os.path.exists(args.cs_cert) is True):
         cs_cert = args.cs_cert
 
+    c = None
+    iv = None
+    key_size = None
+
+    if args.configure_ds is not False:
+        # Burn hmac_key on the efuse block (if it is empty) or read it
+        # from the efuse block (if the efuse block already contains a key).
+        hmac_key_read = configure_efuse_key_block(args, idf_target)
+        if hmac_key_read is None:
+            sys.exit(-1)
+
+        # Calculate the encrypted private key data along with all other parameters
+        c, iv, key_size = calculate_ds_parameters(args.privkey, args.priv_key_pass, hmac_key_read, idf_target)
+    else:
+        print("--configure_ds option not set. Configuring without use of DS peripheral.")
+        
     if args.sec_cert_type == 'cust_flash':
-        generate_cust_flash_partition(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, idf_target, bin_filename)
+        if args.configure_ds is not False:
+            generate_cust_flash_partition_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, idf_target, bin_filename)
+        else:
+            generate_cust_flash_partition_no_ds(args.device_cert, ca_cert, cs_cert, args.privkey, args.priv_key_pass, idf_target, bin_filename)
     elif args.sec_cert_type == 'nvs':
         # Generate csv file for the DS data and generate an NVS partition.
-        generate_csv_file(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, csv_filename)
+        if args.configure_ds is not False:
+            generate_csv_file_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, csv_filename)
+        else:
+            generate_csv_file_no_ds(args.device_cert, ca_cert, cs_cert, args.privkey, args.priv_key_pass, csv_filename)
         generate_nvs_partition(csv_filename, bin_filename)
 
     cleanup(args)
