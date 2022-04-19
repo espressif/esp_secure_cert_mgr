@@ -27,20 +27,20 @@ openssl x509 -req -days 365 -in client.csr -CA cacert.pem -CAkey prvtkey.pem  -s
 
 # Generate `esp_secure_cert` partition
 Following commands can be used to configure the DS peripheral and generate the `esp_secure_cert` partition.
-The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
+The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions. Remove the `--configure_ds` argument from these commands if use of the DS peripheral is disabled in the menu config.
 
 1. Generate `esp_secure_cert` partition of type `cust_flash`:
 
 ```
-python configure_ds.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash
+python configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash --configure_ds
 ```
 
 2. Generate `esp_secure_cert` partition of type `nvs`:
 ```
-python configure_ds.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type nvs
+python configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type nvs --configure_ds
 ```
 
-> The help menu for the utility can be found at `python configure_ds.py --help`
+> The help menu for the utility can be found at `python configure_esp_secure_cert.py --help`
 
 # Flash the `esp_secure_cert` partition
 The `esp_secure_cert` partition can be flashed with help of following command:
