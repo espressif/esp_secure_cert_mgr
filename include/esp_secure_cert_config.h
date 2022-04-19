@@ -14,6 +14,7 @@
 #define ESP_SECURE_CERT_PKEY_MAGIC_BYTE        0xC1   /* Magic byte of the generated private key */
 #define ESP_SECURE_CERT_DEV_CERT_MAGIC_BYTE    0xC2   /* Magic byte of the generated device certificate */
 #define ESP_SECURE_CERT_CA_CERT_MAGIC_BYTE     0xC3   /* Magic byte of the CA certificate */
+#define ESP_SECURE_CERT_CS_CERT_MAGIC_BYTE     0xC4   /* Magic byte of the generated code signing certificate */
 
 #ifdef CONFIG_ESP_SECURE_CERT_NVS_PARTITION
 /* NVS Config */
@@ -23,6 +24,7 @@
 #define ESP_SECURE_CERT_PRIV_KEY            "priv_key"
 #define ESP_SECURE_CERT_DEV_CERT            "dev_cert"
 #define ESP_SECURE_CERT_CA_CERT             "ca_cert"
+#define ESP_SECURE_CERT_CS_CERT             "cs_cert"
 #define ESP_SECURE_CERT_NAMESPACE           CONFIG_ESP_SECURE_CERT_PARTITION_NAME
 
 #define ESP_SECURE_CERT_CIPHERTEXT          "cipher_c"
@@ -35,6 +37,7 @@
 
 #define ESP_SECURE_CERT_DEV_CERT_SIZE                  2048
 #define ESP_SECURE_CERT_CA_CERT_SIZE                   4096
+#define ESP_SECURE_CERT_CS_CERT_SIZE                   2048
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 #define ESP_SECURE_CERT_PRIV_KEY_SIZE                  4096
 #else
@@ -45,11 +48,12 @@
 #define ESP_SECURE_CERT_METADATA_OFFSET                0           /* 32 bytes are reserved for the metadata (Must be a multiple of 32)*/
 #define ESP_SECURE_CERT_DEV_CERT_OFFSET                (ESP_SECURE_CERT_METADATA_OFFSET + ESP_SECURE_CERT_METADATA_SIZE)
 #define ESP_SECURE_CERT_CA_CERT_OFFSET                 (ESP_SECURE_CERT_DEV_CERT_OFFSET + ESP_SECURE_CERT_DEV_CERT_SIZE)
+#define ESP_SECURE_CERT_CS_CERT_OFFSET                 (ESP_SECURE_CERT_CA_CERT_OFFSET + ESP_SECURE_CERT_CA_CERT_SIZE)
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
-#define ESP_SECURE_CERT_PRIV_KEY_OFFSET                (ESP_SECURE_CERT_CA_CERT_OFFSET + ESP_SECURE_CERT_CA_CERT_SIZE)
+#define ESP_SECURE_CERT_PRIV_KEY_OFFSET                (ESP_SECURE_CERT_CS_CERT_OFFSET + ESP_SECURE_CERT_CS_CERT_SIZE)
 #define ESP_SECURE_CERT_MAX_SIZE                       (ESP_SECURE_CERT_PRIV_KEY_OFFSET + ESP_SECURE_CERT_PRIV_KEY_SIZE)
 #else
-#define ESP_SECURE_CERT_CIPHERTEXT_OFFSET              (ESP_SECURE_CERT_CA_CERT_OFFSET + ESP_SECURE_CERT_CA_CERT_SIZE)
+#define ESP_SECURE_CERT_CIPHERTEXT_OFFSET              (ESP_SECURE_CERT_CS_CERT_OFFSET + ESP_SECURE_CERT_CS_CERT_SIZE)
 #define ESP_SECURE_CERT_IV_OFFSET                      (ESP_SECURE_CERT_CIPHERTEXT_OFFSET + ESP_SECURE_CERT_CIPHERTEXT_SIZE)
 #define ESP_SECURE_CERT_MAX_SIZE                       (ESP_SECURE_CERT_IV_OFFSET + ESP_SECURE_CERT_IV_SIZE)
 #endif
@@ -64,6 +68,8 @@ typedef struct {
     uint16_t dev_cert_len;                          /* The actual length of the device cert */
     uint32_t ca_cert_crc;                           /* CRC of the ca cert data */
     uint16_t ca_cert_len;                           /* The actual length of the ca cert [The length before the 32 byte alignment] */
+    uint32_t cs_cert_crc;                           /* CRC of the cs cert data */
+    uint16_t cs_cert_len;                           /* The actual length of the cs cert [The length before the 32 byte alignment] */
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
     uint32_t priv_key_crc;                          /* CRC of the priv key data */
     uint16_t priv_key_len;                          /* The actual length of the private key */

@@ -73,6 +73,11 @@ esp_err_t esp_secure_cert_get_ca_cert(char *buffer, uint32_t *len)
     return nvs_get(ESP_SECURE_CERT_NAMESPACE, ESP_SECURE_CERT_CA_CERT, buffer, (size_t *)len, NVS_STR);
 }
 
+esp_err_t esp_secure_cert_get_cs_cert(char *buffer, uint32_t *len)
+{
+    return nvs_get(ESP_SECURE_CERT_NAMESPACE, ESP_SECURE_CERT_CS_CERT, buffer, (size_t *)len, NVS_STR);
+}
+
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 esp_err_t esp_secure_cert_get_ciphertext(char *buffer, uint32_t *len)
 {
@@ -157,6 +162,10 @@ static esp_err_t esp_secure_cert_read_metadata(esp_secure_cert_metadata *metadat
     case ESP_SECURE_CERT_CA_CERT_OFFSET:
         *data_len = metadata->ca_cert_len;
         *data_crc = metadata->ca_cert_crc;
+        break;
+    case ESP_SECURE_CERT_CS_CERT_OFFSET:
+        *data_len = metadata->cs_cert_len;
+        *data_crc = metadata->cs_cert_crc;
         break;
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
     case ESP_SECURE_CERT_PRIV_KEY_OFFSET:
@@ -294,6 +303,11 @@ esp_err_t esp_secure_cert_get_ca_cert(unsigned char *buffer, uint32_t *len)
 esp_err_t esp_secure_cert_get_ca_cert_addr(const void **buffer, uint32_t *len)
 {
     return esp_secure_cert_get_addr(ESP_SECURE_CERT_CA_CERT_OFFSET, buffer, len);
+}
+
+esp_err_t esp_secure_cert_get_cs_cert_addr(const void **buffer, uint32_t *len)
+{
+    return esp_secure_cert_get_addr(ESP_SECURE_CERT_CS_CERT_OFFSET, buffer, len);
 }
 
 

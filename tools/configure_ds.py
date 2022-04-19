@@ -17,10 +17,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.utils import int_to_bytes
 
+
+idf_path = os.getenv('IDF_PATH')
+
 try:
     import nvs_partition_gen as nvs_gen
 except ImportError:
-    idf_path = os.getenv('IDF_PATH')
     if not idf_path or not os.path.exists(idf_path):
         raise Exception('IDF_PATH not found')
     sys.path.insert(0, os.path.join(idf_path, 'components', 'nvs_flash', 'nvs_partition_generator'))
@@ -134,13 +136,7 @@ def calculate_ds_parameters(privkey, priv_key_pass, hmac_key, idf_target):
 # @info
 #       The function makes use of the "espefuse.py" script to read the efuse summary
 def efuse_summary(args, idf_target):
-    output = None
-    try:
-        output = subprocess.check_output(('python $IDF_PATH/components/esptool_py/esptool/espefuse.py'
-                                          '--chip {0} -p {1} summary'.format(idf_target, (args.port))), shell=True)
-    except subprocess.CalledProcessError as e:
-        print((e.output).decode('UTF-8'))
-        sys.exit(-1)
+    os.system('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} summary'.format((idf_path), (idf_target), (args.port)))
 
 # @info
 #       The function makes use of the "espefuse.py" script to burn the HMAC key on the efuse.
@@ -153,15 +149,9 @@ def efuse_burn_key(args, idf_target):
         # read protection will be enabled as the default behaviour of the command
         key_block_status = ' '
 
-    output = None
-    try:
-        output = subprocess.check_output(('python $IDF_PATH/components/esptool_py/esptool/espefuse.py'
-                                          '--chip {0} -p {1} burn_key {2} {3} HMAC_DOWN_DIGITAL_SIGNATURE {4}'
-                                          .format((idf_target), (args.port), ('BLOCK_KEY' + str(args.efuse_key_id)),
-                                          (hmac_key_file), (key_block_status))), shell=True)
-    except subprocess.CalledProcessError as e:
-        print((e.output).decode('UTF-8'))
-        sys.exit(-1)
+    os.system('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} burn_key '
+              '{3} {4} HMAC_DOWN_DIGITAL_SIGNATURE {5}'
+              .format((idf_path), (idf_target), (args.port), ('BLOCK_KEY' + str(args.efuse_key_id)), (hmac_key_file), (key_block_status)))
 
 
 # size is calculated as actual size + 16 (offset)
@@ -171,12 +161,13 @@ ciphertext_size = {'esp32s2':1600,'esp32s3':1600,'esp32c3':1216}
 # @info
 #       This function generates the cust_flash partition of
 #       the encrypted private key parameters.
-def generate_cust_flash_partition(c, iv, hmac_key_id, key_size, device_cert, ca_cert, idf_target, op_file):
+def generate_cust_flash_partition(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, idf_target, op_file):
     # Following offsets have been calculated with help of esp_secure_cert_config.h
     METADATA_OFFSET = 0
     DEV_CERT_OFFSET = METADATA_OFFSET + 64
     CA_CERT_OFFSET = DEV_CERT_OFFSET + 2048
-    CIPHERTEXT_OFFSET = CA_CERT_OFFSET  + 4096
+    CS_CERT_OFFSET = CA_CERT_OFFSET + 4096
+    CIPHERTEXT_OFFSET = CS_CERT_OFFSET  + 2048
     IV_OFFSET = CIPHERTEXT_OFFSET + ciphertext_size[idf_target]
 
     # cust_flash partition is of size 0x6000 i.e. 24576
@@ -208,6 +199,20 @@ def generate_cust_flash_partition(c, iv, hmac_key_id, key_size, device_cert, ca_
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
+        if cs_cert is not None:
+            with open(cs_cert, 'rb') as cs_cert:
+                cs_cert = cs_cert.read()
+                # Write cs cert at specific address
+                cs_cert = cs_cert + b'\0'
+                output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET + len(cs_cert)] = cs_cert
+                metadata = metadata + struct.pack('<IH', zlib.crc32(cs_cert, 0xffffffff), len(cs_cert))
+        else:
+            output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET] = b'\x00'
+            metadata = metadata + struct.pack('<IH', 0,0)
+
+        # Align to 32 bit
+        metadata = metadata + b'\x00' * 2
+
         # Add ciphertext to the binary
         output_file_data[CIPHERTEXT_OFFSET: CIPHERTEXT_OFFSET + len(c)] = c
         metadata = metadata + struct.pack('<IH', zlib.crc32(c, 0xffffffff), len(c))
@@ -233,7 +238,7 @@ def generate_cust_flash_partition(c, iv, hmac_key_id, key_size, device_cert, ca_
 # @info
 #       Generate a custom csv file of encrypted private key parameters.
 #       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
-def generate_csv_file(c, iv, hmac_key_id, key_size, device_cert, ca_cert, csv_file):
+def generate_csv_file(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, csv_file):
 
     with open(csv_file, 'wt', encoding='utf8') as f:
         f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
@@ -241,6 +246,8 @@ def generate_csv_file(c, iv, hmac_key_id, key_size, device_cert, ca_cert, csv_fi
 
         if ca_cert is not None:
             f.write('ca_cert,file,string,{}\n'.format(ca_cert))
+        if cs_cert is not None:
+            f.write('cs_cert,file,string,{}\n'.format(ca_cert))
         f.write('cipher_c,data,hex2bin,{}\n'.format(c.hex()))
         f.write('dev_cert,file,string,{}\n'.format(device_cert))
         f.write('rsa_len,data,u16,{}\n'.format(key_size))
@@ -276,8 +283,7 @@ def generate_nvs_partition(input_filename, output_filename):
 def get_efuse_summary_json(args, idf_target):
     _efuse_summary = None
     try:
-        _efuse_summary = subprocess.check_output(('python $IDF_PATH/components/esptool_py/esptool/espefuse.py '
-                                                  '--chip {0} -p {1} summary --format json'.format(idf_target, (args.port))), shell=True)
+        _efuse_summary = subprocess.check_output(('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} summary --format json'.format((idf_path), (idf_target), (args.port))), shell=True)
     except subprocess.CalledProcessError as e:
         print((e.output).decode('UTF-8'))
         sys.exit(-1)
@@ -407,6 +413,13 @@ def main():
         help='relative path to ca certificate which has been used to sign the client certificate')
 
     parser.add_argument(
+        '--cs-cert',
+        dest='cs_cert',
+        default='cs.crt',
+        metavar='relative/path/to/cs-cert',
+        help='relative path to cs certificate which has been used to sign code')
+
+    parser.add_argument(
         '--secure_cert_type',
         dest='sec_cert_type', type=str, choices={'cust_flash', 'nvs'},
         default='cust_flash',
@@ -487,11 +500,15 @@ def main():
     if (os.path.exists(args.ca_cert) is True):
         ca_cert = args.ca_cert
 
+    cs_cert = None
+    if (os.path.exists(args.cs_cert) is True):
+        cs_cert = args.cs_cert
+
     if args.sec_cert_type == 'cust_flash':
-        generate_cust_flash_partition(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, idf_target, bin_filename)
+        generate_cust_flash_partition(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, idf_target, bin_filename)
     elif args.sec_cert_type == 'nvs':
         # Generate csv file for the DS data and generate an NVS partition.
-        generate_csv_file(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, csv_filename)
+        generate_csv_file(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, csv_filename)
         generate_nvs_partition(csv_filename, bin_filename)
 
     cleanup(args)
