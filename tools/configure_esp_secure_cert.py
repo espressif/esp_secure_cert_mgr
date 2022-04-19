@@ -288,31 +288,31 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, cs_cert, priv_key,
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
-        with open(priv_key, 'rb') as priv_key:
-            priv_key = priv_key.read()
-            # Write device cert at specific address
-            priv_key = priv_key + b'\0'
-            output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(priv_key)] = priv_key
-            # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
-            # The value `0xffffffff` corresponds to the starting value used at the time of calculation
-            metadata = metadata + struct.pack('<IH', zlib.crc32(priv_key, 0xffffffff), len(priv_key))
-            # Align to 32 bit, this is done to match the same operation done by the compiler
-            metadata = metadata + b'\x00' * 2
+        # with open(priv_key, 'rb') as priv_key:
+        #     priv_key = priv_key.read()
+        #     # Write device cert at specific address
+        #     priv_key = priv_key + b'\0'
+        #     output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(priv_key)] = priv_key
+        #     # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
+        #     # The value `0xffffffff` corresponds to the starting value used at the time of calculation
+        #     metadata = metadata + struct.pack('<IH', zlib.crc32(priv_key, 0xffffffff), len(priv_key))
+        #     # Align to 32 bit, this is done to match the same operation done by the compiler
+        #     metadata = metadata + b'\x00' * 2
 
-        # private_key = load_privatekey(priv_key, priv_key_pass)
+        private_key = load_privatekey(priv_key, priv_key_pass)
 
-        # private_key_pem = private_key.private_bytes(
-        #     encoding=serialization.Encoding.PEM,
-        #     format=serialization.PrivateFormat.TraditionalOpenSSL,
-        #     encryption_algorithm=serialization.NoEncryption())
+        private_key_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption())
 
         
-        # # Write private key at specific address
-        # private_key_pem = private_key_pem + b'\0'
-        # output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(private_key_pem)] = private_key_pem
-        # metadata = struct.pack('<IH', zlib.crc32(private_key_pem, 0xffffffff), len(private_key_pem))
-        # # Align to 32 bit, this is done to match the same operation done by the compiler
-        # metadata = metadata + b'\x00' * 2
+        # Write private key at specific address
+        private_key_pem = private_key_pem + b'\0'
+        output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(private_key_pem)] = private_key_pem
+        metadata = metadata + struct.pack('<IH', zlib.crc32(private_key_pem, 0xffffffff), len(private_key_pem))
+        # Align to 32 bit, this is done to match the same operation done by the compiler
+        metadata = metadata + b'\x00' * 2
 
         metadata = metadata + struct.pack('<I', 0x12345678)
 
