@@ -71,22 +71,6 @@ esp_err_t esp_secure_cert_get_device_cert(char *buffer, uint32_t *len);
  */
 esp_err_t esp_secure_cert_get_ca_cert(char *buffer, uint32_t *len);
 
-/* @info
- *  Get the cs cert from the esp_secure_cert partition
- *
- * @params
- *      buffer(in)  The buffer in which the cs cert shall be stored.
- *                  If the buffer value is NULL, then the function shall
- *                  return success and the len argument shall hold the value
- *                  of the length of the cs cert.
- *      len(out)    The length of the cs cert.
- * @return
- *      - ESP_OK    On success
- *      - ESP_FAIL/other relevant esp error code
- *                  On failure
- */
-esp_err_t esp_secure_cert_get_cs_cert(char *buffer, uint32_t *len);
-
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 /* @info
  *  Get the ciphertext ( encrypted RSA private key) from the esp_secure_cert partition
@@ -175,21 +159,6 @@ esp_err_t esp_secure_cert_get_dev_cert_addr(const void **buffer, uint32_t *len);
  *                  On failure
  */
 esp_err_t esp_secure_cert_get_ca_cert_addr(const void **buffer, uint32_t *len);
-
-/* @info
- *       This function returns the flash address of ca certificate
- *       The address is mapped to memory.
- *
- * @params
- *      - buffer    This value shall be filled with the cs certificate address
- *                      on successfull completion
- *      - len       This value shall be filled with the length of the cs certificate
- * @return
- *      - ESP_OK    On success
- *      - ESP_FAIL/other relevant esp error code
- *                  On failure
- */
-esp_err_t esp_secure_cert_get_cs_cert_addr(const void **buffer, uint32_t *len);
 
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 /* @info
