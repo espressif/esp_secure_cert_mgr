@@ -136,7 +136,8 @@ def calculate_ds_parameters(privkey, priv_key_pass, hmac_key, idf_target):
 # @info
 #       The function makes use of the "espefuse.py" script to read the efuse summary
 def efuse_summary(args, idf_target):
-    os.system('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} summary'.format((idf_path), (idf_target), (args.port)))
+    os.system('python {0}/components/esptool_py/esptool/espefuse.py '
+    '--chip {1} -p {2} summary'.format((idf_path), (idf_target), (args.port)))
 
 # @info
 #       The function makes use of the "espefuse.py" script to burn the HMAC key on the efuse.
@@ -151,7 +152,12 @@ def efuse_burn_key(args, idf_target):
 
     os.system('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} burn_key '
               '{3} {4} HMAC_DOWN_DIGITAL_SIGNATURE {5}'
-              .format((idf_path), (idf_target), (args.port), ('BLOCK_KEY' + str(args.efuse_key_id)), (hmac_key_file), (key_block_status)))
+              .format((idf_path), 
+              (idf_target), 
+              (args.port), 
+              ('BLOCK_KEY' + str(args.efuse_key_id)), 
+              (hmac_key_file), 
+              (key_block_status)))
 
 
 # size is calculated as actual size + 16 (offset)
@@ -348,7 +354,9 @@ def generate_nvs_partition(input_filename, output_filename):
 def get_efuse_summary_json(args, idf_target):
     _efuse_summary = None
     try:
-        _efuse_summary = subprocess.check_output(('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} summary --format json'.format((idf_path), (idf_target), (args.port))), shell=True)
+        _efuse_summary = subprocess.check_output(('python {0}/components/esptool_py/esptool/espefuse.py '
+                                                  '--chip {1} -p {2} summary --format json'.format((idf_path), 
+                                                  (idf_target), (args.port))), shell=True)
     except subprocess.CalledProcessError as e:
         print((e.output).decode('UTF-8'))
         sys.exit(-1)

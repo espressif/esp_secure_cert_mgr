@@ -11,7 +11,7 @@ With the Espressif Pre-Provisioning Service, the ESP modules are pre-provisioned
 When a device is pre-provisioned that means the PKI credentials are generated for the device. The PKI credentials are then stored in a partition named
 *esp_secure_cert*.
 
-The `esp_secure_cert` partition can be generated on host with help of [configure_ds.py](./tools/configure_ds.py) utility, more details about the utility can be found in the [tools/README](./tools/README.md).
+The `esp_secure_cert` partition can be generated on host with help of [configure_esp_secure_cert.py](./tools/configure_esp_secure_cert.py) utility, more details about the utility can be found in the [tools/README](./tools/README.md).
 
 For esp devices that support DS peripheral, the pre-provisioning is done by leveraging the security benefit of the DS peripheral. In that case, all of the data which is present in the *esp_secure_cert* partition is completely secure.
 
