@@ -161,13 +161,12 @@ ciphertext_size = {'esp32s2':1600,'esp32s3':1600,'esp32c3':1216}
 # @info
 #       This function generates the cust_flash partition of
 #       the encrypted private key parameters when DS is enabled.
-def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, idf_target, op_file):
+def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, idf_target, op_file):
     # Following offsets have been calculated with help of esp_secure_cert_config.h
     METADATA_OFFSET = 0
     DEV_CERT_OFFSET = METADATA_OFFSET + 64
     CA_CERT_OFFSET = DEV_CERT_OFFSET + 2048
-    CS_CERT_OFFSET = CA_CERT_OFFSET + 4096
-    CIPHERTEXT_OFFSET = CS_CERT_OFFSET  + 2048
+    CIPHERTEXT_OFFSET = CA_CERT_OFFSET + 4096
     IV_OFFSET = CIPHERTEXT_OFFSET + ciphertext_size[idf_target]
 
     # cust_flash partition is of size 0x6000 i.e. 24576
@@ -199,20 +198,6 @@ def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, 
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
-        if cs_cert is not None:
-            with open(cs_cert, 'rb') as cs_cert:
-                cs_cert = cs_cert.read()
-                # Write cs cert at specific address
-                cs_cert = cs_cert + b'\0'
-                output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET + len(cs_cert)] = cs_cert
-                metadata = metadata + struct.pack('<IH', zlib.crc32(cs_cert, 0xffffffff), len(cs_cert))
-        else:
-            output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET] = b'\x00'
-            metadata = metadata + struct.pack('<IH', 0,0)
-
-        # Align to 32 bit
-        metadata = metadata + b'\x00' * 2
-
         # Add ciphertext to the binary
         output_file_data[CIPHERTEXT_OFFSET: CIPHERTEXT_OFFSET + len(c)] = c
         metadata = metadata + struct.pack('<IH', zlib.crc32(c, 0xffffffff), len(c))
@@ -237,13 +222,12 @@ def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, 
 # @info
 #       This function generates the cust_flash partition of
 #       the encrypted private key parameters when DS is disabled.
-def generate_cust_flash_partition_no_ds(device_cert, ca_cert, cs_cert, priv_key, priv_key_pass, idf_target, op_file):
+def generate_cust_flash_partition_no_ds(device_cert, ca_cert, priv_key, priv_key_pass, idf_target, op_file):
     # Following offsets have been calculated with help of esp_secure_cert_config.h
     METADATA_OFFSET = 0
     DEV_CERT_OFFSET = METADATA_OFFSET + 64
     CA_CERT_OFFSET = DEV_CERT_OFFSET + 2048
-    CS_CERT_OFFSET = CA_CERT_OFFSET + 4096
-    PRIV_KEY_OFFSET = CS_CERT_OFFSET + 2048
+    PRIV_KEY_OFFSET = CA_CERT_OFFSET + 4096
 
     # cust_flash partition is of size 0x6000 i.e. 24576
     with open(op_file, 'wb') as output_file:
@@ -274,31 +258,6 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, cs_cert, priv_key,
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
-        if cs_cert is not None:
-            with open(cs_cert, 'rb') as cs_cert:
-                cs_cert = cs_cert.read()
-                # Write cs cert at specific address
-                cs_cert = cs_cert + b'\0'
-                output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET + len(cs_cert)] = cs_cert
-                metadata = metadata + struct.pack('<IH', zlib.crc32(cs_cert, 0xffffffff), len(cs_cert))
-        else:
-            output_file_data[CS_CERT_OFFSET: CS_CERT_OFFSET] = b'\x00'
-            metadata = metadata + struct.pack('<IH', 0,0)
-
-        # Align to 32 bit
-        metadata = metadata + b'\x00' * 2
-
-        # with open(priv_key, 'rb') as priv_key:
-        #     priv_key = priv_key.read()
-        #     # Write device cert at specific address
-        #     priv_key = priv_key + b'\0'
-        #     output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(priv_key)] = priv_key
-        #     # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
-        #     # The value `0xffffffff` corresponds to the starting value used at the time of calculation
-        #     metadata = metadata + struct.pack('<IH', zlib.crc32(priv_key, 0xffffffff), len(priv_key))
-        #     # Align to 32 bit, this is done to match the same operation done by the compiler
-        #     metadata = metadata + b'\x00' * 2
-
         private_key = load_privatekey(priv_key, priv_key_pass)
 
         private_key_pem = private_key.private_bytes(
@@ -325,7 +284,7 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, cs_cert, priv_key,
 # @info
 #       Generate a custom csv file of encrypted private key parameters when DS is enabled.
 #       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
-def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_cert, csv_file):
+def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, csv_file):
 
     with open(csv_file, 'wt', encoding='utf8') as f:
         f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
@@ -333,8 +292,6 @@ def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_
 
         if ca_cert is not None:
             f.write('ca_cert,file,string,{}\n'.format(ca_cert))
-        if cs_cert is not None:
-            f.write('cs_cert,file,string,{}\n'.format(ca_cert))
         f.write('cipher_c,data,hex2bin,{}\n'.format(c.hex()))
         f.write('dev_cert,file,string,{}\n'.format(device_cert))
         f.write('rsa_len,data,u16,{}\n'.format(key_size))
@@ -344,7 +301,7 @@ def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, cs_
 # @info
 #       Generate a custom csv file of encrypted private key parameters when DS is disabled.
 #       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
-def generate_csv_file_no_ds(device_cert, ca_cert, cs_cert, priv_key, priv_key_pass, csv_file):
+def generate_csv_file_no_ds(device_cert, ca_cert, priv_key, priv_key_pass, csv_file):
 
     with open(csv_file, 'wt', encoding='utf8') as f:
         f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
@@ -352,8 +309,6 @@ def generate_csv_file_no_ds(device_cert, ca_cert, cs_cert, priv_key, priv_key_pa
 
         if ca_cert is not None:
             f.write('ca_cert,file,string,{}\n'.format(ca_cert))
-        if cs_cert is not None:
-            f.write('cs_cert,file,string,{}\n'.format(ca_cert))
         f.write('dev_cert,file,string,{}\n'.format(device_cert))
 
         private_key = load_privatekey(priv_key, priv_key_pass)
@@ -523,13 +478,6 @@ def main():
         help='relative path to ca certificate which has been used to sign the client certificate')
 
     parser.add_argument(
-        '--cs-cert',
-        dest='cs_cert',
-        default='cs.crt',
-        metavar='relative/path/to/cs-cert',
-        help='relative path to cs certificate which has been used to sign code')
-
-    parser.add_argument(
         '--secure_cert_type',
         dest='sec_cert_type', type=str, choices={'cust_flash', 'nvs'},
         default='cust_flash',
@@ -606,10 +554,6 @@ def main():
     if (os.path.exists(args.ca_cert) is True):
         ca_cert = args.ca_cert
 
-    cs_cert = None
-    if (os.path.exists(args.cs_cert) is True):
-        cs_cert = args.cs_cert
-
     c = None
     iv = None
     key_size = None
@@ -628,15 +572,15 @@ def main():
         
     if args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
-            generate_cust_flash_partition_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, idf_target, bin_filename)
+            generate_cust_flash_partition_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, idf_target, bin_filename)
         else:
-            generate_cust_flash_partition_no_ds(args.device_cert, ca_cert, cs_cert, args.privkey, args.priv_key_pass, idf_target, bin_filename)
+            generate_cust_flash_partition_no_ds(args.device_cert, ca_cert, args.privkey, args.priv_key_pass, idf_target, bin_filename)
     elif args.sec_cert_type == 'nvs':
         # Generate csv file for the DS data and generate an NVS partition.
         if args.configure_ds is not False:
-            generate_csv_file_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, cs_cert, csv_filename)
+            generate_csv_file_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, csv_filename)
         else:
-            generate_csv_file_no_ds(args.device_cert, ca_cert, cs_cert, args.privkey, args.priv_key_pass, csv_filename)
+            generate_csv_file_no_ds(args.device_cert, ca_cert, args.privkey, args.priv_key_pass, csv_filename)
         generate_nvs_partition(csv_filename, bin_filename)
 
     cleanup(args)
