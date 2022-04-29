@@ -149,14 +149,16 @@ def efuse_burn_key(args, idf_target):
         # Whitespace character will have no additional effect on the command and
         # read protection will be enabled as the default behaviour of the command
         key_block_status = ' '
-
+    else:
+        print('WARNING:Efuse key block shall not be read protected in development mode (default)\n'
+              'Enable production mode to read protect the key block')
     os.system('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} burn_key '
               '{3} {4} HMAC_DOWN_DIGITAL_SIGNATURE {5}'
-              .format((idf_path), 
-              (idf_target), 
-              (args.port), 
-              ('BLOCK_KEY' + str(args.efuse_key_id)), 
-              (hmac_key_file), 
+              .format((idf_path),
+              (idf_target),
+              (args.port),
+              ('BLOCK_KEY' + str(args.efuse_key_id)),
+              (hmac_key_file),
               (key_block_status)))
 
 
@@ -271,7 +273,6 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, priv_key, priv_key
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.NoEncryption())
 
-        
         # Write private key at specific address
         private_key_pem = private_key_pem + b'\0'
         output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(private_key_pem)] = private_key_pem
@@ -355,7 +356,7 @@ def get_efuse_summary_json(args, idf_target):
     _efuse_summary = None
     try:
         _efuse_summary = subprocess.check_output(('python {0}/components/esptool_py/esptool/espefuse.py '
-                                                  '--chip {1} -p {2} summary --format json'.format((idf_path), 
+                                                  '--chip {1} -p {2} summary --format json'.format((idf_path),
                                                   (idf_target), (args.port))), shell=True)
     except subprocess.CalledProcessError as e:
         print((e.output).decode('UTF-8'))
@@ -577,7 +578,8 @@ def main():
         c, iv, key_size = calculate_ds_parameters(args.privkey, args.priv_key_pass, hmac_key_read, idf_target)
     else:
         print("--configure_ds option not set. Configuring without use of DS peripheral.")
-        
+        print('WARNING: Not Secure.\nthe private shall be stored as plaintext')
+
     if args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
             generate_cust_flash_partition_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, idf_target, bin_filename)
