@@ -9,11 +9,12 @@ The sample app demonstrates the use of APIs from *esp_secure_cert_mgr* to retrie
 Before project configuration and build, be sure to set the correct chip target using `idf.py set-target <chip_name>`.
 ### Configure the project
 
+* The *esp_secure_cert* partition needs to be generated first with help of [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) script. See [tools/README.md](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/README.md) for more details.
 * Selecting the type of *esp_secure_cert* partition:
 The pre-provisioning utility supports the *esp_secure_cert* partition with two types, that are `nvs` and `cust_flash` partition.
 You will have to select the respective partition type with which the module has been provisioned earlier.
 
-Select the proper pre_prov partition type and respective csv file as follows:
+Select the proper *esp_secure_cert* partition type and respective *partitions_csv* file as follows:
 #### 1) `esp_secure_cert` partition of type "cust_flash"
 When the "esp_secure_cert" partition is of the "cust_flash" type, The data is directly stored on the flash in the raw format. Metadata is maintained at the start of the partition to manage the contents of the custom partition.
 

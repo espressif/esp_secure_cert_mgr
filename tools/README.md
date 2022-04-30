@@ -1,5 +1,5 @@
 # DS Peripheral Configuration Tool
-The script [configure_ds.py](./configure_ds.py) is used for configuring the DS peripheral on the ESP32-S2/ESP32-S3/ESP32-C3 SoC. The steps in the script are based on technical details of certain operations in the Digital Signature calculation, which can be found at Digital Signature Section of [ESP32-S2 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-s2_technical_reference_manual_en.pdf)
+The script [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) is used for configuring the DS peripheral on the ESP32-S2/ESP32-S3/ESP32-C3 SoC. The steps in the script are based on technical details of certain operations in the Digital Signature calculation, which can be found at Digital Signature Section of [ESP32-S2 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-s2_technical_reference_manual_en.pdf)
 
 The script generates a partition named `esp_secure_cert` on host machine, that contains the parameters required by the DS peripheral. The `esp_secure_cert` partition then needs to be flashed onto the device in order to use the ds peripheral.
 
