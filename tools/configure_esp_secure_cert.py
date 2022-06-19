@@ -25,28 +25,35 @@ try:
 except ImportError:
     if not idf_path or not os.path.exists(idf_path):
         raise Exception('IDF_PATH not found')
-    sys.path.insert(0, os.path.join(idf_path, 'components', 'nvs_flash', 'nvs_partition_generator'))
+    sys.path.insert(0, os.path.join(idf_path, 'components',
+                    'nvs_flash', 'nvs_partition_generator'))
     import nvs_partition_gen as nvs_gen
 
 # Check python version is proper or not to avoid script failure
 assert sys.version_info >= (3, 6, 0), 'Python version too low.'
 
 esp_ds_data_dir = 'esp_ds_data'
-# hmac_key_file is generated when HMAC_KEY is calculated, it is used when burning HMAC_KEY to efuse
+# hmac_key_file is generated when HMAC_KEY is calculated,
+# it is used when burning HMAC_KEY to efuse
 hmac_key_file = os.path.join(esp_ds_data_dir, 'hmac_key.bin')
-# csv and bin filenames are default filenames for nvs partition files created with this script
+# csv and bin filenames are default filenames
+# for nvs partition files created with this script
 csv_filename = os.path.join(esp_ds_data_dir, 'esp_secure_cert.csv')
 bin_filename = os.path.join(esp_ds_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
 supported_targets = {'esp32s2', 'esp32c3', 'esp32s3'}
-supported_key_size = {'esp32s2':[1024, 2048, 3072, 4096], 'esp32c3':[1024, 2048, 3072], 'esp32s3':[1024, 2048, 3072, 4096]}
+supported_key_size = {'esp32s2': [1024, 2048, 3072, 4096],
+                      'esp32c3': [1024, 2048, 3072],
+                      'esp32s3': [1024, 2048, 3072, 4096]}
 
 
 def load_privatekey(key_file_path, password=None):
     key_file = open(key_file_path, 'rb')
     key = key_file.read()
     key_file.close()
-    return serialization.load_pem_private_key(key, password=password, backend=default_backend())
+    return serialization.load_pem_private_key(key,
+                                              password=password,
+                                              backend=default_backend())
 
 
 def number_as_bytes(number, pad_bits=None):
@@ -67,10 +74,12 @@ def number_as_bytes(number, pad_bits=None):
 #       privkey         : path to the RSA private key
 #       priv_key_pass   : path to the RSA privaete key password
 #       hmac_key        : HMAC key value ( to calculate DS params)
-#       idf_target      : The target chip for the script (e.g. esp32s2, esp32c3, esp32s3)
+#       idf_target      : The target chip for the script (e.g. esp32c3)
 # @info
 #       The function calculates the encrypted private key parameters.
-#       Consult the DS documentation (available for the ESP32-S2) in the esp-idf programming guide for more details about the variables and calculations.
+#       Consult the DS documentation (available for the ESP32-S2)
+#       in the esp-idf programming guide for more details
+#       about the variables and calculations.
 def calculate_ds_parameters(privkey, priv_key_pass, hmac_key, idf_target):
     private_key = load_privatekey(privkey, priv_key_pass)
     if not isinstance(private_key, rsa.RSAPrivateKey):
@@ -86,8 +95,10 @@ def calculate_ds_parameters(privkey, priv_key_pass, hmac_key, idf_target):
     M = pub_numbers.n
     key_size = private_key.key_size
     if key_size not in supported_key_size[idf_target]:
-        print('ERROR: Private key size {0} not supported for the target {1},\nthe supported key sizes are {2}'
-              .format(key_size, idf_target, str(supported_key_size[idf_target])))
+        print('ERROR: Private key size {0} not supported for the target {1},'
+              '\nthe supported key sizes are {2}'
+              .format(key_size, idf_target,
+                      str(supported_key_size[idf_target])))
         sys.exit(-1)
 
     iv = os.urandom(16)
@@ -108,7 +119,8 @@ def calculate_ds_parameters(privkey, priv_key_pass, hmac_key, idf_target):
         struct.pack('<II', mprime, length) + \
         iv
 
-    # expected_len = max_len_Y + max_len_M + max_len_rinv + (mprime + length packed (8 bytes))+ iv (16 bytes)
+    # expected_len = max_len_Y + max_len_M + max_len_rinv
+    #                + (mprime + length packed (8 bytes))+ iv (16 bytes)
     expected_len = (max_len / 8) * 3 + 8 + 16
     assert len(md_in) == expected_len
     md = hashlib.sha256(md_in).digest()
@@ -123,54 +135,67 @@ def calculate_ds_parameters(privkey, priv_key_pass, hmac_key, idf_target):
         struct.pack('<II', mprime, length) + \
         b'\x08' * 8
 
-    # expected_len = max_len_Y + max_len_M + max_len_rinv + md (32 bytes) + (mprime + length packed (8bytes)) + padding (8 bytes)
+    # expected_len = max_len_Y + max_len_M + max_len_rinv
+    #                + md (32 bytes) + (mprime + length packed (8bytes))
+    #                + padding (8 bytes)
     expected_len = (max_len / 8) * 3 + 32 + 8 + 8
     assert len(p) == expected_len
 
-    cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+    cipher = Cipher(algorithms.AES(aes_key),
+                    modes.CBC(iv),
+                    backend=default_backend())
     encryptor = cipher.encryptor()
     c = encryptor.update(p) + encryptor.finalize()
     return c, iv, key_size
 
 
 # @info
-#       The function makes use of the "espefuse.py" script to read the efuse summary
+#       The function makes use of the "espefuse.py" script
+#       to read the efuse summary
 def efuse_summary(args, idf_target):
     os.system('python {0}/components/esptool_py/esptool/espefuse.py '
-    '--chip {1} -p {2} summary'.format((idf_path), (idf_target), (args.port)))
+              '--chip {1} -p {2} summary'
+              .format((idf_path), (idf_target), (args.port)))
+
 
 # @info
-#       The function makes use of the "espefuse.py" script to burn the HMAC key on the efuse.
+#       The function makes use of the "espefuse.py" script to
+#       burn the HMAC key on the efuse.
 def efuse_burn_key(args, idf_target):
-    # In case of a development (default) usecase we disable the read protection.
+    # In case of a development (default) usecase
+    # we dont enable the read protection.
     key_block_status = '--no-read-protect'
 
     if args.production is True:
-        # Whitespace character will have no additional effect on the command and
-        # read protection will be enabled as the default behaviour of the command
+        # Whitespace character will have no additional
+        # effect on the command and
+        # read protection will be enabled as the default
+        # behaviour of the command
         key_block_status = ' '
     else:
-        print('WARNING:Efuse key block shall not be read protected in development mode (default)\n'
+        print('WARNING:Efuse key block shall not be read '
+              'protected in development mode (default)\n'
               'Enable production mode to read protect the key block')
-    os.system('python {0}/components/esptool_py/esptool/espefuse.py --chip {1} -p {2} burn_key '
+    os.system('python {0}/components/esptool_py/esptool/espefuse.py '
+              '--chip {1} -p {2} burn_key '
               '{3} {4} HMAC_DOWN_DIGITAL_SIGNATURE {5}'
-              .format((idf_path),
-              (idf_target),
-              (args.port),
-              ('BLOCK_KEY' + str(args.efuse_key_id)),
-              (hmac_key_file),
-              (key_block_status)))
+              .format((idf_path), (idf_target), (args.port),
+                      ('BLOCK_KEY' + str(args.efuse_key_id)),
+                      (hmac_key_file), (key_block_status)))
 
 
 # size is calculated as actual size + 16 (offset)
-ciphertext_size = {'esp32s2':1600,'esp32s3':1600,'esp32c3':1216}
+ciphertext_size = {'esp32s2': 1600, 'esp32s3': 1600, 'esp32c3': 1216}
 
 
 # @info
 #       This function generates the cust_flash partition of
 #       the encrypted private key parameters when DS is enabled.
-def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, idf_target, op_file):
-    # Following offsets have been calculated with help of esp_secure_cert_config.h
+def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size,
+                                     device_cert, ca_cert,
+                                     idf_target, op_file):
+    # Following offsets have been calculated with help of
+    # esp_secure_cert_config.h
     METADATA_OFFSET = 0
     DEV_CERT_OFFSET = METADATA_OFFSET + 64
     CA_CERT_OFFSET = DEV_CERT_OFFSET + 2048
@@ -185,11 +210,17 @@ def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, 
             dev_cert = cli_cert.read()
             # Write device cert at specific address
             dev_cert = dev_cert + b'\0'
-            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET + len(dev_cert)] = dev_cert
-            # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
-            # The value `0xffffffff` corresponds to the starting value used at the time of calculation
-            metadata = struct.pack('<IH', zlib.crc32(dev_cert, 0xffffffff), len(dev_cert))
-            # Align to 32 bit, this is done to match the same operation done by the compiler
+            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET
+                             + len(dev_cert)] = dev_cert
+            # The following line packs the dev_cert_crc
+            # and dev_cet_len into the metadata in little endian format
+            # The value `0xffffffff` corresponds to the
+            # starting value used at the time of calculation
+            metadata = struct.pack('<IH',
+                                   zlib.crc32(dev_cert, 0xffffffff),
+                                   len(dev_cert))
+            # Align to 32 bit, this is done to match
+            # the same operation done by the compiler
             metadata = metadata + b'\x00' * 2
 
         if ca_cert is not None:
@@ -197,24 +228,32 @@ def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, 
                 ca_cert = ca_cert.read()
                 # Write ca cert at specific address
                 ca_cert = ca_cert + b'\0'
-                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET + len(ca_cert)] = ca_cert
-                metadata = metadata + struct.pack('<IH', zlib.crc32(ca_cert, 0xffffffff), len(ca_cert))
+                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
+                                 + len(ca_cert)] = ca_cert
+                metadata = metadata
+                + struct.pack('<IH',
+                              zlib.crc32(ca_cert, 0xffffffff),
+                              len(ca_cert))
         else:
             output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
-            metadata = metadata + struct.pack('<IH', 0,0)
+            metadata = metadata + struct.pack('<IH', 0, 0)
 
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
         # Add ciphertext to the binary
         output_file_data[CIPHERTEXT_OFFSET: CIPHERTEXT_OFFSET + len(c)] = c
-        metadata = metadata + struct.pack('<IH', zlib.crc32(c, 0xffffffff), len(c))
+        metadata = metadata + struct.pack('<IH',
+                                          zlib.crc32(c, 0xffffffff),
+                                          len(c))
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
         # Add iv to the binary
         output_file_data[IV_OFFSET: IV_OFFSET + len(iv)] = iv
-        metadata = metadata + struct.pack('<IH', zlib.crc32(iv, 0xffffffff), len(iv))
+        metadata = metadata + struct.pack('<IH',
+                                          zlib.crc32(iv, 0xffffffff),
+                                          len(iv))
         metadata = metadata + struct.pack('<H', key_size)
         metadata = metadata + struct.pack('<B', hmac_key_id)
         # Align to 32 bit
@@ -223,15 +262,20 @@ def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size, device_cert, 
 
         # Add metadata to the binary
         output_file_data[METADATA_OFFSET: METADATA_OFFSET + 64] = b'\x00' * 64
-        output_file_data[METADATA_OFFSET: METADATA_OFFSET + len(metadata)] = metadata
+        output_file_data[METADATA_OFFSET: METADATA_OFFSET
+                         + len(metadata)] = metadata
         output_file.write(output_file_data)
         output_file.close()
+
 
 # @info
 #       This function generates the cust_flash partition of
 #       the encrypted private key parameters when DS is disabled.
-def generate_cust_flash_partition_no_ds(device_cert, ca_cert, priv_key, priv_key_pass, idf_target, op_file):
-    # Following offsets have been calculated with help of esp_secure_cert_config.h
+def generate_cust_flash_partition_no_ds(device_cert, ca_cert,
+                                        priv_key, priv_key_pass,
+                                        idf_target, op_file):
+    # Following offsets have been calculated with help
+    # of esp_secure_cert_config.h
     METADATA_OFFSET = 0
     DEV_CERT_OFFSET = METADATA_OFFSET + 64
     CA_CERT_OFFSET = DEV_CERT_OFFSET + 2048
@@ -245,11 +289,17 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, priv_key, priv_key
             dev_cert = cli_cert.read()
             # Write device cert at specific address
             dev_cert = dev_cert + b'\0'
-            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET + len(dev_cert)] = dev_cert
-            # The following line packs the dev_cert_crc and dev_cet_len into the metadata in little endian format
-            # The value `0xffffffff` corresponds to the starting value used at the time of calculation
-            metadata = struct.pack('<IH', zlib.crc32(dev_cert, 0xffffffff), len(dev_cert))
-            # Align to 32 bit, this is done to match the same operation done by the compiler
+            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET
+                             + len(dev_cert)] = dev_cert
+            # The following line packs the dev_cert_crc and dev_cet_len
+            # into the metadata in little endian format
+            # The value `0xffffffff` corresponds to the starting value
+            # used at the time of calculation
+            metadata = struct.pack('<IH',
+                                   zlib.crc32(dev_cert, 0xffffffff),
+                                   len(dev_cert))
+            # Align to 32 bit, this is done to match
+            # the same operation done by the compiler
             metadata = metadata + b'\x00' * 2
 
         if ca_cert is not None:
@@ -257,11 +307,15 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, priv_key, priv_key
                 ca_cert = ca_cert.read()
                 # Write ca cert at specific address
                 ca_cert = ca_cert + b'\0'
-                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET + len(ca_cert)] = ca_cert
-                metadata = metadata + struct.pack('<IH', zlib.crc32(ca_cert, 0xffffffff), len(ca_cert))
+                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
+                                 + len(ca_cert)] = ca_cert
+                metadata = metadata
+                + struct.pack('<IH',
+                              zlib.crc32(ca_cert, 0xffffffff),
+                              len(ca_cert))
         else:
             output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
-            metadata = metadata + struct.pack('<IH', 0,0)
+            metadata = metadata + struct.pack('<IH', 0, 0)
 
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
@@ -275,26 +329,37 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert, priv_key, priv_key
 
         # Write private key at specific address
         private_key_pem = private_key_pem + b'\0'
-        output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET + len(private_key_pem)] = private_key_pem
-        metadata = metadata + struct.pack('<IH', zlib.crc32(private_key_pem, 0xffffffff), len(private_key_pem))
-        # Align to 32 bit, this is done to match the same operation done by the compiler
+        output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET
+                         + len(private_key_pem)] = private_key_pem
+        metadata = metadata
+        + struct.pack('<IH',
+                      zlib.crc32(private_key_pem, 0xffffffff),
+                      len(private_key_pem))
+        # Align to 32 bit, this is done to match the
+        # same operation done by the compiler
         metadata = metadata + b'\x00' * 2
 
         metadata = metadata + struct.pack('<I', 0x12345678)
 
         # Add metadata to the binary
         output_file_data[METADATA_OFFSET: METADATA_OFFSET + 64] = b'\x00' * 64
-        output_file_data[METADATA_OFFSET: METADATA_OFFSET + len(metadata)] = metadata
+        output_file_data[METADATA_OFFSET: METADATA_OFFSET
+                         + len(metadata)] = metadata
         output_file.write(output_file_data)
         output_file.close()
 
+
 # @info
-#       Generate a custom csv file of encrypted private key parameters when DS is enabled.
-#       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
-def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, csv_file):
+#       Generate a custom csv file of encrypted private key parameters
+#       when DS is enabled.
+#       The csv file is required by the nvs_partition_generator
+#       utility to create the nvs partition.
+def generate_csv_file_ds(c, iv, hmac_key_id, key_size,
+                         device_cert, ca_cert, csv_file):
 
     with open(csv_file, 'wt', encoding='utf8') as f:
-        f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
+        f.write('# This is a generated csv file containing '
+                'required parameters for the Digital Signature operation\n')
         f.write('key,type,encoding,value\nesp_secure_cert,namespace,,\n')
 
         if ca_cert is not None:
@@ -305,13 +370,18 @@ def generate_csv_file_ds(c, iv, hmac_key_id, key_size, device_cert, ca_cert, csv
         f.write('ds_key_id,data,u8,{}\n'.format(hmac_key_id))
         f.write('iv,data,hex2bin,{}\n'.format(iv.hex()))
 
+
 # @info
-#       Generate a custom csv file of encrypted private key parameters when DS is disabled.
-#       The csv file is required by the nvs_partition_generator utility to create the nvs partition.
-def generate_csv_file_no_ds(device_cert, ca_cert, priv_key, priv_key_pass, csv_file):
+#       Generate a custom csv file of encrypted private key parameters
+#       when DS is disabled.
+#       The csv file is required by the nvs_partition_generator utility
+#       to create the nvs partition.
+def generate_csv_file_no_ds(device_cert, ca_cert, priv_key,
+                            priv_key_pass, csv_file):
 
     with open(csv_file, 'wt', encoding='utf8') as f:
-        f.write('# This is a generated csv file containing required parameters for the Digital Signature operation\n')
+        f.write('# This is a generated csv file containing required '
+                'parameters for the Digital Signature operation\n')
         f.write('key,type,encoding,value\nesp_secure_cert,namespace,,\n')
 
         if ca_cert is not None:
@@ -326,6 +396,7 @@ def generate_csv_file_no_ds(device_cert, ca_cert, priv_key, priv_key_pass, csv_f
             encryption_algorithm=serialization.NoEncryption())
 
         f.write('priv_key,data,string,{}\n'.format(private_key_pem.decode()))
+
 
 class DefineArgs(object):
     def __init__(self, attributes):
@@ -344,7 +415,7 @@ def generate_nvs_partition(input_filename, output_filename):
         'output': output_filename,
         'size': hex(0x3000),
         'version': 2,
-        'keyfile':None,
+        'keyfile': None,
     })
 
     nvs_gen.generate(nvs_args, is_encr_enabled=False, encr_key=None)
@@ -355,15 +426,17 @@ def generate_nvs_partition(input_filename, output_filename):
 def get_efuse_summary_json(args, idf_target):
     _efuse_summary = None
     try:
-        _efuse_summary = subprocess.check_output(('python {0}/components/esptool_py/esptool/espefuse.py '
-                                                  '--chip {1} -p {2} summary --format json'.format((idf_path),
-                                                  (idf_target), (args.port))), shell=True)
+        _efuse_summary = subprocess.check_output(
+                ('python {0}/components/esptool_py/esptool/espefuse.py '
+                 '--chip {1} -p {2} summary --format json'
+                 .format((idf_path), (idf_target), (args.port))), shell=True)
     except subprocess.CalledProcessError as e:
         print((e.output).decode('UTF-8'))
         sys.exit(-1)
 
     _efuse_summary = _efuse_summary.decode('UTF-8')
-    # Remove everything before actual json data from efuse_summary command output.
+    # Remove everything before actual json data from
+    # efuse_summary command output.
     _efuse_summary = _efuse_summary[_efuse_summary.find('{'):]
     try:
         _efuse_summary_json = json.loads(_efuse_summary)
@@ -374,12 +447,15 @@ def get_efuse_summary_json(args, idf_target):
 
 
 # @return
-#       on success: 256 bit HMAC key present in the given key_block (args.efuse_key_id)
+#       on success: 256 bit HMAC key present in the given key_block
+#                   (args.efuse_key_id)
 #       on failure: None
 # @info
 #       This function configures the provided efuse key_block.
-#       If the provided efuse key_block is empty the function generates a new HMAC key and burns it in the efuse key_block.
-#       If the key_block already contains a key the function reads the key from the efuse key_block
+#       If the provided efuse key_block is empty the function generates
+#       a new HMAC key and burns it in the efuse key_block.
+#       If the key_block already contains a key the function reads
+#       the key from the efuse key_block
 def configure_efuse_key_block(args, idf_target):
     efuse_summary_json = get_efuse_summary_json(args, idf_target)
     key_blk = 'BLOCK_KEY' + str(args.efuse_key_id)
@@ -391,9 +467,12 @@ def configure_efuse_key_block(args, idf_target):
 
     # If the efuse key block is writable (empty) then generate and write
     # the new hmac key and check again
-    # If the efuse key block is not writable (already contains a key) then check if it is readable
+    # If the efuse key block is not writable (already contains a key)
+    # then check if it is readable
     if kb_writeable is True:
-        print('Provided key block (KEY BLOCK {}) is writable\n Generating a new key and burning it in the efuse..\n'.format(args.efuse_key_id))
+        print('Provided key block (KEY BLOCK {}) is writable\n'
+              'Generating a new key and burning it in the efuse..\n'
+              .format(args.efuse_key_id))
 
         new_hmac_key = os.urandom(32)
         with open(hmac_key_file, 'wb') as key_file:
@@ -401,7 +480,8 @@ def configure_efuse_key_block(args, idf_target):
         # Burn efuse key
         efuse_burn_key(args, idf_target)
         if args.production is False:
-            # Read fresh summary of the efuse to read the key value from efuse.
+            # Read fresh summary of the efuse to read the
+            # key value from efuse.
             # If the key read from efuse matches with the key generated
             # on host then burn_key operation was successfull
             new_efuse_summary_json = get_efuse_summary_json(args, idf_target)
@@ -409,37 +489,55 @@ def configure_efuse_key_block(args, idf_target):
             print(hmac_key_read)
             hmac_key_read = bytes.fromhex(hmac_key_read)
             if new_hmac_key == hmac_key_read:
-                print('Key was successfully written to the efuse (KEY BLOCK {})'.format(args.efuse_key_id))
+                print('Key was successfully written to the efuse '
+                      '(KEY BLOCK {})'.format(args.efuse_key_id))
             else:
-                print('ERROR: Failed to burn the hmac key to efuse (KEY BLOCK {}),'
-                      '\nPlease execute the script again using a different key id'.format(args.efuse_key_id))
+                print('ERROR: Failed to burn the hmac key to efuse '
+                      '(KEY BLOCK {}),'
+                      '\nPlease execute the script again using '
+                      'a different key id'.format(args.efuse_key_id))
                 return None
         else:
             new_efuse_summary_json = get_efuse_summary_json(args, idf_target)
-            if new_efuse_summary_json[key_purpose]['value'] != 'HMAC_DOWN_DIGITAL_SIGNATURE':
-                print('ERROR: Failed to verify the key purpose of the key block{})'.format(args.efuse_key_id))
+            if (new_efuse_summary_json[key_purpose]['value']
+                    != 'HMAC_DOWN_DIGITAL_SIGNATURE'):
+                print('ERROR: Failed to verify the key purpose of '
+                      'the key block{})'.format(args.efuse_key_id))
                 return None
             hmac_key_read = new_hmac_key
     else:
-        # If the efuse key block is redable, then read the key from efuse block and use it for encrypting the RSA private key parameters.
-        # If the efuse key block is not redable or it has key purpose set to a different
-        # value than "HMAC_DOWN_DIGITAL_SIGNATURE" then we cannot use it for DS operation
+        # If the efuse key block is redable, then read the key from
+        # efuse block and use it for encrypting the RSA private key parameters.
+        # If the efuse key block is not redable or it has key
+        # purpose set to a different value than "HMAC_DOWN_DIGITAL_SIGNATURE"
+        # then we cannot use it for DS operation
         if kb_readable is True:
-            if efuse_summary_json[key_purpose]['value'] == 'HMAC_DOWN_DIGITAL_SIGNATURE':
-                print('Provided efuse key block (KEY BLOCK {}) already contains a key with key_purpose=HMAC_DOWN_DIGITAL_SIGNATURE,'
-                      '\nusing the same key for encrypting the private key data...\n'.format(args.efuse_key_id))
+            if (efuse_summary_json[key_purpose]['value'] ==
+                    'HMAC_DOWN_DIGITAL_SIGNATURE'):
+                print('Provided efuse key block (KEY BLOCK {}) '
+                      'already contains a key with '
+                      'key_purpose=HMAC_DOWN_DIGITAL_SIGNATURE,'
+                      '\nusing the same key for encrypting the '
+                      'private key data...\n'.format(args.efuse_key_id))
                 hmac_key_read = efuse_summary_json[key_blk]['value']
                 hmac_key_read = bytes.fromhex(hmac_key_read)
                 if args.keep_ds_data is True:
                     with open(hmac_key_file, 'wb') as key_file:
                         key_file.write(hmac_key_read)
             else:
-                print('ERROR: Provided efuse key block ((KEY BLOCK {})) contains a key with key purpose different'
-                      'than HMAC_DOWN_DIGITAL_SIGNATURE,\nplease execute the script again with a different value of the efuse key id.'.format(args.efuse_key_id))
+                print('ERROR: Provided efuse key block ((KEY BLOCK {})) '
+                      'contains a key with key purpose different '
+                      'than HMAC_DOWN_DIGITAL_SIGNATURE,'
+                      '\nplease execute the script again with '
+                      'a different value of the efuse key id.'
+                      .format(args.efuse_key_id))
                 return None
         else:
-            print('ERROR: Provided efuse key block (KEY BLOCK {}) is not readable and writeable,'
-                  '\nplease execute the script again with a different value of the efuse key id.'.format(args.efuse_key_id))
+            print('ERROR: Provided efuse key block (KEY BLOCK {}) '
+                  'is not readable and writeable,'
+                  '\nplease execute the script again '
+                  'with a different value of the efuse key id.'
+                  .format(args.efuse_key_id))
             return None
 
     # Return the hmac key burned into the efuse
@@ -455,9 +553,11 @@ def cleanup(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='''Generate an HMAC key and burn it in the desired efuse key block (required for Digital Signature),
-    Generates an NVS partition containing the encrypted private key parameters from the client private key.
-            ''')
+    parser = argparse.ArgumentParser(description='''
+    Generate an HMAC key and burn it in the desired efuse key
+    block (required for Digital Signature),
+    Generates an NVS partition containing the
+    encrypted private key parameters from the client private key.''')
 
     parser.add_argument(
         '--private-key',
@@ -477,45 +577,50 @@ def main():
         dest='device_cert',
         default='client.crt',
         metavar='relative/path/to/device-cert',
-        help='relative path to device/client certificate (which contains the public part of the client private key) ')
+        help='relative path to device/client certificate '
+             '(which contains the public part of the client private key) ')
 
     parser.add_argument(
         '--ca-cert',
         dest='ca_cert',
         default='ca.crt',
         metavar='relative/path/to/ca-cert',
-        help='relative path to ca certificate which has been used to sign the client certificate')
+        help='relative path to ca certificate which '
+             'has been used to sign the client certificate')
 
     parser.add_argument(
         '--secure_cert_type',
         dest='sec_cert_type', type=str, choices={'cust_flash', 'nvs'},
         default='cust_flash',
         metavar='type of secure_cert partition',
-        help='The type of esp_secure_cert partition. Can be \"cust_flash\" or \"nvs\"')
+        help='The type of esp_secure_cert partition. '
+             'Can be \"cust_flash\" or \"nvs\"')
 
     parser.add_argument(
         '--target_chip',
-        dest='target_chip', type=str, choices={'esp32s2', 'esp32s3', 'esp32c3'},
+        dest='target_chip', type=str,
+        choices={'esp32s2', 'esp32s3', 'esp32c3'},
         default='esp32c3',
         metavar='target chip',
         help='The target chip e.g. esp32s2, s3, c3')
 
     parser.add_argument(
         '--summary',
-        dest='summary',action='store_true',
+        dest='summary', action='store_true',
         help='Provide this option to print efuse summary of the chip')
 
     parser.add_argument(
         '--configure_ds',
-        dest='configure_ds',action='store_true',
+        dest='configure_ds', action='store_true',
         help='Provide this option to configure the DS peripheral.')
 
     parser.add_argument(
         '--efuse_key_id',
-        dest='efuse_key_id', type=int, choices=range(1,6),
+        dest='efuse_key_id', type=int, choices=range(1, 6),
         metavar='[key_id] ',
         default=1,
-        help='Provide the efuse key_id which contains/will contain HMAC_KEY, default is 1')
+        help='Provide the efuse key_id which '
+             'contains/will contain HMAC_KEY, default is 1')
 
     parser.add_argument(
         '--port', '-p',
@@ -525,21 +630,24 @@ def main():
         help='UART com port to which the ESP device is connected')
 
     parser.add_argument(
-        '--keep_ds_data_on_host','-keep_ds_data',
+        '--keep_ds_data_on_host', '-keep_ds_data',
         dest='keep_ds_data', action='store_true',
-        help='Keep encrypted private key data and key on host machine for testing purpose')
+        help='Keep encrypted private key data and key '
+             'on host machine for testing purpose')
 
     parser.add_argument(
         '--production', '-prod',
         dest='production', action='store_true',
-        help='Enable production configurations. e.g.keep efuse key block read protection enabled')
+        help='Enable production configurations. '
+             'e.g.keep efuse key block read protection enabled')
 
     args = parser.parse_args()
 
     idf_target = args.target_chip
     if idf_target not in supported_targets:
         if idf_target is not None:
-            print('ERROR: The script does not support the target {}'.format(idf_target))
+            print('ERROR: The script does not support '
+                  'the target {}'.format(idf_target))
         sys.exit(-1)
     idf_target = str(idf_target)
 
@@ -574,23 +682,38 @@ def main():
         if hmac_key_read is None:
             sys.exit(-1)
 
-        # Calculate the encrypted private key data along with all other parameters
-        c, iv, key_size = calculate_ds_parameters(args.privkey, args.priv_key_pass, hmac_key_read, idf_target)
+        # Calculate the encrypted private key data along
+        # with all other parameters
+        c, iv, key_size = calculate_ds_parameters(args.privkey,
+                                                  args.priv_key_pass,
+                                                  hmac_key_read, idf_target)
     else:
-        print("--configure_ds option not set. Configuring without use of DS peripheral.")
-        print('WARNING: Not Secure.\nthe private shall be stored as plaintext')
+        print('--configure_ds option not set. '
+              'Configuring without use of DS peripheral.')
+        print('WARNING: Not Secure.\n'
+              'the private shall be stored as plaintext')
 
     if args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
-            generate_cust_flash_partition_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, idf_target, bin_filename)
+            generate_cust_flash_partition_ds(c, iv, args.efuse_key_id,
+                                             key_size, args.device_cert,
+                                             ca_cert, idf_target,
+                                             bin_filename)
         else:
-            generate_cust_flash_partition_no_ds(args.device_cert, ca_cert, args.privkey, args.priv_key_pass, idf_target, bin_filename)
+            generate_cust_flash_partition_no_ds(args.device_cert, ca_cert,
+                                                args.privkey,
+                                                args.priv_key_pass,
+                                                idf_target, bin_filename)
     elif args.sec_cert_type == 'nvs':
         # Generate csv file for the DS data and generate an NVS partition.
         if args.configure_ds is not False:
-            generate_csv_file_ds(c, iv, args.efuse_key_id, key_size, args.device_cert, ca_cert, csv_filename)
+            generate_csv_file_ds(c, iv, args.efuse_key_id,
+                                 key_size, args.device_cert,
+                                 ca_cert, csv_filename)
         else:
-            generate_csv_file_no_ds(args.device_cert, ca_cert, args.privkey, args.priv_key_pass, csv_filename)
+            generate_csv_file_no_ds(args.device_cert, ca_cert,
+                                    args.privkey, args.priv_key_pass,
+                                    csv_filename)
         generate_nvs_partition(csv_filename, bin_filename)
 
     cleanup(args)
