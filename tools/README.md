@@ -1,7 +1,5 @@
-# DS Peripheral Configuration Tool
-The script [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) is used for configuring the DS peripheral on the ESP32-S2/ESP32-S3/ESP32-C3 SoC. The steps in the script are based on technical details of certain operations in the Digital Signature calculation, which can be found at Digital Signature Section of [ESP32-S2 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-s2_technical_reference_manual_en.pdf)
-
-The script generates a partition named `esp_secure_cert` on host machine, that contains the parameters required by the DS peripheral. The `esp_secure_cert` partition then needs to be flashed onto the device in order to use the ds peripheral.
+# ESP Secure cert Configuration Tool
+The script [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/feature/support_secure_cert_esp32/tools/configure_esp_secure_cert.py) is used for configuring the secure cert partition.
 
 # Configuration
 
@@ -27,27 +25,18 @@ openssl x509 -req -days 365 -in client.csr -CA cacert.pem -CAkey prvtkey.pem  -s
 
 # Generate `esp_secure_cert` partition
 Following commands can be used to configure the DS peripheral and generate the `esp_secure_cert` partition.
-The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
+The script can generate `cust_flash` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
 
-* When configuring the DS peripheral, by default the configuration script does not enable the read protection for the efuse key block in which the DS key is programmed. This is done for allowing flexibility while using the script for development purpose. Please provide the `--production` option as an additional argument to below command/s to enable the read protection for the respective efuse key block.
-
-* Please remove the `--configure_ds` argument from these commands if use of the DS peripheral is disabled in the menu config. WARNING: This is not recommended for production purpose as the private key shall be stored as plaintext.
-
-1. Generate `esp_secure_cert` partition of type `cust_flash`:
+## Generate `esp_secure_cert` partition of type `cust_flash`:
 
 ```
-python configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash --configure_ds
+python configure_esp_secure_cert.py -p /* Serial port */ --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash
 ```
-
-2. Generate `esp_secure_cert` partition of type `nvs`:
-```
-python configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type nvs --configure_ds
-```
-
-> The help menu for the utility can be found at `python configure_esp_secure_cert.py --help`
+> Note: This step shall create the “esp_secure_cert.bin” in the “esp_secure_cert_data” directly. Its contents can be viewed by executing `hexdump esp_secure_cert_data/esp_secure_cert.bin`
 
 # Flash the `esp_secure_cert` partition
 The `esp_secure_cert` partition can be flashed with help of following command:
 ```
-esptool.py --port /* Serial port */ write_flash 0xD000 esp_ds_data/esp_secure_cert.bin
+esptool.py --port /* Serial port */ write_flash 0xE000 esp_ds_data/esp_secure_cert.bin
 ```
+> Note: the offset of the esp_secure_cert.bin is decided based on the partition_custflash.csv in the esp_secure_cert_app.

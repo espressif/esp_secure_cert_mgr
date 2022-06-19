@@ -11,30 +11,26 @@ With the Espressif Pre-Provisioning Service, the ESP modules are pre-provisioned
 When a device is pre-provisioned that means the PKI credentials are generated for the device. The PKI credentials are then stored in a partition named
 *esp_secure_cert*.
 
-The `esp_secure_cert` partition can be generated on host with help of [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) utility, more details about the utility can be found in the [tools/README](https://github.com/espressif/esp_secure_cert_mgr/tree/main/tools#readme).
+The `esp_secure_cert` partition can be generated on host with help of [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/feature/support_secure_cert_esp32/tools/configure_esp_secure_cert.py) utility, more details about the utility can be found in the [tools/README](https://github.com/espressif/esp_secure_cert_mgr/blob/feature/support_secure_cert_esp32/tools/README.md).
 
-For esp devices that support DS peripheral, the pre-provisioning is done by leveraging the security benefit of the DS peripheral. In that case, all of the data which is present in the *esp_secure_cert* partition is completely secure.
-
-When the device is pre-provisioned with help of the DS peripheral then by default the partition primarily contains the following data:
+When the device is pre-provisioned then by default the partition primarily contains the following data:
 1) Device certificate: It is the public key/ certificate for the device's private key. It is used in TLS authentication.
 2) CA certificate: This is the certificate of the CA which is used to sign the device cert.
-3) Ciphertext: This is the encrypted private key of the device. The ciphertext is encrypted using the DS peripheral, thus it is completely safe to store on the flash.
+3) Private key: This is the RSA private key of the device.
 
-As listed above, the data only contains the public certificates and the encrypted private key and hence it is completely secure in itself. There is no need to further encrypt this data with any additional security algorithm.
+> Note: It is recommended to enable flash encryption for `esp_secure_cert` partition in production mode to protect the private key data.
 
-The `esp_secure_cert` partition can be of two types:
-1) *cust_flash*: In this case, the partition is a custom flash partition. The data is directly stored over the flash.
-2) *nvs partition*: In this case, the partition is of the `nvs` type. The `nvs_flash` abstraction layer from the ESP-IDF is used to store and then retreive the contents of the `esp_secure_cert` partition.
-
+The type of `esp_secure_cert` partition is as follows:
+* *cust_flash*: In this case, the partition is a custom flash partition. The data is directly stored over the flash.
 
 ## How to use the `esp_secure_cert_mgr` in your project ?
-The *esp_secure_cert_mgr* provides the set of APIs that are required to access the contents of the `esp_secure_cert` partition. The information on using the *esp_secure_cert_mgr* component with help of the IDF component manager for your project can be found at [Using with a project](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/tools/idf-component-manager.html#using-with-a-project). A demo example has also been provided with the `esp_secure_cert_mgr`, more details can be found out in the [example README](https://github.com/espressif/esp_secure_cert_mgr/blob/main/examples/esp_secure_cert_app/README.md).
+The *esp_secure_cert_mgr* provides the set of APIs that are required to access the contents of the `esp_secure_cert` partition. The information on using the *esp_secure_cert_mgr* component with help of the IDF component manager for your project can be found at [Using with a project](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/tools/idf-component-manager.html#using-with-a-project). A demo example has also been provided with the `esp_secure_cert_mgr`, more details can be found out in the [example README](https://github.com/espressif/esp_secure_cert_mgr/tree/feature/support_secure_cert_esp32/examples/esp_secure_cert_app).
 
-To use *esp_secure_cert_mgr* in a project, some configurations related to the type of *esp_secure_cert* partition need to be done. The instruction to configure the project for two types of *esp_secure_cert* are given below.
+To use *esp_secure_cert_mgr* in a project, some configurations related to the type of *esp_secure_cert* partition need to be done. The instruction to configure the project are given below.
 
 > To use the component with your project you need to know the type of *esp_secure_cert* partition of your pre-provisioned device.
 
-### Approach 1 - `esp_secure_cert` partition of type "cust_flash"
+### `esp_secure_cert` partition of type "cust_flash"
 When the "esp_secure_cert" partition is of the "cust_flash" type, The data is directly stored on the flash in the raw format. Metadata is maintained at the start of the partition to manage the contents of the custom partition.
 The contents of the partition are already public or encrypted, hence they are perfectly safe to be stored in the unencrypted format.
 
@@ -47,21 +43,5 @@ The partitions.csv file should contain the following line which enables it to id
 
 ```
 # Name, Type, SubType, Offset, Size, Flags
-esp_secure_cert, 0x3F, , 0xD000, 0x6000,
-```
-
-### Approach 2 - `esp_secure_cert` partition of type "nvs"
-When the "esp_secure_cert" partition is of "nvs" type, The data is directly stored on the flash in the "nvs" format. The "nvs_flash" component of ESP-IDF is used to handle the read/write operations of the data.
-The contents of the partition are either public or encrypted, hence they are perfectly safe to be stored in the unencrypted format.
-
-To use the esp_secure_cert_mgr for "nvs" type of partition. The following steps need to be followed:
-1) Enable the following menuconfig option
-`CONFIG_ESP_SECURE_CERT_NVS_PARTITION`
-2) Select the appropriate partitions.csv file:
-The partitions.csv file should contain the following line which enables it to identify the `esp_secure_cert` partition.
-
-```
-# Name, Type, SubType, Offset, Size, Flags
-esp_secure_cert, data, nvs, 0xD000, 0x6000,
-esp_secure_cert_keys, data, nvs_keys, 0x13000, 0x1000,
+esp_secure_cert, 0x3F, , 0xE000, 0x3000,
 ```
