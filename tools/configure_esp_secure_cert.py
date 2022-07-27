@@ -32,24 +32,19 @@ except ImportError:
 # Check python version is proper or not to avoid script failure
 assert sys.version_info >= (3, 6, 0), 'Python version too low.'
 
-esp_ds_data_dir = 'esp_ds_data'
+esp_secure_cert_data_dir = 'esp_secure_cert_data'
 # hmac_key_file is generated when HMAC_KEY is calculated,
 # it is used when burning HMAC_KEY to efuse
-hmac_key_file = os.path.join(esp_ds_data_dir, 'hmac_key.bin')
+hmac_key_file = os.path.join(esp_secure_cert_data_dir, 'hmac_key.bin')
 # csv and bin filenames are default filenames
 # for nvs partition files created with this script
-csv_filename = os.path.join(esp_ds_data_dir, 'esp_secure_cert.csv')
-bin_filename = os.path.join(esp_ds_data_dir, 'esp_secure_cert.bin')
+csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
+bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
-supported_targets = {'esp32s2', 'esp32c3', 'esp32s3'}
+supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3'}
 supported_key_size = {'esp32s2': [1024, 2048, 3072, 4096],
                       'esp32c3': [1024, 2048, 3072],
                       'esp32s3': [1024, 2048, 3072, 4096]}
-
-# The utility now only supports cust flash partition
-# NVS support is kept for reference
-CUST_FLASH = True
-NVS = False
 
 
 def load_privatekey(key_file_path, password=None):
@@ -235,10 +230,9 @@ def generate_cust_flash_partition_ds(c, iv, hmac_key_id, key_size,
                 ca_cert = ca_cert + b'\0'
                 output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
                                  + len(ca_cert)] = ca_cert
-                metadata = metadata
-                + struct.pack('<IH',
-                              zlib.crc32(ca_cert, 0xffffffff),
-                              len(ca_cert))
+                metadata += struct.pack('<IH',
+                                        zlib.crc32(ca_cert, 0xffffffff),
+                                        len(ca_cert))
         else:
             output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
             metadata = metadata + struct.pack('<IH', 0, 0)
@@ -314,10 +308,9 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert,
                 ca_cert = ca_cert + b'\0'
                 output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
                                  + len(ca_cert)] = ca_cert
-                metadata = metadata
-                + struct.pack('<IH',
-                              zlib.crc32(ca_cert, 0xffffffff),
-                              len(ca_cert))
+                metadata += struct.pack('<IH',
+                                        zlib.crc32(ca_cert, 0xffffffff),
+                                        len(ca_cert))
         else:
             output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
             metadata = metadata + struct.pack('<IH', 0, 0)
@@ -336,10 +329,9 @@ def generate_cust_flash_partition_no_ds(device_cert, ca_cert,
         private_key_pem = private_key_pem + b'\0'
         output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET
                          + len(private_key_pem)] = private_key_pem
-        metadata = metadata
-        + struct.pack('<IH',
-                      zlib.crc32(private_key_pem, 0xffffffff),
-                      len(private_key_pem))
+        metadata += struct.pack('<IH',
+                                zlib.crc32(private_key_pem, 0xffffffff),
+                                len(private_key_pem))
         # Align to 32 bit, this is done to match the
         # same operation done by the compiler
         metadata = metadata + b'\x00' * 2
@@ -393,14 +385,13 @@ def generate_csv_file_no_ds(device_cert, ca_cert, priv_key,
             f.write('ca_cert,file,string,{}\n'.format(ca_cert))
         f.write('dev_cert,file,string,{}\n'.format(device_cert))
 
-        private_key = load_privatekey(priv_key, priv_key_pass)
+        if priv_key_pass is not None:
+            print('Private key is going to be written'
+                  'in password encrypted format.')
+            print('If you want to write ptivate key in plaintext,'
+                  ' Please remove the password')
 
-        private_key_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption())
-
-        f.write('priv_key,data,string,{}\n'.format(private_key_pem.decode()))
+        f.write('priv_key,file,string,{}\n'.format(priv_key))
 
 
 class DefineArgs(object):
@@ -617,7 +608,7 @@ def main():
     parser.add_argument(
         '--target_chip',
         dest='target_chip', type=str,
-        choices={'esp32s2', 'esp32s3', 'esp32c3'},
+        choices=supported_targets,
         default='esp32c3',
         metavar='target chip',
         help='The target chip e.g. esp32s2, s3, c3')
@@ -626,6 +617,14 @@ def main():
         '--summary',
         dest='summary', action='store_true',
         help='Provide this option to print efuse summary of the chip')
+
+    parser.add_argument(
+        '--secure_cert_type',
+        dest='sec_cert_type', type=str, choices={'cust_flash', 'nvs'},
+        default='cust_flash',
+        metavar='type of secure_cert partition',
+        help='The type of esp_secure_cert partition. '
+             'Can be \"cust_flash\" or \"nvs\"')
 
     parser.add_argument(
         '--configure_ds',
@@ -687,8 +686,8 @@ def main():
         print('ERROR: The provided client cert file does not exist')
         sys.exit(-1)
 
-    if (os.path.exists(esp_ds_data_dir) is False):
-        os.makedirs(esp_ds_data_dir)
+    if (os.path.exists(esp_secure_cert_data_dir) is False):
+        os.makedirs(esp_secure_cert_data_dir)
 
     # Provide CA cert path only if it exists
     ca_cert = None
@@ -717,7 +716,7 @@ def main():
         print('WARNING: Not Secure.\n'
               'the private shall be stored as plaintext')
 
-    if CUST_FLASH:
+    if args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
             generate_cust_flash_partition_ds(c, iv, args.efuse_key_id,
                                              key_size, args.device_cert,
@@ -728,7 +727,7 @@ def main():
                                                 args.privkey,
                                                 args.priv_key_pass,
                                                 idf_target, bin_filename)
-    elif NVS:
+    elif args.sec_cert_type == 'nvs':
         # Generate csv file for the DS data and generate an NVS partition.
         if args.configure_ds is not False:
             generate_csv_file_ds(c, iv, args.efuse_key_id,
