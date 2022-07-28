@@ -190,7 +190,7 @@ void app_main()
         ESP_LOGI(TAG, "Ciphertext validated succcessfully");
     }
 #endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
-#elif CONFIG_ESP_SECURE_CERT_CUST_FLASH_PARTITION
+#else
     uint32_t len = 0;
     const void *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;

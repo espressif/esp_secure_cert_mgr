@@ -46,6 +46,11 @@ supported_key_size = {'esp32s2': [1024, 2048, 3072, 4096],
                       'esp32c3': [1024, 2048, 3072],
                       'esp32s3': [1024, 2048, 3072, 4096]}
 
+# The utility now only supports cust flash partition
+# NVS support is kept for reference
+CUST_FLASH = True
+NVS = False
+
 
 def load_privatekey(key_file_path, password=None):
     key_file = open(key_file_path, 'rb')
@@ -544,6 +549,27 @@ def configure_efuse_key_block(args, idf_target):
     return hmac_key_read
 
 
+# Flash esp_secure_cert partition after its generation
+#
+# @info
+# The flash region at offset of 0xD000 to 0x13000
+# The partition shall be flashed at 0xD000 offset
+def flash_esp_secure_cert_partition(args, idf_target):
+    print('Flashing the esp_secure_cert partition at 0xD000 offset')
+    print('Note: You can skip this step by providing --skip_flash argument')
+
+    os.system('python {0}/components/esptool_py/esptool/esptool.py '
+              '--chip {1} -p {2} erase_region '
+              '0xD000 0x6000'
+              .format((idf_path), (idf_target), (args.port)))
+
+    os.system('python {0}/components/esptool_py/esptool/esptool.py '
+              '--chip {1} -p {2} write_flash '
+              '0xD000 {3}'
+              .format((idf_path), (idf_target), (args.port),
+                      bin_filename))
+
+
 def cleanup(args):
     if args.keep_ds_data is False:
         if os.path.exists(hmac_key_file):
@@ -589,14 +615,6 @@ def main():
              'has been used to sign the client certificate')
 
     parser.add_argument(
-        '--secure_cert_type',
-        dest='sec_cert_type', type=str, choices={'cust_flash', 'nvs'},
-        default='cust_flash',
-        metavar='type of secure_cert partition',
-        help='The type of esp_secure_cert partition. '
-             'Can be \"cust_flash\" or \"nvs\"')
-
-    parser.add_argument(
         '--target_chip',
         dest='target_chip', type=str,
         choices={'esp32s2', 'esp32s3', 'esp32c3'},
@@ -613,6 +631,12 @@ def main():
         '--configure_ds',
         dest='configure_ds', action='store_true',
         help='Provide this option to configure the DS peripheral.')
+
+    parser.add_argument(
+        '--skip_flash',
+        dest='skip_flash', action='store_true',
+        help='Provide this option to skip flashing the'
+             ' esp_secure_cert partition at 0xD000 offset')
 
     parser.add_argument(
         '--efuse_key_id',
@@ -693,7 +717,7 @@ def main():
         print('WARNING: Not Secure.\n'
               'the private shall be stored as plaintext')
 
-    if args.sec_cert_type == 'cust_flash':
+    if CUST_FLASH:
         if args.configure_ds is not False:
             generate_cust_flash_partition_ds(c, iv, args.efuse_key_id,
                                              key_size, args.device_cert,
@@ -704,7 +728,7 @@ def main():
                                                 args.privkey,
                                                 args.priv_key_pass,
                                                 idf_target, bin_filename)
-    elif args.sec_cert_type == 'nvs':
+    elif NVS:
         # Generate csv file for the DS data and generate an NVS partition.
         if args.configure_ds is not False:
             generate_csv_file_ds(c, iv, args.efuse_key_id,
@@ -715,6 +739,9 @@ def main():
                                     args.privkey, args.priv_key_pass,
                                     csv_filename)
         generate_nvs_partition(csv_filename, bin_filename)
+
+    if args.skip_flash is False:
+        flash_esp_secure_cert_partition(args, idf_target)
 
     cleanup(args)
 

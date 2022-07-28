@@ -15,22 +15,26 @@
 #define ESP_SECURE_CERT_DEV_CERT_MAGIC_BYTE    0xC2   /* Magic byte of the generated device certificate */
 #define ESP_SECURE_CERT_CA_CERT_MAGIC_BYTE     0xC3   /* Magic byte of the CA certificate */
 
-#ifdef CONFIG_ESP_SECURE_CERT_NVS_PARTITION
 /* NVS Config */
-#define ESP_SECURE_CERT_NVS_PARTITION       CONFIG_ESP_SECURE_CERT_PARTITION_NAME
-#define ESP_SECURE_CERT_NVS_KEYS_PARTITION  CONFIG_ESP_SECURE_CERT_KEYS_PARTITION_NAME
+
+#define ESP_SECURE_CERT_NVS_PARTITION_NAME          "esp_secure_cert"  /* Name of the nvs pre prov partition */
+#define ESP_SECURE_CERT_NVS_KEYS_PARTITION          "esp_secure_cert_keys"
+
+#define ESP_SECURE_CERT_NVS_LEGACY_PARTITION_NAME   "pre_prov"
+#define ESP_SECURE_CERT_NVS_LEGACY_KEYS_PARTITION   "pre_prov_keys"
 
 #define ESP_SECURE_CERT_PRIV_KEY            "priv_key"
 #define ESP_SECURE_CERT_DEV_CERT            "dev_cert"
 #define ESP_SECURE_CERT_CA_CERT             "ca_cert"
-#define ESP_SECURE_CERT_NAMESPACE           CONFIG_ESP_SECURE_CERT_PARTITION_NAME
+#define ESP_SECURE_CERT_NAMESPACE           "esp_secure_cert"
+#define ESP_SECURE_CERT_LEGACY_NAMESPACE    "pre_prov"
+
 
 #define ESP_SECURE_CERT_CIPHERTEXT          "cipher_c"
 #define ESP_SECURE_CERT_RSA_LEN             "rsa_len"
 #define ESP_SECURE_CERT_EFUSE_KEY_ID        "ds_key_id"
 #define ESP_SECURE_CERT_IV                  "iv"
 
-#elif CONFIG_ESP_SECURE_CERT_CUST_FLASH_PARTITION
 #define ESP_SECURE_CERT_METADATA_SIZE                  64     /* 32 bytes are reserved for the metadata (Must be a multiple of 32)*/
 
 #define ESP_SECURE_CERT_DEV_CERT_SIZE                  2048
@@ -54,9 +58,13 @@
 #define ESP_SECURE_CERT_MAX_SIZE                       (ESP_SECURE_CERT_IV_OFFSET + ESP_SECURE_CERT_IV_SIZE)
 #endif
 
-#define ESP_SECURE_CERT_PARTITION_TYPE          0x3F        /* Custom partition type */
-#define ESP_SECURE_CERT_PARTITION_NAME          CONFIG_ESP_SECURE_CERT_PARTITION_NAME  /* Name of the custom pre prov partition */
-#define ESP_SECURE_CERT_METADATA_MAGIC_WORD     0x12345678
+#define ESP_SECURE_CERT_CUST_FLASH_PARTITION_TYPE           0x3F        /* Custom partition type */
+#define ESP_SECURE_CERT_NVS_PARTITION_TYPE                  0x01    /* Data type partition */
+#define ESP_SECURE_CERT_PARTITION_NAME                      "esp_secure_cert"  /* Name of the custom pre prov partition */
+#define ESP_SECURE_CERT_LEGACY_PARTITION_NAME               "pre_prov"
+
+#define ESP_SECURE_CERT_METADATA_MAGIC_WORD                 0x12345678
+
 
 
 typedef struct {
@@ -77,7 +85,3 @@ typedef struct {
 #endif
     uint32_t magic_word;                            /* The magic word which shall identify the valid metadata when read from flash */
 } esp_secure_cert_metadata;
-
-#else
-#error "Invalid type of partition selected"
-#endif
