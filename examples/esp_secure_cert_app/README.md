@@ -9,28 +9,9 @@ The sample app demonstrates the use of APIs from *esp_secure_cert_mgr* to retrie
 Before project configuration and build, be sure to set the correct chip target using `idf.py set-target <chip_name>`.
 ### Configure the project
 
-* The *esp_secure_cert* partition needs to be generated first with help of [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) script. See [tools/README.md](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/README.md) for more details.
-* Selecting the type of *esp_secure_cert* partition:
-The pre-provisioning utility supports the *esp_secure_cert* partition with two types, that are `nvs` and `cust_flash` partition.
-You will have to select the respective partition type with which the module has been provisioned earlier.
+* The *esp_secure_cert* partition needs to be generated and flashed first with help of [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) script. See [tools/README.md](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/README.md) for more details.
 
-Select the proper *esp_secure_cert* partition type and respective *partitions_csv* file as follows:
-#### 1) `esp_secure_cert` partition of type "cust_flash"
-When the "esp_secure_cert" partition is of the "cust_flash" type, The data is directly stored on the flash in the raw format. Metadata is maintained at the start of the partition to manage the contents of the custom partition.
-
-By default the type of *esp_secure_cert* partition is set to **cust_flash**.
-Hence, No Additional configurations need to be done.
-
-
-#### 2) `esp_secure_cert` partition of type "nvs"
-When the "esp_secure_cert" partition is of "nvs" type, The data is directly stored on the flash in the "nvs" format. The "nvs_flash" component of ESP-IDF is used to handle the read/write operations of the data.
-
-To use the esp_secure_cert_mgr for "nvs" type of partition. The following steps need to be followed:
-1) Set the type of *esp_secure_cert_partition* to **nvs**
-`Component config -> esp_secure_cert_mgr -> Choose the type of esp_secure_cert partition`
-2) Select the appropriate partitions.csv file:
-Set the custom partition file name to `partitions_nvs.csv` in
-`Component config -> Partition Table -> Custom partition CSV file`
+* Please ensure that appropriate type of esp_secure_cert partition has been set in your projects `partitions.csv` file. Please refer the "esp_secure_cert partition" section in the [component README](https://github.com/espressif/esp_secure_cert_mgr#readme) for more details.
 
 ### Build and Flash
 
@@ -72,10 +53,9 @@ I (831) sample_app: Ciphertext validated succcessfully
 
 ## Additional configurations for `pre_prov` partition
 Few of the modules which were pre-provisioned initially had the name of the pre-provisioning partition as `pre_prov`. For the modules which have pre-provisioning partition of name `esp_secure_cert` this part can be ignored.
-For modules with the `pre_prov` partition of type *cust_flash* the configuration remain the same as the `esp_secure_cert` partition which is listed above.
 
-For modules with `pre_prov` partition of type *nvs*, some additional configurations need to be done. The configurations can be done by simply replacing the *sdkconfig.defaults* file with *sdkconfig.pre_prov_nvs* file with following command:
-
+* For modules with `pre_prov` partition of type *cust_flash*, please update the line refering to `esp_secure_cert` partition in the partitions.csv with following: 
 ```
-cp sdkconfig.pre_prov_nvs sdkconfig.defaults
+pre_prov,         0x3F,          ,    0xD000,     0x6000,
 ```
+* No change is necessary for `pre_prov` partition of type *nvs*.
