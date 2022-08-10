@@ -26,7 +26,8 @@ esp_err_t esp_secure_cert_init_nvs_partition();
  *
  *  @note
  *       If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
- *       the required memory to store the device cert and return the pointer. The pointer can only be freed in this case (NVS)
+ *       the required memory to store the device cert and return the pointer.
+ *       The pointer can be freed in this case (NVS) using respective free API
  *
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
  *
@@ -45,12 +46,26 @@ esp_err_t esp_secure_cert_init_nvs_partition();
  */
 esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len);
 
+/*
+ * Free any internally allocated for the device cert.
+ * @note
+ *      This API is only needed in case the partition is of type NVS.
+ *      In other cases no internal memory is allocated by the respective API.
+ *
+ * @params
+ *      - buffer(in)        The data pointer
+ *                          This pointer should be the same one which has been obtained
+ *                          through respective "esp_secure_get_device_cert" API.
+ */
+esp_err_t esp_secure_cert_free_device_cert(char *buffer);
+
 /* @info
  *  Get the ca cert from the esp_secure_cert partition
  *
  *  @note
  *       If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
- *       the required memory to store the device cert and return the pointer. The pointer can only be freed in this case (NVS)
+ *       the required memory to store the device cert and return the pointer.
+ *       The pointer can be freed in this case (NVS) using respective free API
  *
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
  *
@@ -69,6 +84,19 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len);
  */
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len);
 
+/*
+ * Free any internally allocated for the ca cert.
+ * @note
+ *      This API is only needed in case the partition is of type NVS.
+ *      In other cases no internal memory is allocated by the respective API.
+ *
+ * @params
+ *      - buffer(in)        The data pointer
+ *                          This pointer should be the same one which
+ *                          has been obtained through respective "esp_secure_get_ca_cert" API.
+ */
+esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
+
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 /* @info
  *  Get the private key from the esp_secure_cert partition
@@ -76,7 +104,8 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len);
  * @note
  *
  *       If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
- *       the required memory to store the device cert and return the pointer. The pointer can only be freed in this case (NVS)
+ *       the required memory to store the device cert and return the pointer.
+ *       The pointer can be freed in this case (NVS) using respective free API
  *
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
  *
@@ -92,6 +121,20 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len);
  *                  On failure
  */
 esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len);
+
+/*
+ * Free any internally allocated for the priv key.
+ * @note
+ *      This API is only needed in case the partition is of type NVS.
+ *      In other cases no internal memory is allocated by the respective API.
+ *
+ * @params
+ *      - buffer(in)        The data pointer
+ *                          This pointer should be the same one which
+ *                          has been obtained through respective "esp_secure_get_ca_cert" API.
+ */
+esp_err_t esp_secure_cert_free_priv_key(char *buffer);
+
 #else /* !CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
 /* @info
  *       This function returns the flash esp_ds_context which can then be

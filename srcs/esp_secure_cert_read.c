@@ -384,6 +384,25 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
 
 }
 
+esp_err_t esp_secure_cert_free_device_cert(char *buffer)
+{
+    switch(current_partition_format) {
+    // fall through
+    case ESP_SECURE_CERT_PF_CUST_FLASH:
+    case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
+        return ESP_OK;
+        break;
+
+    case ESP_SECURE_CERT_PF_NVS:
+        free(buffer);
+        return ESP_OK;
+        break;
+    case ESP_SECURE_CERT_PF_INVALID:
+    default:
+        return ESP_FAIL;
+    }
+}
+
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 {
     // This API sets the global variable current_partition_format
@@ -417,6 +436,24 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 
 }
 
+esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
+{
+    switch(current_partition_format) {
+    // fall through
+    case ESP_SECURE_CERT_PF_CUST_FLASH:
+    case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
+        return ESP_OK;
+        break;
+
+    case ESP_SECURE_CERT_PF_NVS:
+        free(buffer);
+        return ESP_OK;
+        break;
+    case ESP_SECURE_CERT_PF_INVALID:
+    default:
+        return ESP_FAIL;
+    }
+}
 
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
@@ -452,6 +489,25 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
         return ESP_FAIL;
     }
 
+}
+
+esp_err_t esp_secure_cert_free_priv_key(char *buffer)
+{
+    switch(current_partition_format) {
+    // fall through
+    case ESP_SECURE_CERT_PF_CUST_FLASH:
+    case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
+        return ESP_OK;
+        break;
+
+    case ESP_SECURE_CERT_PF_NVS:
+        free(buffer);
+        return ESP_OK;
+        break;
+    case ESP_SECURE_CERT_PF_INVALID:
+    default:
+        return ESP_FAIL;
+    }
 }
 #endif
 
