@@ -7,4 +7,16 @@ menu "ESP Secure Cert Manager"
         help
             Enable the DS peripheral support. Not supported on esp32.
 
+    config ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
+        bool "Enable support for legacy formats"
+        default n
+        help
+            This option enables support for the legacy formats along with
+            the current format in the esp_secure_cert component.
+            The current format is
+            cust_flash_tlv
+            The legacy formats are as follows:
+            cust_flash
+            nvs
+
 endmenu # ESP Secure Cert Manager
