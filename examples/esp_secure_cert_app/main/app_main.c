@@ -42,7 +42,12 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         goto exit;
     }
 
-    esp_ds_init_data_ctx(ds_data);
+    esp_err_t esp_ret = esp_ds_init_data_ctx(ds_data);
+    if (esp_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialze the DS context");
+        return esp_ret;
+    }
+
     const size_t sig_len = 256;
     uint32_t hash[8] = {[0 ... 7] = 0xAABBCCDD};
 
@@ -112,7 +117,7 @@ void app_main()
     if (ds_data != NULL) {
         ESP_LOGI(TAG, "Successfully obtained the ds context");
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->c, ESP_DS_C_LEN, ESP_LOG_DEBUG);
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->iv, ESP_DS_IV_BIT_LEN / 8, ESP_LOG_DEBUG);
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->iv, ESP_DS_IV_LEN, ESP_LOG_DEBUG);
         ESP_LOGI(TAG, "The value of rsa length is %d", ds_data->rsa_length_bits);
         ESP_LOGI(TAG, "The value of efuse key id is %d", ds_data->efuse_key_id);
     } else {
@@ -133,8 +138,8 @@ void app_main()
     }
 #endif
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Successfully obtained the contents of esp_secure_cert partition");
+        ESP_LOGI(TAG, "Successfully obtained and verified the contents of esp_secure_cert partition");
     } else {
-        ESP_LOGE(TAG, "Failed to obtain the contents of the esp_secure_cert partition");
+        ESP_LOGE(TAG, "Failed to obtain and verify the contents of the esp_secure_cert partition");
     }
 }

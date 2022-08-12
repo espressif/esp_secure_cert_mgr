@@ -6,7 +6,6 @@
 #pragma once
 #include "esp_err.h"
 
-#include "esp_secure_cert_config.h"
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 #include "rsa_sign_alt.h"
 #endif

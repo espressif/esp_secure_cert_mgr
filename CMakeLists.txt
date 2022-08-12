@@ -1,6 +1,6 @@
 set(srcs "srcs/esp_secure_cert_tlv_read.c")
 
-if(CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMAT)
+if(CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS)
     list(APPEND srcs "srcs/esp_secure_cert_read.c")
 endif()
 
