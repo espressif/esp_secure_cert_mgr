@@ -1,4 +1,4 @@
-version: "1.0.2"
+version: "1.0.3"
 description: "ESP Secure Cert Manager"
 url: https://github.com/espressif/esp_secure_cert_mgr
 dependencies:

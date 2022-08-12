@@ -80,129 +80,18 @@ exit:
 
 void app_main()
 {
-#ifdef CONFIG_ESP_SECURE_CERT_NVS_PARTITION
-    esp_err_t err = esp_secure_cert_init_nvs_partition();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to intialize nvs (0x%x).", err);
-        return;
-    }
-
-    uint32_t len;
-    if (esp_secure_cert_get_device_cert(NULL, &len) == ESP_OK) {
-        char *buffer = (char *)calloc(1, len + 1);
-        if (buffer == NULL) {
-            ESP_LOGE(TAG, "Not enough memory for device cert buffer");
-        }
-        esp_secure_cert_get_device_cert(buffer, &len);
-        ESP_LOGI(TAG, "Device Cert: \nLength: %d\n%s", strlen((char *)buffer), (char *)buffer);
-        free(buffer);
-    } else {
-        ESP_LOGE(TAG, "Error in getting device cert");
-    }
-
-    if (esp_secure_cert_get_ca_cert(NULL, &len) == ESP_OK) {
-        char *buffer = (char *)calloc(1, len + 1);
-        if (buffer == NULL) {
-            ESP_LOGE(TAG, "Not enough memory for ca cert buffer");
-        }
-        esp_secure_cert_get_ca_cert(buffer, &len);
-        ESP_LOGI(TAG, "CA Cert: \nLength: %d\n%s", strlen((char *)buffer), (char *)buffer);
-        free(buffer);
-    } else {
-        ESP_LOGE(TAG, "Error in getting ca cert");
-    }
-
-#ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
-    if (esp_secure_cert_get_priv_key(NULL, &len) == ESP_OK) {
-        char *buffer = (char *)calloc(1, len + 1);
-        if (buffer == NULL) {
-            ESP_LOGE(TAG, "Not enough memory for priv key buffer");
-        }
-        esp_secure_cert_get_priv_key(buffer, &len);
-        ESP_LOGI(TAG, "PEM KEY: \nLength: %d\n%s", strlen((char *)buffer), (char *)buffer);
-        free(buffer);
-    } else {
-        ESP_LOGE(TAG, "Error in getting private key");
-    }
-#else
-    if (esp_secure_cert_get_ciphertext(NULL, &len) == ESP_OK) {
-        char *buffer = (char *)calloc(1, len + 1);
-        if (buffer == NULL) {
-            ESP_LOGE(TAG, "Not enough memory for ciphertext buffer");
-        }
-        esp_secure_cert_get_ciphertext(buffer, &len);
-        ESP_LOGI(TAG, "Successfuly obtained ciphertext, ciphertext length is %d", len);
-        ESP_LOGD(TAG, "ciphertext:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, buffer, len, ESP_LOG_DEBUG);
-        free(buffer);
-    } else {
-        ESP_LOGE(TAG, "Error in getting ciphertext");
-    }
-
-    if (esp_secure_cert_get_iv(NULL, &len) == ESP_OK) {
-        char *buffer = (char *)calloc(1, len + 1);
-        if (buffer == NULL) {
-            ESP_LOGE(TAG, "Not enough memory for ciphertext buffer");
-        }
-        esp_secure_cert_get_iv(buffer, &len);
-        ESP_LOGI(TAG, "Successfuly obtained initialization vector, iv length is %d", len);
-        ESP_LOGD(TAG, "iv:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, buffer, len, ESP_LOG_DEBUG);
-        free(buffer);
-    } else {
-        ESP_LOGE(TAG, "Error in getting initialization vector");
-    }
-
-    uint16_t rsa_length;
-    if (esp_secure_cert_get_rsa_length(&rsa_length) == ESP_OK) {
-        ESP_LOGI(TAG, "RSA length is %d", rsa_length);
-    } else {
-        ESP_LOGE(TAG, "Error in getting rsa length");
-    }
-
-    uint8_t efuse_key_id;
-    if (esp_secure_cert_get_efuse_key_id(&efuse_key_id) == ESP_OK) {
-        ESP_LOGI(TAG, "Efuse key id %d", efuse_key_id);
-    } else {
-        ESP_LOGE(TAG, "Error in getting efuse key id");
-    }
-
-    esp_ds_data_ctx_t *ds_data = NULL;
-    ds_data = esp_secure_cert_get_ds_ctx();
-    if (ds_data == NULL) {
-        ESP_LOGE(TAG, "Failed to obtain the ds context");
-    }
-    ESP_LOGI(TAG, "Successfully obtained the ds context");
-
-    char *dev_cert_buf = NULL;
-    if (esp_secure_cert_get_device_cert(NULL, &len) == ESP_OK) {
-        dev_cert_buf = (char *)calloc(1, len + 1);
-        if (dev_cert_buf == NULL) {
-            ESP_LOGE(TAG, "Not enough memory for device cert buffer");
-        }
-        esp_secure_cert_get_device_cert(dev_cert_buf, &len);
-    }
-
-    err = test_ciphertext_validity(ds_data, (unsigned char *) dev_cert_buf, len);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to validate ciphertext");
-    } else {
-        ESP_LOGI(TAG, "Ciphertext validated succcessfully");
-    }
-#endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
-#elif CONFIG_ESP_SECURE_CERT_CUST_FLASH_PARTITION
     uint32_t len = 0;
-    const void *addr = NULL;
+    char *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;
 
-    esp_ret = esp_secure_cert_get_dev_cert_addr(&addr, &len);
+    esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
         ESP_LOGI(TAG, "Device Cert: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
     }
 
-    esp_ret = esp_secure_cert_get_ca_cert_addr(&addr, &len);
+    esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
         ESP_LOGI(TAG, "CA Cert: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, addr, len, ESP_LOG_DEBUG);
@@ -211,35 +100,19 @@ void app_main()
     }
 
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
-    esp_ret = esp_secure_cert_get_priv_key_addr(&addr, &len);
+    esp_ret = esp_secure_cert_get_priv_key(&addr, &len);
     if (esp_ret == ESP_OK) {
         ESP_LOGI(TAG, "PEM KEY: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of private_key");
     }
 #else
-    esp_ret = esp_secure_cert_get_ciphertext_addr(&addr, &len);
-    if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Successfuly obtained ciphertext, ciphertext length is %d", len);
-        ESP_LOGD(TAG, "ciphertext:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, addr, len, ESP_LOG_DEBUG);
-    } else {
-        ESP_LOGE(TAG, "Failed to obtain flash address of ciphertext");
-    }
-
-    esp_ret = esp_secure_cert_get_iv_addr(&addr, &len);
-    if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Successfuly obtained iv, iv length is %d", len);
-        ESP_LOGD(TAG, "iv:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, addr, len, ESP_LOG_DEBUG);
-    } else {
-        ESP_LOGE(TAG, "Failed to obtain flash address of iv");
-    }
-
     esp_ds_data_ctx_t *ds_data = NULL;
     ds_data = esp_secure_cert_get_ds_ctx();
     if (ds_data != NULL) {
         ESP_LOGI(TAG, "Successfully obtained the ds context");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->c, ESP_DS_C_LEN, ESP_LOG_DEBUG);
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->iv, ESP_DS_IV_BIT_LEN / 8, ESP_LOG_DEBUG);
         ESP_LOGI(TAG, "The value of rsa length is %d", ds_data->rsa_length_bits);
         ESP_LOGI(TAG, "The value of efuse key id is %d", ds_data->efuse_key_id);
     } else {
@@ -247,7 +120,7 @@ void app_main()
     }
 
     /* Read the dev_cert addr again */
-    esp_ret = esp_secure_cert_get_dev_cert_addr(&addr, &len);
+    esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to obtain the dev cert flash address");
     }
@@ -259,5 +132,9 @@ void app_main()
         ESP_LOGI(TAG, "Ciphertext validated succcessfully");
     }
 #endif
-#endif
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Successfully obtained the contents of esp_secure_cert partition");
+    } else {
+        ESP_LOGE(TAG, "Failed to obtain the contents of the esp_secure_cert partition");
+    }
 }

@@ -49,5 +49,5 @@ python configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host 
 # Flash the `esp_secure_cert` partition
 The `esp_secure_cert` partition can be flashed with help of following command:
 ```
-esptool.py --port /* Serial port */ write_flash 0xD000 esp_ds_data/esp_secure_cert.bin
+esptool.py --port /* Serial port */ write_flash 0xD000 esp_secure_cert_data/esp_secure_cert.bin
 ```
