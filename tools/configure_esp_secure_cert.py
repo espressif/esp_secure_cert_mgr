@@ -4,7 +4,8 @@
 import argparse
 import os
 import sys
-from esp_secure_cert import nvs_format, custflash_format, configure_ds
+from esp_secure_cert import nvs_format, custflash_format
+from esp_secure_cert import configure_ds, tlv_format
 
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):
@@ -100,11 +101,13 @@ def main():
 
     parser.add_argument(
         '--secure_cert_type',
-        dest='sec_cert_type', type=str, choices={'cust_flash', 'nvs'},
-        default='cust_flash',
+        dest='sec_cert_type', type=str,
+        choices={'cust_flash_tlv', 'cust_flash', 'nvs'},
+        default='cust_flash_tlv',
         metavar='type of secure_cert partition',
         help='The type of esp_secure_cert partition. '
-             'Can be \"cust_flash\" or \"nvs\"')
+             'Can be \"cust_flash_tlv\" or \"cust_flash\" or \"nvs\". '
+             'Please note that \"cust_flash\" and \"nvs\" are legacy formats.')
 
     parser.add_argument(
         '--configure_ds',
@@ -172,7 +175,7 @@ def main():
     # Provide CA cert path only if it exists
     ca_cert = None
     if (os.path.exists(args.ca_cert) is True):
-        ca_cert = args.ca_cert
+        ca_cert = os.path.abspath(args.ca_cert)
 
     c = None
     iv = None
@@ -198,7 +201,19 @@ def main():
         print('WARNING: Not Secure.\n'
               'the private shall be stored as plaintext')
 
-    if args.sec_cert_type == 'cust_flash':
+    if args.sec_cert_type == 'cust_flash_tlv':
+        if args.configure_ds is not False:
+            tlv_format.generate_partition_ds(c, iv, args.efuse_key_id,
+                                             key_size, args.device_cert,
+                                             ca_cert, idf_target,
+                                             bin_filename)
+        else:
+            tlv_format.generate_partition_no_ds(args.device_cert,
+                                                ca_cert, args.privkey,
+                                                args.priv_key_pass,
+                                                idf_target, bin_filename)
+
+    elif args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
             custflash_format.generate_partition_ds(c, iv, args.efuse_key_id,
                                                    key_size, args.device_cert,
