@@ -42,7 +42,25 @@ When the device is pre-provisioned with help of the DS peripheral then by defaul
 
 As listed above, the data only contains the public certificates and the encrypted private key and hence it is completely secure in itself. There is no need to further encrypt this data with any additional security algorithm.
 
-The `esp_secure_cert` partition can be of two types:
+### `esp_secure_cert` partition format:
+The data is stored in the TLV format in the `esp_secure_cert`.
+The data is stored in the following manner:
+
+`TLV_Header -> data -> TLV_Footer`
+
+* TLV header: It contains the information regarding the data such as the type of the data and the length of the data.
+* TLV footer: It contains the crc of the data along with the header.
+
+For more details about the TLV, please take a look at [tlv_config.h](https://github.com/espressif/esp_secure_cert_mgr/tree/main/private_include/esp_secure_cert_tlv_config.h).
+
+> Note: The TLV read API expects that a padding of appropriate size is added to data to make it size as a multiple of 16 bytes, the partition generation utility i.e. [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) takes care of this internally while generating the partition. 
+
+
+### Legacy formats for `esp_secure_cert` partition:
+`esp_secure_cert` partition also supports two legacy flash formats.
+The support for these can be enabled through following menuconfig option:
+* `Component config > ESP Secure Cert Manager -> Enable support for legacy formats`
+
 1) *cust_flash*: In this case, the partition is a custom flash partition. The data is directly stored over the flash.
 * In this case the `partitions.csv` file for the project should contain the following line which enables it to identify the `esp_secure_cert` partition.
 

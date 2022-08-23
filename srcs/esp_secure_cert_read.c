@@ -9,17 +9,21 @@
 #include "esp_err.h"
 #include "esp_partition.h"
 #include "esp_crc.h"
-#include "esp_secure_cert_config.h"
-#include "esp_secure_cert_read.h"
 #include "nvs_flash.h"
+#include "esp_secure_cert_read.h"
+#include "esp_secure_cert_config.h"
+#include "esp_secure_cert_tlv_config.h"
+#include "esp_secure_cert_tlv_private.h"
+#include "esp_heap_caps.h"
 
-#define TAG "esp_secure_cert"
+static const char *TAG = "esp_secure_cert";
 
 typedef enum partition_format {
     ESP_SECURE_CERT_PF_INVALID = -1,
     ESP_SECURE_CERT_PF_CUST_FLASH,
     ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY,
     ESP_SECURE_CERT_PF_NVS,
+    ESP_SECURE_CERT_PF_TLV,
 } esp_secure_cert_part_fmt_t;
 
 static esp_secure_cert_part_fmt_t current_partition_format = ESP_SECURE_CERT_PF_INVALID;
@@ -68,9 +72,18 @@ static const esp_partition_t *esp_secure_cert_get_partition(void)
 
     // This switch case statement is added for increasing readability
     // The actual behaviour is a simple fall through
-    current_partition_format = ESP_SECURE_CERT_PF_CUST_FLASH;
+    current_partition_format = ESP_SECURE_CERT_PF_TLV;
 
     switch (current_partition_format) {
+    case ESP_SECURE_CERT_PF_TLV:
+        part = esp_secure_cert_find_partition(ESP_SECURE_CERT_CUST_FLASH_PARTITION_TYPE, ESP_SECURE_CERT_TLV_PARTITION_NAME, ESP_SECURE_CERT_PF_TLV);
+        if (part != NULL) {
+            if (esp_secure_cert_is_tlv_partition()) {
+                ESP_LOGI(TAG, "Pre-provisioned partition information:");
+                ESP_LOGI(TAG, "partition format: %s, partition name: %s", "CUST_FLASH_TLV", ESP_SECURE_CERT_PARTITION_NAME);
+                return part;
+            }
+        }
     // fall through
     case ESP_SECURE_CERT_PF_CUST_FLASH:
         part = esp_secure_cert_find_partition(ESP_SECURE_CERT_CUST_FLASH_PARTITION_TYPE, ESP_SECURE_CERT_PARTITION_NAME, ESP_SECURE_CERT_PF_CUST_FLASH);
@@ -357,6 +370,9 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
     esp_secure_cert_get_partition_format();
     esp_err_t ret;
     switch (current_partition_format) {
+    case ESP_SECURE_CERT_PF_TLV:
+        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, buffer, len);
+
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return esp_secure_cert_get_addr(ESP_SECURE_CERT_DEV_CERT_OFFSET, buffer, len);;
@@ -388,6 +404,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer)
 {
     switch(current_partition_format) {
     // fall through
+    case ESP_SECURE_CERT_PF_TLV:
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return ESP_OK;
@@ -410,6 +427,9 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
     esp_err_t ret;
 
     switch (current_partition_format) {
+    case ESP_SECURE_CERT_PF_TLV:
+        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, buffer, len);
+
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return esp_secure_cert_get_addr(ESP_SECURE_CERT_DEV_CERT_OFFSET, buffer, len);;
@@ -440,6 +460,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
 {
     switch(current_partition_format) {
     // fall through
+    case ESP_SECURE_CERT_PF_TLV:
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return ESP_OK;
@@ -464,6 +485,8 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
     esp_err_t ret;
 
     switch (current_partition_format) {
+    case ESP_SECURE_CERT_PF_TLV:
+        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, buffer, len);
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return esp_secure_cert_get_addr(ESP_SECURE_CERT_PRIV_KEY_OFFSET, buffer, len);;
@@ -495,6 +518,7 @@ esp_err_t esp_secure_cert_free_priv_key(char *buffer)
 {
     switch(current_partition_format) {
     // fall through
+    case ESP_SECURE_CERT_PF_TLV:
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return ESP_OK;
@@ -537,7 +561,7 @@ static esp_err_t esp_secure_cert_read(size_t offset, unsigned char *buffer, uint
     }
 
     if (*len < data_len) {
-        ESP_LOGE(TAG, "Insufficient length of buffer. buffer size: %d, required: %d", *len, data_len);
+        ESP_LOGE(TAG, "Insufficient length of buffer. buffer size: %lu, required: %lu", *len, data_len);
         return ESP_FAIL;
     }
 
@@ -564,23 +588,26 @@ static esp_err_t esp_secure_cert_read(size_t offset, unsigned char *buffer, uint
 
 esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx()
 {
+    esp_secure_cert_get_partition_format();
+    if (current_partition_format == ESP_SECURE_CERT_PF_TLV) {
+        return esp_secure_cert_tlv_get_ds_ctx();
+    }
     esp_err_t esp_ret;
     esp_ds_data_ctx_t *ds_data_ctx;
     uint32_t len = 0;
-    ds_data_ctx = (esp_ds_data_ctx_t *)malloc(sizeof(esp_ds_data_ctx_t));
+    ds_data_ctx = (esp_ds_data_ctx_t *)heap_caps_malloc(sizeof(esp_ds_data_ctx_t), MALLOC_CAP_INTERNAL);
     if (ds_data_ctx == NULL) {
         ESP_LOGE(TAG, "Error in allocating memory for esp_ds_data_context");
         goto exit;
     }
 
-    ds_data_ctx->esp_ds_data = (esp_ds_data_t *)calloc(1, sizeof(esp_ds_data_t));
+    ds_data_ctx->esp_ds_data = (esp_ds_data_t *)heap_caps_calloc(1, sizeof(esp_ds_data_t), MALLOC_CAP_INTERNAL);
     if (ds_data_ctx->esp_ds_data == NULL) {
         ESP_LOGE(TAG, "Could not allocate memory for DS data handle ");
         goto exit;
     }
 
     // This API sets the global variable current_partition_format
-    esp_secure_cert_get_partition_format();
 
     if (current_partition_format == ESP_SECURE_CERT_PF_CUST_FLASH || current_partition_format == ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY) {
         char *buffer;
@@ -651,6 +678,11 @@ exit:
 
 void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
 {
+    esp_secure_cert_get_partition_format();
+    if (current_partition_format == ESP_SECURE_CERT_PF_TLV) {
+        esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
+    }
+
     if (ds_ctx != NULL) {
         free(ds_ctx->esp_ds_data);
     }
