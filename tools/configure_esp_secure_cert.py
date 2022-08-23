@@ -52,10 +52,10 @@ def cleanup(args):
 
 def main():
     parser = argparse.ArgumentParser(description='''
-    Generate an HMAC key and burn it in the desired efuse key
-    block (required for Digital Signature),
-    Generates an NVS partition containing the
-    encrypted private key parameters from the client private key.''')
+    The python utility helps to configure and provision
+    the device with PKI credentials, to generate the esp_secure_cert partition.
+    The utility also configures the DS peripheral on the SoC if available.
+    ''')
 
     parser.add_argument(
         '--private-key',
