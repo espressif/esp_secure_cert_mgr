@@ -86,7 +86,7 @@ static esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_
                 return ESP_OK;
             }
             ESP_LOGD(TAG, "Unable to find tlv of type: %d", type);
-            ESP_LOGE(TAG, "Expected magic byte is %04X, obtained magic byte = %08lX", ESP_SECURE_CERT_TLV_MAGIC, tlv_header->magic);
+            ESP_LOGE(TAG, "Expected magic byte is %04X, obtained magic byte = %04X", ESP_SECURE_CERT_TLV_MAGIC, (unsigned int) tlv_header->magic);
             return ESP_FAIL;
         }
         uint8_t padding_length = MIN_ALIGNMENT_REQUIRED - (tlv_header->length % MIN_ALIGNMENT_REQUIRED);
@@ -98,8 +98,8 @@ static esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_
             uint32_t data_crc = esp_crc32_le(UINT32_MAX, (const uint8_t * )tlv_header, crc_data_len);
             esp_secure_cert_tlv_footer_t *tlv_footer = (esp_secure_cert_tlv_footer_t *)(esp_secure_cert_addr + crc_data_len + tlv_offset);
             if (tlv_footer->crc != data_crc) {
-                ESP_LOGE(TAG, "Calculated crc = %08lX does not match with crc"
-                         "read from esp_secure_cert partition = %08lX", data_crc, tlv_footer->crc);
+                ESP_LOGE(TAG, "Calculated crc = %04X does not match with crc"
+                         "read from esp_secure_cert partition = %04X", (unsigned int)data_crc, (unsigned int)tlv_footer->crc);
                 return ESP_FAIL;
             }
             ESP_LOGD(TAG, "tlv structure of type %d found and verified", type);
