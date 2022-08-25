@@ -18,7 +18,7 @@
  *      - ESP_FAIL/other relevant esp error code
  *                  On failure
  */
-esp_err_t esp_secure_cert_init_nvs_partition();
+esp_err_t esp_secure_cert_init_nvs_partition(void);
 
 /* @info
  *  Get the device cert from the esp_secure_cert partition
@@ -147,7 +147,7 @@ esp_err_t esp_secure_cert_free_priv_key(char *buffer);
  *      - ESP_FAIL/other relevant esp error code
  *                  On failure
  */
-esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx();
+esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void);
 
 /*
  *@info

@@ -1,5 +1,18 @@
 # This file contains the list of changes across different versions
 
+## v2.0.1
+* Added fixes for build failures with `-Wstrict-prototypes` CFLAG.
+* Added fix for build failure with toolchain change in IDFv4.x and IDFv5.x
+
+## v2.0.0
+* Added esp-secure-cert-tool to PyPi.
+* Restructure esp-secure-cert-tool
+### Breaking changes in v2.0.0
+* Added the support for TLV format for storing data in esp_secure_cert partition.
+* Make the TLV `cust_flash_tlv` as the default flash format.
+* Marked all the supported flash formats before TLV as legacy: `cust_flash`, `nvs`.
+* esp_secure_cert_app: Updated the partition table for the example
+
 ## v1.0.3
 * esp_secure_cert API now Dynamically identify the type of partitionand access the data accordingly
 * esp_secure_cert_app: Enable support for target esp32

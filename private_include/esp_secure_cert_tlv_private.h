@@ -50,7 +50,7 @@ bool esp_secure_cert_is_tlv_partition(void);
  *      - ESP_FAIL/other relevant esp error code
  *                  On failure
  */
-esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx();
+esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void);
 
 /*
  *@info
