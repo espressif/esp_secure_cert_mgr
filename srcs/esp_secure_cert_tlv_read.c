@@ -25,7 +25,7 @@ static const char *TAG = "esp_secure_cert_tlv";
  * The mapping is done only once and function shall
  * simply return same address in case of successive calls.
  **/
-static const void *esp_secure_cert_get_mapped_addr()
+static const void *esp_secure_cert_get_mapped_addr(void)
 {
     // Once initialized, these variable shall contain valid data till reboot.
     static const void *esp_secure_cert_mapped_addr;
@@ -131,7 +131,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **b
 }
 
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
-esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx()
+esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void)
 {
     esp_err_t esp_ret;
     esp_ds_data_ctx_t *ds_data_ctx;
@@ -202,7 +202,7 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 }
 #else /* !CONFIG_ESP_SECURE_CERT_DS_PEIPHERAL */
 
-esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx()
+esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void)
 {
     return esp_secure_cert_tlv_get_ds_ctx();
 }

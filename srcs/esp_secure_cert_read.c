@@ -171,7 +171,7 @@ static const esp_partition_t *esp_secure_cert_get_partition(void)
     return NULL;
 }
 
-static void esp_secure_cert_get_partition_format()
+static void esp_secure_cert_get_partition_format(void)
 {
     if (current_partition_format != ESP_SECURE_CERT_PF_INVALID) {
         return;
@@ -223,7 +223,7 @@ static int nvs_get(const char *name_space, const char *key, char *value, size_t 
     return err;
 }
 
-esp_err_t esp_secure_cert_init_nvs_partition()
+esp_err_t esp_secure_cert_init_nvs_partition(void)
 {
     const esp_partition_t *part = esp_secure_cert_get_partition();
     if (part == NULL) {
@@ -586,7 +586,7 @@ static esp_err_t esp_secure_cert_read(size_t offset, unsigned char *buffer, uint
     return ESP_OK;
 }
 
-esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx()
+esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void)
 {
     esp_secure_cert_get_partition_format();
     if (current_partition_format == ESP_SECURE_CERT_PF_TLV) {
