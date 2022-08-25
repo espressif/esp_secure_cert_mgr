@@ -5,6 +5,7 @@
  */
 
 #include <string.h>
+#include <inttypes.h>
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_partition.h"
@@ -561,7 +562,7 @@ static esp_err_t esp_secure_cert_read(size_t offset, unsigned char *buffer, uint
     }
 
     if (*len < data_len) {
-        ESP_LOGE(TAG, "Insufficient length of buffer. buffer size: %lu, required: %lu", *len, data_len);
+        ESP_LOGE(TAG, "Insufficient length of buffer. buffer size: %"PRIu32", required: %"PRIu32"", *len, data_len);
         return ESP_FAIL;
     }
 
