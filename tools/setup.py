@@ -21,7 +21,7 @@ except ImportError:
     )
     exit(1)
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 
 long_description = """
 ====================
@@ -67,7 +67,9 @@ setup(
     },
     author="Espressif Systems",
     author_email="",
+    license="Apache-2.0",
     classifiers=[
+        "License :: OSI Approved :: Apache Software License",
         "Intended Audience :: Developers",
         "Natural Language :: English",
         "Operating System :: POSIX",
