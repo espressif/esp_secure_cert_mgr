@@ -1,11 +1,13 @@
 stages:
   - build
+  - qemu_test
 
 variables:
   BATCH_BUILD: "1"
   V: "0"
   MAKEFLAGS: "-j5 --no-keep-going"
   GIT_SUBMODULE_STRATEGY: recursive
+  QEMU_IMAGE: ${CI_DOCKER_REGISTRY}/qemu-v5.2:2-20230522
 
 # before each job, we need to check if this job is filtered by bot stage/job filter
 .apply_bot_filter: &apply_bot_filter
@@ -24,6 +26,17 @@ variables:
     - echo -e "Host gitlab.espressif.cn\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
     - git --version
     - git submodule update --init --recursive
+
+.setup_idf: &setup_idf
+  before_script: &setup_idf
+    - *setup_env
+    - git --version
+    - git submodule update --init --recursive --depth 1
+    - git clone --recursive --single-branch -b release/v4.4 --reference-if-able /local_references/gitlab/ https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.espressif.cn:6688/espressif/esp-idf.git
+    - cd esp-idf
+    - ./install.sh
+    - . export.sh
+    - cd ..
 
 .build_idf_template:
   stage: build
@@ -54,6 +67,29 @@ build_demo_esp32:
   extends: .build_idf_template
   variables:
     IDF_TARGET: esp32
+
+qemu_test_tlv_esp32:
+  stage: qemu_test
+  image: $QEMU_IMAGE
+  artifacts:
+    paths:
+      - qemu_test/qemu_test_bins
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - cd examples/esp_secure_cert_app/qemu_test
+    - ./build_qemu_image tlv
+    - cd ../
+    - pytest --target esp32
+    - cd qemu_test
+    - ./build_qemu_image legacy_format
+    - cd ../
+    - pytest --target esp32
+
+build_demo_esp32s2:
+  extends: .build_idf_template
+  variables:
+    IDF_TARGET: esp32s2
 
 build_demo_esp32s3:
   extends: .build_idf_template
