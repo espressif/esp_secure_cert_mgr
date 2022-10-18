@@ -17,6 +17,13 @@
 #include "esp_secure_cert_tlv_private.h"
 #include "esp_heap_caps.h"
 
+#if __has_include("esp_idf_version.h")
+#include "esp_idf_version.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "spi_flash_mmap.h"
+#endif
+#endif
+
 static const char *TAG = "esp_secure_cert";
 
 typedef enum partition_format {
