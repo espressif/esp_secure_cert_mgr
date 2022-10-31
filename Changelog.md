@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.0.2
+* Updated reference to the new esp_partition component (IDFv5.0)
+
 ## v2.0.1
 * Added fixes for build failures with `-Wstrict-prototypes` CFLAG.
 * Added fix for build failure with toolchain change in IDFv4.x and IDFv5.x
