@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## v2.0.3
+* Added C linkage so that C++ code can find the definitions for secure cert APIs.
+* Minor documentation fixes.
+
 ## v2.0.2
 * Updated reference to the new esp_partition component (IDFv5.0)
 

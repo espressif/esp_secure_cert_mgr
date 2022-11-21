@@ -10,6 +10,11 @@
 #include "rsa_sign_alt.h"
 #endif
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /* @info
  * Init the esp_secure_cert nvs partition
  *
@@ -31,9 +36,9 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
  *
  * @params
- *      - buffer(out)       This value shall be filled with the private key address
+ *      - buffer(out)       This value shall be filled with the device cert address
  *                          on successfull completion
- *      - len(out)          This value shall be filled with the length of the private key
+ *      - len(out)          This value shall be filled with the length of the device cert
  *                          If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
  *                          the required memory to store the device cert
  *
@@ -46,7 +51,7 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
 esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len);
 
 /*
- * Free any internally allocated for the device cert.
+ * Free any internally allocated resources for the device cert.
  * @note
  *      This API is only needed in case the partition is of type NVS.
  *      In other cases no internal memory is allocated by the respective API.
@@ -54,7 +59,7 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len);
  * @params
  *      - buffer(in)        The data pointer
  *                          This pointer should be the same one which has been obtained
- *                          through respective "esp_secure_get_device_cert" API.
+ *                          through "esp_secure_cert_get_device_cert" API.
  */
 esp_err_t esp_secure_cert_free_device_cert(char *buffer);
 
@@ -63,17 +68,17 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer);
  *
  *  @note
  *       If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
- *       the required memory to store the device cert and return the pointer.
+ *       the required memory to store the ca cert and return the pointer.
  *       The pointer can be freed in this case (NVS) using respective free API
  *
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
  *
  * @params
- *      - buffer(out)       This value shall be filled with the private key address
+ *      - buffer(out)       This value shall be filled with the ca cert address
  *                          on successfull completion
- *      - len(out)          This value shall be filled with the length of the private key
+ *      - len(out)          This value shall be filled with the length of the ca cert
  *                          If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
- *                          the required memory to store the device cert
+ *                          the required memory to store the ca cert
  *
  *                          In case of cust_flash partition, a read only flash pointer shall be returned here.
  * @return
@@ -84,7 +89,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer);
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len);
 
 /*
- * Free any internally allocated for the ca cert.
+ * Free any internally allocated resources for the ca cert.
  * @note
  *      This API is only needed in case the partition is of type NVS.
  *      In other cases no internal memory is allocated by the respective API.
@@ -92,7 +97,7 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len);
  * @params
  *      - buffer(in)        The data pointer
  *                          This pointer should be the same one which
- *                          has been obtained through respective "esp_secure_get_ca_cert" API.
+ *                          has been obtained through "esp_secure_cert_get_ca_cert" API.
  */
 esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
 
@@ -103,7 +108,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
  * @note
  *
  *       If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
- *       the required memory to store the device cert and return the pointer.
+ *       the required memory to store the private key and return the pointer.
  *       The pointer can be freed in this case (NVS) using respective free API
  *
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
@@ -122,7 +127,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
 esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len);
 
 /*
- * Free any internally allocated for the priv key.
+ * Free any internally allocated resources for the priv key.
  * @note
  *      This API is only needed in case the partition is of type NVS.
  *      In other cases no internal memory is allocated by the respective API.
@@ -130,7 +135,7 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len);
  * @params
  *      - buffer(in)        The data pointer
  *                          This pointer should be the same one which
- *                          has been obtained through respective "esp_secure_get_ca_cert" API.
+ *                          has been obtained through "esp_secure_cert_get_priv_key" API.
  */
 esp_err_t esp_secure_cert_free_priv_key(char *buffer);
 
@@ -155,3 +160,7 @@ esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void);
  */
 void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
 #endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
+
+#ifdef __cplusplus
+}
+#endif
