@@ -53,6 +53,15 @@ The data is stored in the following manner:
 
 For more details about the TLV, please take a look at [tlv_config.h](https://github.com/espressif/esp_secure_cert_mgr/tree/main/private_include/esp_secure_cert_tlv_config.h).
 
+* For TLV format the `partitions.csv` file for the project should contain the following line which enables it to identify the `esp_secure_cert` partition:
+
+```
+# Name, Type, SubType, Offset, Size, Flags
+esp_secure_cert, 0x3F, , 0xD000, 0x2000,
+```
+
+Please note that, TLV format uses compact data representation and hence partition size is kept as 8KiB.
+
 > Note: The TLV read API expects that a padding of appropriate size is added to data to make it size as a multiple of 16 bytes, the partition generation utility i.e. [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) takes care of this internally while generating the partition. 
 
 
