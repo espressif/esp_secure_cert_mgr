@@ -197,9 +197,21 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
     return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, buffer, len);
 }
 
+esp_err_t esp_secure_cert_free_device_cert(char *buffer)
+{
+    (void) buffer; /* nothing to do */
+    return ESP_OK;
+}
+
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 {
     return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, buffer, len);
+}
+
+esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
+{
+    (void) buffer; /* nothing to do */
+    return ESP_OK;
 }
 
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
@@ -207,6 +219,13 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 {
     return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, buffer, len);
 }
+
+esp_err_t esp_secure_cert_free_priv_key(char *buffer)
+{
+    (void) buffer; /* nothing to do */
+    return ESP_OK;
+}
+
 #else /* !CONFIG_ESP_SECURE_CERT_DS_PEIPHERAL */
 
 esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void)

@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.0.4
+* Add implementation of `esp_secure_cert_free_*` APIs for TLV configuration.
+
 ## v2.0.3
 * Added C linkage so that C++ code can find the definitions for secure cert APIs.
 * Minor documentation fixes.
