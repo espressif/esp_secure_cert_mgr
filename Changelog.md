@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.0.5
+* Fixed targets in Kconfig to reflect DS Peripheral compatibility
+
 ## v2.0.4
 * Add implementation of `esp_secure_cert_free_*` APIs for TLV configuration.
 
