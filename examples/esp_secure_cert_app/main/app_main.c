@@ -19,6 +19,8 @@
 #include "mbedtls/ssl.h"
 #include "mbedtls/pk.h"
 #include "mbedtls/x509.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
 #include "esp_idf_version.h"
 
@@ -77,9 +79,94 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
     return ESP_OK;
 exit:
     free(sig);
+    mbedtls_x509_crt_free(&crt);
     printf("\nFailed to verify the ciphertext\n");
     esp_ds_release_ds_lock();
     return ESP_FAIL;
+}
+#else
+static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key_len, unsigned char *dev_cert, size_t dev_cert_len)
+{
+    static const char *pers = "Hello";
+    mbedtls_x509_crt crt;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_pk_context pk;
+    unsigned char *sig = NULL;
+
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    mbedtls_x509_crt_init(&crt);
+    mbedtls_entropy_init(&entropy);
+    mbedtls_pk_init(&pk);
+    esp_err_t esp_ret = ESP_FAIL;
+    if (priv_key == NULL || dev_cert == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int ret = mbedtls_x509_crt_parse(&crt, dev_cert, dev_cert_len);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Parsing of device certificate failed, returned %02X", ret);
+        esp_ret = ESP_FAIL;
+        goto exit;
+    } else {
+        ESP_LOGI(TAG, "Successfully parsed the certificate");
+    }
+    ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen(pers));
+    if (ret != 0) {
+        ESP_LOGE(TAG, "mbedtls_ctr_drbg_seed returned -0x%04x", -ret );
+        esp_ret = ESP_FAIL;
+        goto exit;
+    }
+
+#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
+    ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0);
+#else
+    ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
+#endif
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to parse the key");
+        esp_ret = ESP_FAIL;
+        goto exit;
+    } else {
+        ESP_LOGI(TAG, "Successfully parsed the key");
+    }
+
+    static uint32_t hash[8] = {[0 ... 7] = 0xAABBCCDD};
+#define SIG_SIZE 1024
+    sig = (unsigned char*)calloc(1, SIG_SIZE * sizeof(char));
+    if (sig == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory");
+        esp_ret = ESP_FAIL;
+        goto exit;
+    }
+    size_t sig_len = 0;
+#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
+    ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, &sig_len, mbedtls_ctr_drbg_random, &ctr_drbg);
+#else
+    ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, SIG_SIZE, &sig_len, mbedtls_ctr_drbg_random, &ctr_drbg);
+#endif
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to sign the data");
+        esp_ret = ESP_FAIL;
+        goto exit;
+    } else {
+        ESP_LOGI(TAG, "Successfully signed the data");
+    }
+
+    ret = mbedtls_pk_verify(&crt.pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, sig_len);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to verify the signed data");
+        esp_ret = ESP_FAIL;
+        goto exit;
+    }
+    esp_ret = ESP_OK;
+exit:
+    free(sig);
+    mbedtls_pk_free(&pk);
+    mbedtls_entropy_free(&entropy);
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_x509_crt_free(&crt);
+    return esp_ret;
 }
 #endif
 
@@ -110,6 +197,17 @@ void app_main()
         ESP_LOGI(TAG, "PEM KEY: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of private_key");
+    }
+    uint32_t dev_cert_len = 0;
+    char *dev_cert_addr = NULL;
+    esp_ret = esp_secure_cert_get_device_cert(&dev_cert_addr, &dev_cert_len);
+    if (esp_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to obtain the dev cert flash address");
+    }
+
+    esp_ret = test_priv_key_validity((unsigned char *)addr, len, (unsigned char *)dev_cert_addr, dev_cert_len);
+    if (esp_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to validate the private key and device certificate");
     }
 #else
     esp_ds_data_ctx_t *ds_data = NULL;
