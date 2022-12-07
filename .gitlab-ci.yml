@@ -1,0 +1,77 @@
+stages:
+  - build
+
+variables:
+  BATCH_BUILD: "1"
+  V: "0"
+  MAKEFLAGS: "-j5 --no-keep-going"
+  GIT_SUBMODULE_STRATEGY: recursive
+
+# before each job, we need to check if this job is filtered by bot stage/job filter
+.apply_bot_filter: &apply_bot_filter
+  python $APPLY_BOT_FILTER_SCRIPT || exit 0
+
+.setup_env:
+  before_script: &setup_env
+    # apply bot filter in before script
+    - *apply_bot_filter
+    # add gitlab ssh key
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -n $GITLAB_KEY > ~/.ssh/id_rsa_base64
+    - base64 --decode --ignore-garbage ~/.ssh/id_rsa_base64 > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - echo -e "Host gitlab.espressif.cn\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
+    - git --version
+    - git submodule update --init --recursive
+
+.build_idf_template:
+  stage: build
+  before_script: *setup_env
+  image: espressif/idf:release-v5.0
+  tags:
+    - build
+  parallel: 3
+  variables:
+    PEDANTIC_FLAGS: "-Werror -Werror=unused-variable -Werror=unused-but-set-variable -Werror=unused-function"
+    EXTRA_CFLAGS: "${PEDANTIC_FLAGS}"
+    EXTRA_CXXFLAGS: "${PEDANTIC_FLAGS}"
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - cd ci
+    - ./build_test.sh $IDF_TARGET $CI_NODE_INDEX || exit 1
+
+.build_idf_template_release_v4.4:
+  extends: .build_idf_template
+  image: espressif/idf:release-v4.4
+
+build_demo_esp32:
+  extends: .build_idf_template
+  variables:
+    IDF_TARGET: esp32
+
+build_demo_esp32s3:
+  extends: .build_idf_template
+  variables:
+    IDF_TARGET: esp32s3
+
+build_demo_esp32c3:
+  extends: .build_idf_template
+  variables:
+    IDF_TARGET: esp32c3
+
+build_demo_esp32_v4.4:
+  extends: .build_idf_template_release_v4.4
+  variables:
+    IDF_TARGET: esp32
+
+build_demo_esp32s3_v4.4:
+  extends: .build_idf_template_release_v4.4
+  variables:
+    IDF_TARGET: esp32s3
+
+build_demo_esp32c3_v4.4:
+  extends: .build_idf_template_release_v4.4
+  variables:
+    IDF_TARGET: esp32c3
