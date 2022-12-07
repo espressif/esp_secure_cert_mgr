@@ -32,7 +32,7 @@ static const char *TAG = "esp_secure_cert_tlv";
  * The mapping is done only once and function shall
  * simply return same address in case of successive calls.
  **/
-static const void *esp_secure_cert_get_mapped_addr(void)
+const void *esp_secure_cert_get_mapped_addr(void)
 {
     // Once initialized, these variable shall contain valid data till reboot.
     static const void *esp_secure_cert_mapped_addr;
@@ -77,7 +77,7 @@ static const void *esp_secure_cert_get_mapped_addr(void)
  * tlv_address              Void pointer to store tlv address
  *
  */
-static esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_cert_tlv_type_t type, void **tlv_address)
+esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_cert_tlv_type_t type, void **tlv_address)
 {
     /* start from the begining of the partition */
     uint16_t tlv_offset = 0;
