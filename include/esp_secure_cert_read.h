@@ -37,7 +37,7 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the device cert address
- *                          on successfull completion
+ *                          on successful completion
  *      - len(out)          This value shall be filled with the length of the device cert
  *                          If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
  *                          the required memory to store the device cert
@@ -75,7 +75,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the ca cert address
- *                          on successfull completion
+ *                          on successful completion
  *      - len(out)          This value shall be filled with the length of the ca cert
  *                          If your esp_secure_cert partition is of type NVS, the API will dynamically allocate
  *                          the required memory to store the ca cert
@@ -115,7 +115,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
  *
   * @params
  *      - buffer(out)       This value shall be filled with the private key address
- *                          on successfull completion
+ *                          on successful completion
  *      - len(out)          This value shall be filled with the length of the private key
  *
  *
