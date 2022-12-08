@@ -13,5 +13,5 @@ endif()
 idf_component_register(SRCS ${srcs}
                     INCLUDE_DIRS "include"
                     PRIV_INCLUDE_DIRS "private_include"
-                    REQUIRES spi_flash mbedtls nvs_flash
+                    REQUIRES spi_flash mbedtls nvs_flash efuse
                     PRIV_REQUIRES ${priv_reqs})
