@@ -149,9 +149,7 @@ esp_err_t esp_secure_cert_free_priv_key(char *buffer);
  * @params
  *      - ds_ctx    The pointer to the DS context
  * @return
- *      - ESP_OK    On success
- *      - ESP_FAIL/other relevant esp error code
- *                  On failure
+ *      - NULL      On failure
  */
 esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void);
 
