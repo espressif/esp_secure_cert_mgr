@@ -29,17 +29,18 @@ supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3'}
 # Flash esp_secure_cert partition after its generation
 #
 # @info
-# The flash region at offset of 0xD000 to 0x13000
-# The partition shall be flashed at 0xD000 offset
+# The partition shall be flashed at the offset provided
+# for the --sec_cert_part_offset option
 def flash_esp_secure_cert_partition(args, idf_target):
-    print('Flashing the esp_secure_cert partition at 0xD000 offset')
+    print('Flashing the esp_secure_cert partition at {0} offset'
+          .format(args.sec_cert_part_offset))
     print('Note: You can skip this step by providing --skip_flash argument')
 
     os.system('python {0}/components/esptool_py/esptool/esptool.py '
               '--chip {1} -p {2} write_flash '
-              '0xD000 {3}'
+              '{3} {4}'
               .format((idf_path), (idf_target), (args.port),
-                      bin_filename))
+                      args.sec_cert_part_offset, bin_filename))
 
 
 def cleanup(args):
@@ -146,6 +147,13 @@ def main():
         dest='production', action='store_true',
         help='Enable production configurations. '
              'e.g.keep efuse key block read protection enabled')
+
+    parser.add_argument(
+        '--sec_cert_part_offset',
+        dest='sec_cert_part_offset',
+        default='0xD000',
+        help='The flash offset of esp_secure_cert partition'
+             'Hex value must be given e.g. 0xD000')
 
     args = parser.parse_args()
 
