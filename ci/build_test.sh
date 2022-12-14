@@ -1,6 +1,11 @@
 #!/bin/bash
 ESP_SECURE_CERT_APP=$PWD/../examples/esp_secure_cert_app
 
+# This option causes the script to fail if any command fails in the main body of the script
+# Note: this does not apply to the internal functions
+# We need to check the exit status of each command individually
+set -e
+
 clean() {
     rm -r sdkconfig 2>&1
     rm -r build 2>&1
@@ -24,8 +29,8 @@ build_ds_config() {
     idf_target=$1
     cd $ESP_SECURE_CERT_APP
     clean
-    idf.py set-target $idf_target
-    idf.py build
+    idf.py set-target $idf_target || exit $?
+    idf.py build || exit $?
     clean
 }
 
@@ -36,8 +41,8 @@ build_ds_config_legacy_flash_format() {
     cd $ESP_SECURE_CERT_APP
     clean
     echo "CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS=y" >> sdkconfig.defaults
-    idf.py set-target $idf_target
-    idf.py build
+    idf.py set-target $idf_target || exit $?
+    idf.py build || exit $?
     clean
 }
 
@@ -52,8 +57,8 @@ build_no_ds_config() {
     cd $ESP_SECURE_CERT_APP
     clean
     echo "CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL=n" >> sdkconfig.defaults
-    idf.py set-target $idf_target
-    idf.py build
+    idf.py set-target $idf_target || exit $?
+    idf.py build || exit $?
     clean
 }
 
