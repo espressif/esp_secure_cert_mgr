@@ -9,6 +9,8 @@
 #include "esp_err.h"
 #include "esp_partition.h"
 #include "esp_crc.h"
+#include "esp_random.h"
+#include "esp_rom_sys.h"
 #include "esp_efuse.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_config.h"
@@ -224,6 +226,7 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_key(uint8_t *aes_key)
     return ESP_OK;
 }
 
+#define HMAC_ENCRYPTION_RANDOM_DELAY_LIMIT 100
 /*
  * @info
  * Decrypt the data encrypted using hmac based encryption
@@ -260,7 +263,9 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
         return ESP_FAIL;
     }
 
-    // Add randomized delay before decryption begins
+    uint32_t rand_delay;
+    rand_delay = esp_random() % HMAC_ENCRYPTION_RANDOM_DELAY_LIMIT;
+    esp_rom_delay_us(rand_delay);
 
     len = len - HMAC_ENCRYPTION_TAG_LEN;
     ret = mbedtls_gcm_auth_decrypt(&gcm_ctx, len, iv,
