@@ -37,7 +37,7 @@ def prepare_tlv(tlv_type, data, data_len):
     # Add the magic at start ( unsigned int )
     tlv_header = struct.pack('<I', 0xBA5EBA11)
     # Reserved bytes in TLV header ( 4 bytes)
-    tlv_header = tlv_header + struct.pack('<I', 0xFFFFFFFF)
+    tlv_header = tlv_header + struct.pack('<I', 0x00000000)
     # Add the tlv type ( unsigned short )
     tlv_header = tlv_header + struct.pack('<H', tlv_type)
     # Add the data_length ( unsigned short )

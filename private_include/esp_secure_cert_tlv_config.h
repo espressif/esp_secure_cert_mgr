@@ -45,7 +45,7 @@ typedef enum esp_secure_cert_tlv_type {
  */
 typedef struct esp_secure_cert_tlv_header {
     uint32_t magic;
-    uint8_t reserved[4];                /* Reserved bytes for future use, the value currently should be 0xFF */
+    uint8_t reserved[4];                /* Reserved bytes for future use, the value currently should be 0x0 */
     uint16_t type;                      /* Type of tlv structure, this shall be typecasted
                                            to esp_secure_cert_tlv_type_t for further use */
     uint16_t length;                    /* Length of the data */
