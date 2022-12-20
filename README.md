@@ -1,27 +1,30 @@
 # ESP Secure Certificate Manager
 
-The *esp_secure_cert_mgr* is a simplified interface to access the PKI credentials of a device pre-provisioned with the
+The *esp_secure_cert_mgr* provides a simplified interface to access the PKI credentials of a device pre-provisioned with the
 Espressif Provisioning Service. It provides the set of APIs that are required to access the contents of
 the `esp_secure_cert` partition.
 A demo example has also been provided with the `esp_secure_cert_mgr`, more details can be found out
 in the [example README](https://github.com/espressif/esp_secure_cert_mgr/blob/main/examples/esp_secure_cert_app/README.md)
 
 ## How to use the `esp_secure_cert_mgr` in your project ?
----
-There are two ways to use `esp_secure_cert_mgr` in your project:
 
-1) Add `esp_secure_cert_mgr` to your project with help of IDF component manager:
+### 1) Include `esp_secure_cert_mgr` in your project
+There are two ways to include `esp_secure_cert_mgr` in your project:
+
+i) Add `esp_secure_cert_mgr` to your project with help of IDF component manager:
 * The component is hosted at https://components.espressif.com/component/espressif/esp_secure_cert_mgr. Please use the same link to obtain the latest available version of the component along with the instructions on how to add it to your project.
 * Additional details about using a component through IDF component manager can be found [here](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/tools/idf-component-manager.html#using-with-a-project)
 
-
-2) Add `esp_secure_cert_mgr` as an extra component in your project.
+ii) Add `esp_secure_cert_mgr` as an extra component in your project.
 
 * Download `esp_secure_cert_mgr` with:
 ```
     git clone https://github.com/espressif/esp_secure_cert_mgr.git
 ```
 * Include  `esp_secure_cert_mgr` in `ESP-IDF` with setting `EXTRA_COMPONENT_DIRS` in CMakeLists.txt/Makefile of your project.For reference see [Optional Project Variables](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html#optional-project-variables)
+
+### 2) Use the public API provided by `esp_secure_cert_mgr` in your project
+* The file [esp_secure_cert_read.h](https://github.com/espressif/esp_secure_cert_mgr/blob/main/include/esp_secure_cert_read.h) contains the public APIs provided by the `esp_secure_cert_mgr`. Please include the file in your project to make use of the available APIs. The file also contains more details about the available APIs.
 
 ## What is Pre-Provisioning?
 
@@ -42,47 +45,6 @@ When the device is pre-provisioned with help of the DS peripheral then by defaul
 
 As listed above, the data only contains the public certificates and the encrypted private key and hence it is completely secure in itself. There is no need to further encrypt this data with any additional security algorithm.
 
-### `esp_secure_cert` partition format:
-The data is stored in the TLV format in the `esp_secure_cert`.
-The data is stored in the following manner:
+### partition format
 
-`TLV_Header -> data -> TLV_Footer`
-
-* TLV header: It contains the information regarding the data such as the type of the data and the length of the data.
-* TLV footer: It contains the crc of the data along with the header.
-
-For more details about the TLV, please take a look at [tlv_config.h](https://github.com/espressif/esp_secure_cert_mgr/tree/main/private_include/esp_secure_cert_tlv_config.h).
-
-* For TLV format the `partitions.csv` file for the project should contain the following line which enables it to identify the `esp_secure_cert` partition:
-
-```
-# Name, Type, SubType, Offset, Size, Flags
-esp_secure_cert, 0x3F, , 0xD000, 0x2000,
-```
-
-Please note that, TLV format uses compact data representation and hence partition size is kept as 8KiB.
-
-> Note: The TLV read API expects that a padding of appropriate size is added to data to make it size as a multiple of 16 bytes, the partition generation utility i.e. [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) takes care of this internally while generating the partition. 
-
-
-### Legacy formats for `esp_secure_cert` partition:
-`esp_secure_cert` partition also supports two legacy flash formats.
-The support for these can be enabled through following menuconfig option:
-* `Component config > ESP Secure Cert Manager -> Enable support for legacy formats`
-
-1) *cust_flash*: In this case, the partition is a custom flash partition. The data is directly stored over the flash.
-* In this case the `partitions.csv` file for the project should contain the following line which enables it to identify the `esp_secure_cert` partition.
-
-```
-# Name, Type, SubType, Offset, Size, Flags
-esp_secure_cert, 0x3F, , 0xD000, 0x6000,
-```
-
-2) *nvs partition*: In this case, the partition is of the `nvs` type. The `nvs_flash` abstraction layer from the ESP-IDF is used to store and then retreive the contents of the `esp_secure_cert` partition.
-
-* In this case the `partitions.csv` file for the project should contain the following line which enables it to identify the `esp_secure_cert` partition.
-
-```
-# Name, Type, SubType, Offset, Size, Flags
-esp_secure_cert, data, nvs, 0xD000, 0x6000,
-```
+The *esp_secure_cert* partition uses TLV format by default. Please take a look at the [format document](https://github.com/espressif/esp_secure_cert_mgr/tree/main/docs/format.md) for more details.
