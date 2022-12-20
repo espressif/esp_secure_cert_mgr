@@ -119,7 +119,8 @@ def main():
         '--skip_flash',
         dest='skip_flash', action='store_true',
         help='Provide this option to skip flashing the'
-             ' esp_secure_cert partition at 0xD000 offset')
+             ' esp_secure_cert partition at the value'
+             ' provided to sec_cert_part_offset option')
 
     parser.add_argument(
         '--efuse_key_id',
@@ -153,7 +154,7 @@ def main():
         dest='sec_cert_part_offset',
         default='0xD000',
         help='The flash offset of esp_secure_cert partition'
-             'Hex value must be given e.g. 0xD000')
+             ' Hex value must be given e.g. 0xD000')
 
     args = parser.parse_args()
 

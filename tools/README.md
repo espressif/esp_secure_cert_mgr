@@ -58,4 +58,23 @@ configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse
 ```
 
 ## Additional options for the utility
+The following options can be provided additional to the main arguments given above.
+
+### Set the `esp_secure_cert` partition offset
+By default the `esp_secure_cert` partition shall be flashed at an offset of `0xD000` by the utility.
+In order to flash the `esp_secure_cert` partition at a different offset, the following argument can be provided additionally to the configure_esp_secure_cert.py script.
+
+```
+configure_esp_secure_cert.py  --sec_cert_part_offset /* offset value in hex e.g. 0xD000 */
+```
+### Skip automatic flashing of `esp_secure_cert` partition
+
+By default the `esp_secure_cert` partition shall be flashed automatically at the offset value provided to `sec_cert_part_offset` argument.
+In order to stop the flashing process the following argument can be provided additionally to the configure_esp_secure_cert.py script
+
+```
+configure_esp_secure_cert.py --skip_flash
+```
+
+### Help section
 The additional options supported by the utility can be found at `configure_esp_secure_cert.py --help`.
