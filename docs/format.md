@@ -18,6 +18,7 @@ The TLV format used in the esp_secure_cert partition is as follows:
 
 
 ### Partition table entry
+
 * For TLV format the `partitions.csv` file for the project should contain the following line which enables it to identify the `esp_secure_cert` partition:
 
 ```
@@ -31,7 +32,8 @@ Please note that, TLV format uses compact data representation and hence partitio
 
 When flash encryption is enabled for the device it is imporatant to encrypt the `esp_secure_cert` partition as well. Adding the encrypted flag in the partition table as done above can ensure that this is done. When flash encryption is not enabled this flag shall be ignored.
 
-## Legacy formats for `esp_secure_cert` partition:
+## Legacy formats for `esp_secure_cert` partition
+
 `esp_secure_cert` partition also supports two legacy flash formats.
 The support for these can be enabled through following menuconfig option:
 * `Component config > ESP Secure Cert Manager -> Enable support for legacy formats`

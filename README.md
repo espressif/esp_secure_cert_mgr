@@ -6,7 +6,7 @@ the `esp_secure_cert` partition.
 A demo example has also been provided with the `esp_secure_cert_mgr`, more details can be found out
 in the [example README](https://github.com/espressif/esp_secure_cert_mgr/blob/main/examples/esp_secure_cert_app/README.md)
 
-## How to use the `esp_secure_cert_mgr` in your project ?
+## Usage Guidelines
 
 ### 1) Include `esp_secure_cert_mgr` in your project
 There are two ways to include `esp_secure_cert_mgr` in your project:
@@ -30,7 +30,8 @@ ii) Add `esp_secure_cert_mgr` as an extra component in your project.
 
 With the Espressif Pre-Provisioning Service, the ESP modules are pre-provisioned with an encrypted RSA private key and respective X509 public certificate before they are shipped out to you. The PKI credentials can then be registered with the cloud service to establish a secure TLS channel for communication. With the pre-provisioning taking place in the factory, it provides a hassle-free PKI infrastructure to the Makers. You may use this repository to set up your test modules to validate that your firmware works with the pre-provisioned modules that you ordered through Espressif's pre-provisioning service.
 
-## `esp_secure_cert` partition
+## ESP Secure Cert Partition
+
 When a device is pre-provisioned that means the PKI credentials are generated for the device. The PKI credentials are then stored in a partition named
 *esp_secure_cert*.
 
@@ -45,6 +46,6 @@ When the device is pre-provisioned with help of the DS peripheral then by defaul
 
 As listed above, the data only contains the public certificates and the encrypted private key and hence it is completely secure in itself. There is no need to further encrypt this data with any additional security algorithm.
 
-### partition format
+### Partition Format
 
 The *esp_secure_cert* partition uses TLV format by default. Please take a look at the [format document](https://github.com/espressif/esp_secure_cert_mgr/tree/main/docs/format.md) for more details.
