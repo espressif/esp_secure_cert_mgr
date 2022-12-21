@@ -10,9 +10,9 @@ The TLV format used in the esp_secure_cert partition is as follows:
 
 * TLV header: It contains the information regarding the data such as the type of the data and the length of the data. For more details about the TLV, please take a look at [tlv_config.h](https://github.com/espressif/esp_secure_cert_mgr/tree/main/private_include/esp_secure_cert_tlv_config.h).
 
-    * i) TLV type: Currently the TLV format supports only a list of pre-defined types. The latest list for pre-defined types can be found at [tlv_config.h](https://github.com/espressif/esp_secure_cert_mgr/tree/main/private_include/esp_secure_cert_tlv_config.h). Additional custom types are also provided in order to allow storing custom data in TLV format. The custom data types can be typecasted to appropriate types after reading the TLV.
-    * ii)  TLV flags field - flags byte that identifies different characteristics for the TLV
-
+    * i)  TLV flags field - flags byte that identifies different characteristics for the TLV
+    * ii) TLV type: Currently the TLV format supports only a list of pre-defined types. The latest list for pre-defined types can be found at [tlv_config.h](https://github.com/espressif/esp_secure_cert_mgr/tree/main/private_include/esp_secure_cert_tlv_config.h). Additional custom types are also provided in order to allow storing custom data in TLV format. The custom data types can be typecasted to appropriate types after reading the TLV.
+    * iii) TLV length - the length of the data field in the TLV.
 * TLV footer: It contains the crc32 of the data and header field.
 * TLV format Padding - In TLV format a padding is added automatically between the end offset of data and TLV footer. The padding is added in order to make the data field a multiple of 16 bytes which is the minimum alignment required for flash encrypted writes.
 
