@@ -3,7 +3,7 @@
 ## v2.0.6
 * Added HMAC based encryption scheme to protect private key data
 * Added support for private key validation in the esp_secure_cert_app
-* Added support of configurable esp_secure_cert in for configure_esp_secure_cert.py utility
+* Added support of configurable esp_secure_cert partition offset in for configure_esp_secure_cert.py utility
 
 ## v2.0.5
 * Fixed targets in Kconfig to reflect DS Peripheral compatibility
