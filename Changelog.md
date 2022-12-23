@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## v2.0.7
+* Updated documentation regarding TLV format
+* Fixed priv_key free API when HMAC based encryption scheme is enabled.
+
 ## v2.0.6
 * Added HMAC based encryption scheme to protect private key data
 * Added support for private key validation in the esp_secure_cert_app

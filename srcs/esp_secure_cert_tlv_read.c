@@ -19,14 +19,21 @@
 #include "esp_fault.h"
 #include "esp_heap_caps.h"
 #include <mbedtls/gcm.h>
+
 #if SOC_HMAC_SUPPORTED
 #include "esp_hmac.h"
 #endif
+
 #if __has_include("esp_idf_version.h")
 #include "esp_idf_version.h"
+
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "spi_flash_mmap.h"
+#include "esp_memory_utils.h"
+#else
+#include "soc/soc_memory_types.h"
 #endif
+
 #endif
 
 static const char *TAG = "esp_secure_cert_tlv";
@@ -372,6 +379,10 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 
 esp_err_t esp_secure_cert_free_priv_key(char *buffer)
 {
+    if (!esp_ptr_in_drom((const void*) buffer)) {
+        free(buffer);
+        return ESP_OK;
+    }
     (void) buffer; /* nothing to do */
     return ESP_OK;
 }
