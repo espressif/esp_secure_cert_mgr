@@ -9,7 +9,16 @@
 #include "esp_err.h"
 #include "esp_partition.h"
 #include "esp_crc.h"
+
+#if __has_include("esp_idf_version.h")
+#include "esp_idf_version.h"
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
 #include "esp_random.h"
+#else
+#include "esp_system.h"
+#endif
+
 #include "esp_rom_sys.h"
 #include "esp_efuse.h"
 #include "esp_secure_cert_read.h"
@@ -24,14 +33,11 @@
 #include "esp_hmac.h"
 #endif
 
-#if __has_include("esp_idf_version.h")
-#include "esp_idf_version.h"
-
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "spi_flash_mmap.h"
 #include "esp_memory_utils.h"
 #else
-#include "soc/soc_memory_types.h"
+#include "soc/soc_memory_layout.h"
 #endif
 
 #endif

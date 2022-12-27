@@ -46,6 +46,10 @@ variables:
   extends: .build_idf_template
   image: espressif/idf:release-v4.4
 
+.build_idf_template_release_v4.3:
+  extends: .build_idf_template
+  image: espressif/idf:release-v4.3
+
 build_demo_esp32:
   extends: .build_idf_template
   variables:
@@ -73,5 +77,15 @@ build_demo_esp32s3_v4.4:
 
 build_demo_esp32c3_v4.4:
   extends: .build_idf_template_release_v4.4
+  variables:
+    IDF_TARGET: esp32c3
+
+build_demo_esp32_v4.3:
+  extends: .build_idf_template_release_v4.3
+  variables:
+    IDF_TARGET: esp32
+
+build_demo_esp32c3_v4.3:
+  extends: .build_idf_template_release_v4.3
   variables:
     IDF_TARGET: esp32c3
