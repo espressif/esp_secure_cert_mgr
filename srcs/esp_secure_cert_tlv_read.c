@@ -21,22 +21,43 @@
 
 #include "esp_rom_sys.h"
 #include "esp_efuse.h"
-#include "esp_secure_cert_read.h"
-#include "esp_secure_cert_tlv_config.h"
-#include "esp_secure_cert_tlv_private.h"
+#include "esp_efuse_table.h"
 #include "soc/soc_caps.h"
 #include "esp_fault.h"
 #include "esp_heap_caps.h"
-#include <mbedtls/gcm.h>
+
+#include "mbedtls/gcm.h"
+#include "mbedtls/sha256.h"
+#include "mbedtls/ecdsa.h"
+#include "mbedtls/pk.h"
+#include "mbedtls/version.h"
+
+#include "esp_secure_cert_read.h"
+#include "esp_secure_cert_tlv_config.h"
+#include "esp_secure_cert_tlv_private.h"
+#include "esp_secure_cert_crypto.h"
 
 #if SOC_HMAC_SUPPORTED
 #include "esp_hmac.h"
 #endif
 
+#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
+/* mbedtls 2.x backward compatibility */
+#define MBEDTLS_2X_COMPAT 1
+/**
+ * Mbedtls-3.0 forward compatibility
+ */
+#ifndef MBEDTLS_PRIVATE
+#define MBEDTLS_PRIVATE(member) member
+#endif
+#endif /* (MBEDTLS_VERSION_NUMBER < 0x03000000) */
+
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "spi_flash_mmap.h"
 #include "esp_memory_utils.h"
+#include "entropy_poll.h"
 #else
+#include "mbedtls/entropy_poll.h"
 #include "soc/soc_memory_layout.h"
 #endif
 
@@ -49,6 +70,8 @@ static const char *TAG = "esp_secure_cert_tlv";
 
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
+static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len);
+#define ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE  121
 #endif
 
 /* This is the mininum required flash address alignment in bytes to write to an encrypted flash partition */
@@ -146,6 +169,7 @@ esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_
     }
 }
 
+
 esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **buffer, uint32_t *len)
 {
     esp_err_t err;
@@ -185,8 +209,28 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **b
 #else
         return ESP_ERR_NOT_SUPPORTED;
 #endif
+    } else if (ESP_SECURE_CERT_HMAC_ECDSA_KEY_DERIVATION(tlv_header->flags)) {
+#if SOC_HMAC_SUPPORTED
+        ESP_LOGD(TAG, "ECDSA private key shall be generated with help of HMAC");
+        char *output_buf = (char *)heap_caps_calloc(1, sizeof(char) * (ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE), MALLOC_CAP_INTERNAL);
+        if (output_buf == NULL) {
+            ESP_LOGE(TAG, "Failed to allocate memory");
+            return ESP_ERR_NO_MEM;
+        }
+        err = esp_secure_cert_gen_ecdsa_key(output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
+        if (err != ESP_OK) {
+            free(output_buf);
+            ESP_LOGE(TAG, "Failed to generate ECDSA key, returned %04X", err);
+            return ESP_FAIL;
+        }
+        ESP_FAULT_ASSERT(err == ESP_OK);
+        *buffer = output_buf;
+        *len = ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE;
+#else
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
     } else {
-        ESP_LOGD(TAG, "TLV data is not encrypted");
+        ESP_LOGI(TAG, "TLV data is not encrypted");
     }
     return ESP_OK;
 }
@@ -197,7 +241,7 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_iv(uint8_t *iv)
     if (iv == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    const uint32_t iv_message[HMAC_ENCRYPTION_MESSAGE_LEN/4] = {[0 ... 7] = 0xABCDABCD};
+    const uint32_t iv_message[HMAC_ENCRYPTION_MESSAGE_LEN / 4] = {[0 ... 7] = 0xABCDABCD};
     esp_err_t esp_ret = ESP_FAIL;
     esp_efuse_block_t efuse_block = EFUSE_BLK_MAX;
     if (!esp_efuse_find_purpose(ESP_EFUSE_KEY_PURPOSE_HMAC_UP, &efuse_block)) {
@@ -222,7 +266,7 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_key(uint8_t *aes_key)
     if (aes_key == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    const uint32_t key_message[HMAC_ENCRYPTION_MESSAGE_LEN/4] = {[0 ... 7] = 0xFFFFFFFF};
+    const uint32_t key_message[HMAC_ENCRYPTION_MESSAGE_LEN / 4] = {[0 ... 7] = 0xFFFFFFFF};
     esp_err_t esp_ret = ESP_FAIL;
     esp_efuse_block_t efuse_block = EFUSE_BLK_MAX;
     if (!esp_efuse_find_purpose(ESP_EFUSE_KEY_PURPOSE_HMAC_UP, &efuse_block)) {
@@ -283,10 +327,10 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
     len = len - HMAC_ENCRYPTION_TAG_LEN;
     ret = mbedtls_gcm_auth_decrypt(&gcm_ctx, len, iv,
                                    HMAC_ENCRYPTION_IV_LEN, NULL, 0,
-                                   (unsigned char*) (in_buf + len),
+                                   (unsigned char *) (in_buf + len),
                                    HMAC_ENCRYPTION_TAG_LEN,
-                                   (const unsigned char*)(in_buf),
-                                   (unsigned char*)output_buf);
+                                   (const unsigned char *)(in_buf),
+                                   (unsigned char *)output_buf);
 
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to decrypt the data, mbedtls_gcm_crypt_and_tag returned %02X", ret);
@@ -296,6 +340,145 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
 
     ESP_FAULT_ASSERT(ret == ESP_OK);
 
+    return ESP_OK;
+}
+
+static int myrand(void *rng_state, unsigned char *output, size_t len)
+{
+    size_t olen;
+    (void) olen;
+    return mbedtls_hardware_poll(rng_state, output, len, &olen);
+}
+
+/*
+ * The API converts the 256 bit ECDSA key to DER format.
+ * @input
+ * key_buf      The readable buffer containing the plaintext key
+ * key_buf_len  The length of the key buf in bytes
+ * output_buf   The writable buffer to write the DER key
+ * output_buf_len Length of the output buffer
+ *
+ */
+static esp_err_t esp_secure_cert_convert_key_to_der(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len)
+{
+    esp_err_t ret = ESP_FAIL;
+    // Convert the private key to der
+    mbedtls_pk_context key;
+    mbedtls_pk_init(&key);
+    ret = mbedtls_pk_setup(&key, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to setup pk key, returned %04X", ret);
+        goto exit;
+    }
+
+    mbedtls_ecdsa_context *key_ctx = mbedtls_pk_ec(key);
+    ret = mbedtls_ecp_group_load(&key_ctx->MBEDTLS_PRIVATE(grp), MBEDTLS_ECP_DP_SECP256R1);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to load the ecp group, returned %04X", ret);
+        goto exit;
+    }
+
+    ret = mbedtls_mpi_read_binary(&key_ctx->MBEDTLS_PRIVATE(d), (const unsigned char *) key_buf, key_buf_len);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to read binary, returned %04X", ret);
+        goto exit;
+    }
+
+    // Calculate the public key
+    ret = mbedtls_ecp_mul(&key_ctx->MBEDTLS_PRIVATE(grp), &key_ctx->MBEDTLS_PRIVATE(Q), &key_ctx->MBEDTLS_PRIVATE(d), &key_ctx->MBEDTLS_PRIVATE(grp).G, myrand, NULL);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to generate public key, returned %04X", ret);
+        goto exit;
+    }
+
+    // Write the private key in DER format
+    ret = mbedtls_pk_write_key_der(&key, (unsigned char *) output_buf, output_buf_len);
+    if (ret != ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE) {
+        ESP_LOGE(TAG, "Failed to write the pem key, returned %04X", ret);
+        goto exit;
+    }
+    ret = ESP_OK;
+
+exit:
+    mbedtls_pk_free(&key);
+    return ret;
+}
+/*
+ * @info
+ * Generate the ECDSA private key (DER format) with help of the PBKDF2 hmac implementation.
+ * In this case the first eFuse key block with purpose set to HMAC_UP shall be used for generating the private key.
+ * The key shall be generated for the SECP256R1 curve, the length of the key in DER format shall be ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE bytes.
+ *
+ * @input
+ * output_buf  A writable buffer to store the DER formatted ECDSA private key
+ * buf_len     The length of the buffer in bytes. This must be exactly ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE bytes.
+ *
+ */
+static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
+{
+    if (buf_len != ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Obtain the unique_id
+    uint8_t salt[32] = {};
+    uint8_t unique_id[ESP_EFUSE_OPTIONAL_UNIQUE_ID[0]->bit_count / 8];
+    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read the optional unique id");
+        return err;
+    }
+    ESP_FAULT_ASSERT(err == ESP_OK);
+
+    // Generate sha256 value of the optional unique id.
+
+#if MBEDTLS_2X_COMPAT
+    int ret = mbedtls_sha256_ret(unique_id, sizeof(unique_id), salt, 0);
+#else
+    int ret = mbedtls_sha256(unique_id, sizeof(unique_id), salt, 0);
+#endif
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Error in generating SHA256 of the unique id");
+        ESP_LOG_BUFFER_HEX(TAG, unique_id, sizeof(unique_id));
+        return ESP_FAIL;
+    }
+
+    ESP_LOG_BUFFER_HEX_LEVEL("UNIQUE ID", unique_id, sizeof(unique_id), ESP_LOG_DEBUG);
+    ESP_LOG_BUFFER_HEX_LEVEL("SALT", salt, sizeof(salt), ESP_LOG_DEBUG);
+
+    esp_efuse_block_t efuse_block = EFUSE_BLK_KEY_MAX;
+    bool res = esp_efuse_find_purpose(ESP_EFUSE_KEY_PURPOSE_HMAC_UP, &efuse_block);
+    if (!res) {
+        ESP_LOGE(TAG, "Failed to get the block with purpose set to HMAC_UP");
+        return ESP_FAIL;
+    }
+    ESP_FAULT_ASSERT(res);
+
+    // Allocate memory for private key
+    char *key_buf = (char *)heap_caps_calloc(1, sizeof(char) * (ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE), MALLOC_CAP_INTERNAL);
+    if (key_buf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory");
+        return ESP_ERR_NO_MEM;
+    }
+
+    // Generate the private key
+    ret = esp_pbkdf2_hmac_sha256(efuse_block - (int)EFUSE_BLK_KEY0, salt, sizeof(salt), ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, ESP_SECURE_CERT_KEY_DERIVATION_ITERATION_COUNT, (unsigned char *)key_buf);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to derive the ECDSA key using HMAC, returned %04X", ret);
+        free(key_buf);
+        return ESP_FAIL;
+    }
+    ESP_FAULT_ASSERT(ret == 0);
+
+    err = esp_secure_cert_convert_key_to_der(key_buf, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
+    if (err != ESP_OK) {
+        free(key_buf);
+        free(output_buf);
+        ESP_LOGE(TAG, "Failed to convert the plaintext key to DER format");
+        return ESP_FAIL;
+    }
+    // Free the plaintext private key as it is no longer needed
+    free(key_buf);
     return ESP_OK;
 }
 #endif
@@ -385,7 +568,7 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 
 esp_err_t esp_secure_cert_free_priv_key(char *buffer)
 {
-    if (!esp_ptr_in_drom((const void*) buffer)) {
+    if (!esp_ptr_in_drom((const void *) buffer)) {
         free(buffer);
         return ESP_OK;
     }

@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## v2.1.0
+* Added support for HMAC based ECDSA key derivation with PBKDF2-HMAC-SHA256
+* Fixed build failure when example is setup through component manager
+
 ## v2.0.8
 * Fix for supporting IDF v4.3
 
