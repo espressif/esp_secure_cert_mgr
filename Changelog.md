@@ -1,7 +1,9 @@
 # This file contains the list of changes across different versions
 
-## v2.1.1
+## v2.2.0
 * tools: Support DER encoded private keys when creating secure cert partition on host
+### Breaking changes in v2.2.0
+* Updated the order of arguments for esp_pbkdf2_hmac_sha256 API to match it with corresponding mbedTLS API
 
 ## v2.1.0
 * Added support for HMAC based ECDSA key derivation with PBKDF2-HMAC-SHA256
