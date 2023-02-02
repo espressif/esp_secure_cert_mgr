@@ -1,3 +1,4 @@
+import sys
 import struct
 import zlib
 from cryptography.hazmat.primitives import serialization
@@ -5,12 +6,25 @@ from cryptography.hazmat.backends import default_backend
 
 
 def load_privatekey(key_file_path, password=None):
-    key_file = open(key_file_path, 'rb')
-    key = key_file.read()
-    key_file.close()
-    return serialization.load_pem_private_key(key,
-                                              password=password,
-                                              backend=default_backend())
+    with open(key_file_path, 'rb') as key_file:
+        key = key_file.read()
+
+    try:
+        private_key = serialization.load_pem_private_key(key, password=password, backend=default_backend())
+        return private_key.private_bytes(encoding=serialization.Encoding.PEM,
+                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                         encryption_algorithm=serialization.NoEncryption())
+    except ValueError:
+        pass
+
+    try:
+        private_key = serialization.load_der_private_key(key, password=password, backend=default_backend())
+        return private_key.private_bytes(encoding=serialization.Encoding.DER,
+                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
+                                         encryption_algorithm=serialization.NoEncryption())
+    except ValueError:
+        print("Unsupported key encoding format, Please provide PEM or DER encoded key", file=sys.stderr)
+        sys.exit(1)
 
 
 # size is calculated as actual size + 16 (offset)
@@ -150,18 +164,13 @@ def generate_partition_no_ds(device_cert, ca_cert,
 
         private_key = load_privatekey(priv_key, priv_key_pass)
 
-        private_key_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption())
-
         # Write private key at specific address
-        private_key_pem = private_key_pem + b'\0'
+        private_key = private_key + b'\0'
         output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET
-                         + len(private_key_pem)] = private_key_pem
+                         + len(private_key)] = private_key
         metadata += struct.pack('<IH',
-                                zlib.crc32(private_key_pem, 0xffffffff),
-                                len(private_key_pem))
+                                zlib.crc32(private_key, 0xffffffff),
+                                len(private_key))
         # Align to 32 bit, this is done to match the
         # same operation done by the compiler
         metadata = metadata + b'\x00' * 2
