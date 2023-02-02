@@ -13,6 +13,7 @@
    CONDITIONS OF ANY KIND, either express or implied.
 */
 #include <string.h>
+#include <inttypes.h>
 #include "esp_log.h"
 #include "esp_secure_cert_read.h"
 
@@ -178,14 +179,14 @@ void app_main()
 
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Device Cert: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
+        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", len, (char *)addr);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
     }
 
     esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "CA Cert: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
+        ESP_LOGI(TAG, "CA Cert: \nLength: %"PRIu32"\n%s", len, (char *)addr);
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, addr, len, ESP_LOG_DEBUG);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of ca_cert");
@@ -194,7 +195,7 @@ void app_main()
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
     esp_ret = esp_secure_cert_get_priv_key(&addr, &len);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "PEM KEY: \nLength: %d\n%s", strlen((char *)addr), (char *)addr);
+        ESP_LOGI(TAG, "PEM KEY: \nLength: %"PRIu32"\n%s", len, (char *)addr);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of private_key");
     }
