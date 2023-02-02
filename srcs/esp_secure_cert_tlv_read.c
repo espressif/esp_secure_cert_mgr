@@ -230,7 +230,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **b
         return ESP_ERR_NOT_SUPPORTED;
 #endif
     } else {
-        ESP_LOGI(TAG, "TLV data is not encrypted");
+        ESP_LOGD(TAG, "TLV data is not encrypted");
     }
     return ESP_OK;
 }
