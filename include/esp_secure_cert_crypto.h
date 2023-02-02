@@ -24,5 +24,5 @@
  *
  */
 int esp_pbkdf2_hmac_sha256(hmac_key_id_t hmac_key_id, const unsigned char *salt, size_t salt_len,
-                           size_t key_length, size_t iteration_count, unsigned char *output);
+                           size_t iteration_count, size_t key_length, unsigned char *output);
 #endif

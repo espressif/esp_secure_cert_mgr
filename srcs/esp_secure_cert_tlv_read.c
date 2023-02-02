@@ -230,7 +230,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **b
         return ESP_ERR_NOT_SUPPORTED;
 #endif
     } else {
-        ESP_LOGI(TAG, "TLV data is not encrypted");
+        ESP_LOGD(TAG, "TLV data is not encrypted");
     }
     return ESP_OK;
 }
@@ -462,7 +462,7 @@ static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
     }
 
     // Generate the private key
-    ret = esp_pbkdf2_hmac_sha256(efuse_block - (int)EFUSE_BLK_KEY0, salt, sizeof(salt), ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, ESP_SECURE_CERT_KEY_DERIVATION_ITERATION_COUNT, (unsigned char *)key_buf);
+    ret = esp_pbkdf2_hmac_sha256(efuse_block - (int)EFUSE_BLK_KEY0, salt, sizeof(salt), ESP_SECURE_CERT_KEY_DERIVATION_ITERATION_COUNT, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, (unsigned char *)key_buf);
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to derive the ECDSA key using HMAC, returned %04X", ret);
         free(key_buf);
