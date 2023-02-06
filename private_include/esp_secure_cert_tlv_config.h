@@ -35,6 +35,7 @@ typedef enum esp_secure_cert_tlv_type {
     ESP_SECURE_CERT_PRIV_KEY_TLV,
     ESP_SECURE_CERT_DS_DATA_TLV,
     ESP_SECURE_CERT_DS_CONTEXT_TLV,
+    ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT,
     // Any new tlv types should be added above this
     ESP_SECURE_CERT_TLV_END = 50,
     //Custom data types

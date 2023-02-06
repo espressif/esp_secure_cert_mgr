@@ -408,6 +408,7 @@ exit:
  * Generate the ECDSA private key (DER format) with help of the PBKDF2 hmac implementation.
  * In this case the first eFuse key block with purpose set to HMAC_UP shall be used for generating the private key.
  * The key shall be generated for the SECP256R1 curve, the length of the key in DER format shall be ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE bytes.
+ * The API assumes that a valid salt is stored in the esp_secure_cert partition, Otherwise the API would return with failure.
  *
  * @input
  * output_buf  A writable buffer to store the DER formatted ECDSA private key
@@ -416,35 +417,22 @@ exit:
  */
 static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
 {
+    esp_err_t err = ESP_FAIL;
+    int ret = 0;
     if (buf_len != ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Obtain the unique_id
-    uint8_t salt[32] = {};
-    uint8_t unique_id[ESP_EFUSE_OPTIONAL_UNIQUE_ID[0]->bit_count / 8];
-    esp_err_t err = esp_efuse_read_field_blob(ESP_EFUSE_OPTIONAL_UNIQUE_ID, unique_id, sizeof(unique_id) * 8);
+    // Obtain the salt stored in the esp_secure_cert partition
+    uint8_t *salt = NULL;
+    uint32_t salt_len = 0;
+    err = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT, (void *)&salt, &salt_len);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read the optional unique id");
-        return err;
+        ESP_LOGE(TAG, "Error in reading salt, returned %04X", err);
     }
     ESP_FAULT_ASSERT(err == ESP_OK);
 
-    // Generate sha256 value of the optional unique id.
-
-#if MBEDTLS_2X_COMPAT
-    int ret = mbedtls_sha256_ret(unique_id, sizeof(unique_id), salt, 0);
-#else
-    int ret = mbedtls_sha256(unique_id, sizeof(unique_id), salt, 0);
-#endif
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Error in generating SHA256 of the unique id");
-        ESP_LOG_BUFFER_HEX(TAG, unique_id, sizeof(unique_id));
-        return ESP_FAIL;
-    }
-
-    ESP_LOG_BUFFER_HEX_LEVEL("UNIQUE ID", unique_id, sizeof(unique_id), ESP_LOG_DEBUG);
-    ESP_LOG_BUFFER_HEX_LEVEL("SALT", salt, sizeof(salt), ESP_LOG_DEBUG);
+    ESP_LOG_BUFFER_HEX_LEVEL("SALT", salt, salt_len, ESP_LOG_DEBUG);
 
     esp_efuse_block_t efuse_block = EFUSE_BLK_KEY_MAX;
     bool res = esp_efuse_find_purpose(ESP_EFUSE_KEY_PURPOSE_HMAC_UP, &efuse_block);
@@ -462,7 +450,7 @@ static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
     }
 
     // Generate the private key
-    ret = esp_pbkdf2_hmac_sha256(efuse_block - (int)EFUSE_BLK_KEY0, salt, sizeof(salt), ESP_SECURE_CERT_KEY_DERIVATION_ITERATION_COUNT, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, (unsigned char *)key_buf);
+    ret = esp_pbkdf2_hmac_sha256(efuse_block - (int)EFUSE_BLK_KEY0, salt, salt_len, ESP_SECURE_CERT_KEY_DERIVATION_ITERATION_COUNT, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, (unsigned char *)key_buf);
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to derive the ECDSA key using HMAC, returned %04X", ret);
         free(key_buf);
