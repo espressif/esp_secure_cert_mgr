@@ -14,7 +14,8 @@ from cryptography.utils import int_to_bytes
 supported_key_size = {'esp32s2': [1024, 2048, 3072, 4096],
                       'esp32c3': [1024, 2048, 3072],
                       'esp32s3': [1024, 2048, 3072, 4096],
-                      'esp32c6': [1024, 2048, 3072]}
+                      'esp32c6': [1024, 2048, 3072],
+                      'esp32h2': [1024, 2048, 3072]}
 
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):

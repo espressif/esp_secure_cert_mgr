@@ -23,7 +23,7 @@ hmac_key_file = os.path.join(esp_secure_cert_data_dir, 'hmac_key.bin')
 csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
 bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
-supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c6'}
+supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c6', 'esp32h2'}
 
 
 # Flash esp_secure_cert partition after its generation
