@@ -1,31 +1,9 @@
 import sys
 import struct
 import zlib
+from esp_secure_cert.esp_secure_cert_helper import load_private_key, load_certificate
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
-
-
-def load_privatekey(key_file_path, password=None):
-    with open(key_file_path, 'rb') as key_file:
-        key = key_file.read()
-
-    try:
-        private_key = serialization.load_pem_private_key(key, password=password, backend=default_backend())
-        return private_key.private_bytes(encoding=serialization.Encoding.PEM,
-                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                         encryption_algorithm=serialization.NoEncryption())
-    except ValueError:
-        pass
-
-    try:
-        private_key = serialization.load_der_private_key(key, password=password, backend=default_backend())
-        return private_key.private_bytes(encoding=serialization.Encoding.DER,
-                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                         encryption_algorithm=serialization.NoEncryption())
-    except ValueError:
-        print("Unsupported key encoding format, Please provide PEM or DER encoded key", file=sys.stderr)
-        sys.exit(1)
-
 
 # size is calculated as actual size + 16 (offset)
 ciphertext_size = {'esp32s2': 1600, 'esp32s3': 1600, 'esp32c3': 1216}
@@ -50,33 +28,39 @@ def generate_partition_ds(c, iv, hmac_key_id, key_size,
     with open(op_file, 'wb') as output_file:
         output_file_data = bytearray(b'\xff' * 24576)
         metadata = b'\x00'
-        with open(device_cert, 'rb') as cli_cert:
-            dev_cert = cli_cert.read()
-            # Write device cert at specific address
-            dev_cert = dev_cert + b'\0'
-            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET
-                             + len(dev_cert)] = dev_cert
-            # The following line packs the dev_cert_crc
-            # and dev_cet_len into the metadata in little endian format
-            # The value `0xffffffff` corresponds to the
-            # starting value used at the time of calculation
-            metadata = struct.pack('<IH',
-                                   zlib.crc32(dev_cert, 0xffffffff),
-                                   len(dev_cert))
-            # Align to 32 bit, this is done to match
-            # the same operation done by the compiler
-            metadata = metadata + b'\x00' * 2
+        dev_cert_data = load_certificate(device_cert)
+
+        # Write dev cert at specific address
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            dev_cert = dev_cert_data["bytes"] + b'\0'
+        else:
+            dev_cert = dev_cert_data["bytes"]
+
+        output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET
+                         + len(dev_cert)] = dev_cert
+        # The following line packs the dev_cert_crc
+        # and dev_cet_len into the metadata in little endian format
+        # The value `0xffffffff` corresponds to the
+        # starting value used at the time of calculation
+        metadata = struct.pack('<IH',
+                               zlib.crc32(dev_cert, 0xffffffff),
+                               len(dev_cert))
+        # Align to 32 bit, this is done to match
+        # the same operation done by the compiler
+        metadata = metadata + b'\x00' * 2
 
         if ca_cert is not None:
-            with open(ca_cert, 'rb') as ca_cert:
-                ca_cert = ca_cert.read()
-                # Write ca cert at specific address
-                ca_cert = ca_cert + b'\0'
-                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
-                                 + len(ca_cert)] = ca_cert
-                metadata += struct.pack('<IH',
-                                        zlib.crc32(ca_cert, 0xffffffff),
-                                        len(ca_cert))
+            ca_cert_data = load_certificate(ca_cert)
+            # Write dev cert at specific address
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+                ca_cert = ca_cert_data["bytes"] + b'\0'
+            else:
+                ca_cert = ca_cert_data["bytes"]
+            output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
+                             + len(ca_cert)] = ca_cert
+            metadata += struct.pack('<IH',
+                                    zlib.crc32(ca_cert, 0xffffffff),
+                                    len(ca_cert))
         else:
             output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
             metadata = metadata + struct.pack('<IH', 0, 0)
@@ -128,33 +112,39 @@ def generate_partition_no_ds(device_cert, ca_cert,
     with open(op_file, 'wb') as output_file:
         output_file_data = bytearray(b'\xff' * 24576)
         metadata = b'\x00'
-        with open(device_cert, 'rb') as cli_cert:
-            dev_cert = cli_cert.read()
-            # Write device cert at specific address
-            dev_cert = dev_cert + b'\0'
-            output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET
-                             + len(dev_cert)] = dev_cert
-            # The following line packs the dev_cert_crc and dev_cet_len
-            # into the metadata in little endian format
-            # The value `0xffffffff` corresponds to the starting value
-            # used at the time of calculation
-            metadata = struct.pack('<IH',
-                                   zlib.crc32(dev_cert, 0xffffffff),
-                                   len(dev_cert))
-            # Align to 32 bit, this is done to match
-            # the same operation done by the compiler
-            metadata = metadata + b'\x00' * 2
+        dev_cert_data = load_certificate(device_cert)
+
+        # Write dev cert at specific address
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            dev_cert = dev_cert_data["bytes"] + b'\0'
+        else:
+            dev_cert = dev_cert_data["bytes"]
+
+        output_file_data[DEV_CERT_OFFSET: DEV_CERT_OFFSET
+                         + len(dev_cert)] = dev_cert
+        # The following line packs the dev_cert_crc and dev_cet_len
+        # into the metadata in little endian format
+        # The value `0xffffffff` corresponds to the starting value
+        # used at the time of calculation
+        metadata = struct.pack('<IH',
+                               zlib.crc32(dev_cert, 0xffffffff),
+                               len(dev_cert))
+        # Align to 32 bit, this is done to match
+        # the same operation done by the compiler
+        metadata = metadata + b'\x00' * 2
 
         if ca_cert is not None:
-            with open(ca_cert, 'rb') as ca_cert:
-                ca_cert = ca_cert.read()
-                # Write ca cert at specific address
-                ca_cert = ca_cert + b'\0'
-                output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
-                                 + len(ca_cert)] = ca_cert
-                metadata += struct.pack('<IH',
-                                        zlib.crc32(ca_cert, 0xffffffff),
-                                        len(ca_cert))
+            ca_cert_data = load_certificate(ca_cert)
+            # Write dev cert at specific address
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+                ca_cert = ca_cert_data["bytes"] + b'\0'
+            else:
+                ca_cert = ca_cert_data["bytes"]
+            output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET
+                             + len(ca_cert)] = ca_cert
+            metadata += struct.pack('<IH',
+                                    zlib.crc32(ca_cert, 0xffffffff),
+                                    len(ca_cert))
         else:
             output_file_data[CA_CERT_OFFSET: CA_CERT_OFFSET] = b'\x00'
             metadata = metadata + struct.pack('<IH', 0, 0)
@@ -162,10 +152,13 @@ def generate_partition_no_ds(device_cert, ca_cert,
         # Align to 32 bit
         metadata = metadata + b'\x00' * 2
 
-        private_key = load_privatekey(priv_key, priv_key_pass)
+        private_key_data = load_private_key(priv_key, priv_key_pass)
 
         # Write private key at specific address
-        private_key = private_key + b'\0'
+        if private_key_data["encoding"] == serialization.Encoding.PEM.value:
+            private_key = private_key_data["bytes"] + b'\0'
+        else:
+            private_key = private_key_data["bytes"]
         output_file_data[PRIV_KEY_OFFSET: PRIV_KEY_OFFSET
                          + len(private_key)] = private_key
         metadata += struct.pack('<IH',

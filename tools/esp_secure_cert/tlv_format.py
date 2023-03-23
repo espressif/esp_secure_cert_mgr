@@ -2,31 +2,9 @@ import sys
 import enum
 import struct
 import zlib
+from esp_secure_cert.esp_secure_cert_helper import load_private_key, load_certificate
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
-
-
-def load_privatekey(key_file_path, password=None):
-    with open(key_file_path, 'rb') as key_file:
-        key = key_file.read()
-
-    try:
-        private_key = serialization.load_pem_private_key(key, password=password, backend=default_backend())
-        return private_key.private_bytes(encoding=serialization.Encoding.PEM,
-                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                         encryption_algorithm=serialization.NoEncryption())
-    except ValueError:
-        pass
-
-    try:
-        private_key = serialization.load_der_private_key(key, password=password, backend=default_backend())
-        return private_key.private_bytes(encoding=serialization.Encoding.DER,
-                                         format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                         encryption_algorithm=serialization.NoEncryption())
-    except ValueError:
-        print("Unsupported key encoding format, Please provide PEM or DER encoded key", file=sys.stderr)
-        sys.exit(1)
-
 
 class tlv_type_t(enum.IntEnum):
     CA_CERT = 0
@@ -82,33 +60,38 @@ def generate_partition_ds(c, iv, hmac_key_id, key_size,
         partition_size = 0x2000
         output_file_data = bytearray(b'\xff' * partition_size)
         cur_offset = 0
-        with open(device_cert, 'rb') as cli_cert:
-            dev_cert = cli_cert.read()
-            # Null terminate the dev_cert.
-            dev_cert = dev_cert + b'\0'
-            dev_cert_tlv = prepare_tlv(tlv_type_t.DEV_CERT,
-                                       dev_cert,
-                                       len(dev_cert))
-            output_file_data[cur_offset: cur_offset
-                             + len(dev_cert_tlv)] = dev_cert_tlv
-            cur_offset = cur_offset + len(dev_cert_tlv)
-            print('dev_cert tlv: total length = {}'.format(len(dev_cert_tlv)))
-            tlv_data_length += len(dev_cert_tlv)
+        dev_cert_data = load_certificate(device_cert)
+
+        # Write dev cert at specific address
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            dev_cert = dev_cert_data["bytes"] + b'\0'
+        else:
+            dev_cert = dev_cert_data["bytes"]
+        dev_cert_tlv = prepare_tlv(tlv_type_t.DEV_CERT,
+                                   dev_cert,
+                                   len(dev_cert))
+        output_file_data[cur_offset: cur_offset
+                         + len(dev_cert_tlv)] = dev_cert_tlv
+        cur_offset = cur_offset + len(dev_cert_tlv)
+        print('dev_cert tlv: total length = {}'.format(len(dev_cert_tlv)))
+        tlv_data_length += len(dev_cert_tlv)
 
         if ca_cert is not None:
-            with open(ca_cert, 'rb') as ca_cert:
-                ca_cert = ca_cert.read()
-                # Write ca cert at specific address
-                ca_cert = ca_cert + b'\0'
-                ca_cert_tlv = prepare_tlv(tlv_type_t.CA_CERT,
-                                          ca_cert,
-                                          len(ca_cert))
-                output_file_data[cur_offset: cur_offset
-                                 + len(ca_cert_tlv)] = ca_cert_tlv
-                cur_offset = cur_offset + len(ca_cert_tlv)
-                print('ca_cert tlv: total length = {}'
-                      .format(len(ca_cert_tlv)))
-                tlv_data_length += len(ca_cert_tlv)
+            ca_cert_data = load_certificate(ca_cert)
+            # Write dev cert at specific address
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+                ca_cert = ca_cert_data["bytes"] + b'\0'
+            else:
+                ca_cert = ca_cert_data["bytes"]
+            ca_cert_tlv = prepare_tlv(tlv_type_t.CA_CERT,
+                                      ca_cert,
+                                      len(ca_cert))
+            output_file_data[cur_offset: cur_offset
+                             + len(ca_cert_tlv)] = ca_cert_tlv
+            cur_offset = cur_offset + len(ca_cert_tlv)
+            print('ca_cert tlv: total length = {}'
+                  .format(len(ca_cert_tlv)))
+            tlv_data_length += len(ca_cert_tlv)
 
         # create esp_secure_cert_data struct
         ds_data = struct.pack('<i', key_size // 32 - 1)
@@ -153,39 +136,46 @@ def generate_partition_no_ds(device_cert, ca_cert, priv_key,
         partition_size = 0x2000
         output_file_data = bytearray(b'\xff' * partition_size)
         cur_offset = 0
-        with open(device_cert, 'rb') as cli_cert:
-            cur_offset = 0
-            dev_cert = cli_cert.read()
-            # Null terminate the dev_cert.
-            dev_cert = dev_cert + b'\0'
-            dev_cert_tlv = prepare_tlv(tlv_type_t.DEV_CERT,
-                                       dev_cert,
-                                       len(dev_cert))
-            output_file_data[cur_offset: cur_offset
-                             + len(dev_cert_tlv)] = dev_cert_tlv
-            cur_offset = cur_offset + len(dev_cert_tlv)
-            print('dev_cert tlv: total length = {}'.format(len(dev_cert_tlv)))
-            tlv_data_length += len(dev_cert_tlv)
+        dev_cert_data = load_certificate(device_cert)
+
+        # Write dev cert at specific address
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            dev_cert = dev_cert_data["bytes"] + b'\0'
+        else:
+            dev_cert = dev_cert_data["bytes"]
+        dev_cert_tlv = prepare_tlv(tlv_type_t.DEV_CERT,
+                                   dev_cert,
+                                   len(dev_cert))
+        output_file_data[cur_offset: cur_offset
+                         + len(dev_cert_tlv)] = dev_cert_tlv
+        cur_offset = cur_offset + len(dev_cert_tlv)
+        print('dev_cert tlv: total length = {}'.format(len(dev_cert_tlv)))
+        tlv_data_length += len(dev_cert_tlv)
 
         if ca_cert is not None:
-            with open(ca_cert, 'rb') as ca_cert:
-                ca_cert = ca_cert.read()
-                # Write ca cert at specific address
-                ca_cert = ca_cert + b'\0'
-                ca_cert_tlv = prepare_tlv(tlv_type_t.CA_CERT,
-                                          ca_cert,
-                                          len(ca_cert))
-                output_file_data[cur_offset: cur_offset
-                                 + len(ca_cert_tlv)] = ca_cert_tlv
-                cur_offset = cur_offset + len(ca_cert_tlv)
-                print('ca_cert tlv: total length = {}'
-                      .format(len(ca_cert_tlv)))
-                tlv_data_length += len(ca_cert_tlv)
+            ca_cert_data = load_certificate(ca_cert)
+            # Write dev cert at specific address
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+                ca_cert = ca_cert_data["bytes"] + b'\0'
+            else:
+                ca_cert = ca_cert_data["bytes"]
+            ca_cert_tlv = prepare_tlv(tlv_type_t.CA_CERT,
+                                      ca_cert,
+                                      len(ca_cert))
+            output_file_data[cur_offset: cur_offset
+                             + len(ca_cert_tlv)] = ca_cert_tlv
+            cur_offset = cur_offset + len(ca_cert_tlv)
+            print('ca_cert tlv: total length = {}'
+                  .format(len(ca_cert_tlv)))
+            tlv_data_length += len(ca_cert_tlv)
 
-        private_key = load_privatekey(priv_key, priv_key_pass)
+        private_key_data = load_private_key(priv_key, priv_key_pass)
 
         # Write private key at specific address
-        private_key = private_key + b'\0'
+        if private_key_data["encoding"] == serialization.Encoding.PEM.value:
+            private_key = private_key_data["bytes"] + b'\0'
+        else:
+            private_key = private_key_data["bytes"]
         priv_key_tlv = prepare_tlv(tlv_type_t.PRIV_KEY,
                                    private_key,
                                    len(private_key))
