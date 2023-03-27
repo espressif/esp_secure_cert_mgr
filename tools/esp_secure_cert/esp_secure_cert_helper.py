@@ -79,6 +79,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
         cert = load_pem_x509_certificate(cert_data, backend=default_backend())
         result["encoding"] = serialization.Encoding.PEM
         result["bytes"] = cert.public_bytes(encoding=serialization.Encoding.PEM)
+        return result
     except ValueError:
         pass
 
