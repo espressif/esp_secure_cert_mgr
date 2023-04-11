@@ -36,6 +36,7 @@ typedef enum esp_secure_cert_tlv_type {
     ESP_SECURE_CERT_DS_DATA_TLV,
     ESP_SECURE_CERT_DS_CONTEXT_TLV,
     ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT,
+    ESP_SECURE_CERT_TLV_SEC_CFG,
     // Any new tlv types should be added above this
     ESP_SECURE_CERT_TLV_END = 50,
     //Custom data types
@@ -112,3 +113,10 @@ _Static_assert(sizeof(esp_secure_cert_tlv_footer_t) == 4, "TLV footer size shoul
  * tlv_header1 -> data_1 -> tlv_footer1 -> tlv_header2...
  *
  */
+
+typedef struct esp_secure_cert_tlv_sec_cfg {
+    uint8_t priv_key_efuse_id; /* eFuse key id in which the private key is stored */
+    uint8_t reserved[39];       /* Reserving 39 bytes for future use */
+} __attribute__((packed)) esp_secure_cert_tlv_sec_cfg_t;
+
+_Static_assert(sizeof(esp_secure_cert_tlv_sec_cfg_t) == 40, "TLV sec cfg size should be 40 bytes");

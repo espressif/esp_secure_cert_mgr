@@ -126,7 +126,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
  *      The esp_secure_cert_free_priv_key API needs to be called in order to free the memory.
  *      The API shall only free the memory if it has been dynamically allocated.
  *
- *      The private key(buffer) shall be returned as NULL when private key type is ESP_SECURE_CERT_ECDSA_
+ *      The private key(buffer) shall be returned as NULL when private key type is ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY.
  *
  * @params
  *      - buffer(out)       This value shall be filled with the private key address
@@ -187,8 +187,26 @@ esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void);
  *@info
  *      Free the ds context
  */
+
 void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
 #endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
+
+#ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
+/* @info
+ *  Get the efuse key block id in which the private key is stored.
+ * @note
+ *      The API is only supported for the TLV format.
+ *      For now only ECDSA type of private key can be stored in the eFuse key blocks
+ *
+ * @params
+ *      - efuse_key_id(in/out)    Pointer to store the obtained key id
+ * @return
+ *      - ESP_OK    On success
+ *      - ESP_FAIL/other relevant esp error code
+ *                  On failure
+ */
+esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id);
+#endif
 
 #ifdef __cplusplus
 }

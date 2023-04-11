@@ -619,4 +619,24 @@ void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
     esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
 }
 #endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
+
+esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id) {
+    esp_err_t err;
+    esp_secure_cert_tlv_header_t *tlv_header = NULL;
+    if (efuse_key_id == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_TLV_SEC_CFG, &tlv_header);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Could not find header for TLV security configurations");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    esp_secure_cert_tlv_sec_cfg_t *tlv_sec_cfg;
+    tlv_sec_cfg = (esp_secure_cert_tlv_sec_cfg_t *) tlv_header->value;
+    *efuse_key_id = tlv_sec_cfg->priv_key_efuse_id;
+
+    return ESP_OK;
+}
 #endif /* CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS */
