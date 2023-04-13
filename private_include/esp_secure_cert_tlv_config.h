@@ -36,6 +36,7 @@ typedef enum esp_secure_cert_tlv_type {
     ESP_SECURE_CERT_DS_DATA_TLV,
     ESP_SECURE_CERT_DS_CONTEXT_TLV,
     ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT,
+    ESP_SECURE_CERT_TLV_SEC_CFG,
     // Any new tlv types should be added above this
     ESP_SECURE_CERT_TLV_END = 50,
     //Custom data types
@@ -51,18 +52,26 @@ typedef enum esp_secure_cert_tlv_type {
  * Flags    8 bits
  * Used bits:
  *      bit7(MSB) & bit6 - hmac_based_encryption
- *          If the value of the bits is 0b10 (i.e. 2 in decimal) then the data in the block needs to be
+ *          0b10 - (i.e. 2 in decimal) the data in the block needs to be
  *          decrypted first using the HMAC based encryption scheme
  *          before sending out
- *          If the value of the bits is 0b01 (i.e. 1 in decimal) then the hmac based ecdsa
+ *          0b01 - (i.e. 1 in decimal) the hmac based ecdsa
  *          private key generation is enabled. Generate the private key internally using the hardware HMAC peripheral.
+ *
+ *      bit5 & bit4 & bit3 - TLV key flags
+ *          0b001 - (i.e. 1 in decimal) The ecdsa key is stored in an eFuse key block
+ *
+ *      In this case all the flags are mutually exclusive.
  * Ununsed bits:
  *      .
  *      .
  *      bit0 (LSB)
  */
+
 #define ESP_SECURE_CERT_TLV_FLAG_HMAC_ENCRYPTION            (2 << 6)
 #define ESP_SECURE_CERT_TLV_FLAG_HMAC_ECDSA_KEY_DERIVATION  (1 << 6)
+#define ESP_SECURE_CERT_TLV_FLAG_KEY_ECDSA_PERIPHERAL       (1 << 3)
+#define ESP_SECURE_CERT_TLV_KEY_FLAGS_BIT_MASK              (BIT5 | BIT4 | BIT3)
 
 #define ESP_SECURE_CERT_IS_TLV_ENCRYPTED(flags) \
     ((flags & (BIT7 | BIT6)) == ESP_SECURE_CERT_TLV_FLAG_HMAC_ENCRYPTION)
@@ -70,6 +79,8 @@ typedef enum esp_secure_cert_tlv_type {
 #define ESP_SECURE_CERT_HMAC_ECDSA_KEY_DERIVATION(flags) \
     ((flags & (BIT7 | BIT6)) == ESP_SECURE_CERT_TLV_FLAG_HMAC_ECDSA_KEY_DERIVATION)
 
+#define ESP_SECURE_CERT_KEY_ECDSA_PERIPHERAL(flags) \
+    ((flags & ESP_SECURE_CERT_TLV_KEY_FLAGS_BIT_MASK) == ESP_SECURE_CERT_TLV_FLAG_KEY_ECDSA_PERIPHERAL)
 /*
  * Header for each tlv
  */
@@ -102,3 +113,10 @@ _Static_assert(sizeof(esp_secure_cert_tlv_footer_t) == 4, "TLV footer size shoul
  * tlv_header1 -> data_1 -> tlv_footer1 -> tlv_header2...
  *
  */
+
+typedef struct esp_secure_cert_tlv_sec_cfg {
+    uint8_t priv_key_efuse_id; /* eFuse key id in which the private key is stored */
+    uint8_t reserved[39];       /* Reserving 39 bytes for future use */
+} __attribute__((packed)) esp_secure_cert_tlv_sec_cfg_t;
+
+_Static_assert(sizeof(esp_secure_cert_tlv_sec_cfg_t) == 40, "TLV sec cfg size should be 40 bytes");

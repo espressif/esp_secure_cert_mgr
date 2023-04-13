@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## v2.3.0
+* Added support to obtain the priv key type
+* Added support for getting the efuse key id for priv key
+
 ## v2.2.0
 * tools: Support DER encoded private keys when creating secure cert partition on host
 ### Breaking changes in v2.2.0

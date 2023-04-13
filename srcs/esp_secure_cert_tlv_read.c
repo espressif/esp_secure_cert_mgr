@@ -169,22 +169,41 @@ esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_
     }
 }
 
+/**
 
-esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **buffer, uint32_t *len)
+@brief Retrieve the header of a specific ESP Secure Certificate TLV record.
+This function retrieves the header of a specific ESP Secure Certificate TLV record, identified by the type parameter. The tlv_header parameter is a pointer to a buffer where the header will be stored. The function returns ESP_OK if the header is successfully retrieved, otherwise it returns an error code.
+@param[in] type The type of the TLV record to retrieve the header for.
+@param[out] tlv_header The pointer at this location shall be updated with tlv_header pointer value.
+@return ESP_OK          Success
+        ESP_FAIL/
+        relevant error  Failure
+*/
+static esp_err_t esp_secure_cert_tlv_get_header(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_header_t **tlv_header)
 {
-    esp_err_t err;
+    esp_err_t err = ESP_FAIL;
     char *esp_secure_cert_addr = (char *)esp_secure_cert_get_mapped_addr();
     if (esp_secure_cert_addr == NULL) {
         ESP_LOGE(TAG, "Error in obtaining esp_secure_cert memory mapped address");
         return ESP_FAIL;
     }
-    void *tlv_address;
-    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, type, &tlv_address);
+    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, type, (void **)tlv_header);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Could not find the tlv of type %d", type);
         return err;
     }
-    esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *) tlv_address;
+    return err;
+}
+
+esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **buffer, uint32_t *len)
+{
+    esp_err_t err;
+    esp_secure_cert_tlv_header_t *tlv_header = NULL;
+    err = esp_secure_cert_tlv_get_header(type, &tlv_header);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Could not find header for TLV type %d", type);
+        return err;
+    }
     *buffer = (char *)&tlv_header->value;
     *len = tlv_header->length;
 
@@ -564,6 +583,30 @@ esp_err_t esp_secure_cert_free_priv_key(char *buffer)
     return ESP_OK;
 }
 
+esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key_type) {
+    esp_err_t err;
+    if (priv_key_type == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_secure_cert_tlv_header_t *tlv_header = NULL;
+    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_PRIV_KEY_TLV, &tlv_header);
+    if (err != ESP_OK) {
+        *priv_key_type = ESP_SECURE_CERT_INVALID_KEY;
+        ESP_LOGE(TAG, "Could not find header for priv key");
+        return err;
+    }
+
+    if (ESP_SECURE_CERT_HMAC_ECDSA_KEY_DERIVATION(tlv_header->flags)) {
+        *priv_key_type = ESP_SECURE_CERT_HMAC_DERIVED_ECDSA_KEY;
+    } else if (ESP_SECURE_CERT_KEY_ECDSA_PERIPHERAL(tlv_header->flags)) {
+        *priv_key_type = ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY;
+    } else if (ESP_SECURE_CERT_IS_TLV_ENCRYPTED(tlv_header->flags)) {
+        *priv_key_type = ESP_SECURE_CERT_HMAC_ENCRYPTED_KEY;
+    } else {
+        *priv_key_type = ESP_SECURE_CERT_DEFAULT_FORMAT_KEY;
+    }
+    return ESP_OK;
+}
 #else /* !CONFIG_ESP_SECURE_CERT_DS_PEIPHERAL */
 
 esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void)
@@ -576,4 +619,24 @@ void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
     esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
 }
 #endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
+
+esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id) {
+    esp_err_t err;
+    esp_secure_cert_tlv_header_t *tlv_header = NULL;
+    if (efuse_key_id == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_TLV_SEC_CFG, &tlv_header);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Could not find header for TLV security configurations");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    esp_secure_cert_tlv_sec_cfg_t *tlv_sec_cfg;
+    tlv_sec_cfg = (esp_secure_cert_tlv_sec_cfg_t *) tlv_header->value;
+    *efuse_key_id = tlv_sec_cfg->priv_key_efuse_id;
+
+    return ESP_OK;
+}
 #endif /* CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS */
