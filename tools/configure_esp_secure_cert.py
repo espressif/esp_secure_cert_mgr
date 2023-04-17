@@ -6,6 +6,10 @@ import os
 import sys
 from esp_secure_cert import nvs_format, custflash_format
 from esp_secure_cert import configure_ds, tlv_format
+from esp_secure_cert.efuse_helper import (
+    log_efuse_summary,
+    configure_efuse_key_block
+)
 
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):
@@ -23,7 +27,8 @@ hmac_key_file = os.path.join(esp_secure_cert_data_dir, 'hmac_key.bin')
 csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
 bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
-supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c6', 'esp32h2'}
+supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
+                     'esp32c6', 'esp32h2'}
 
 
 # Flash esp_secure_cert partition after its generation
@@ -167,7 +172,7 @@ def main():
     idf_target = str(idf_target)
 
     if args.summary is not False:
-        configure_ds.efuse_summary(args, idf_target)
+        log_efuse_summary(idf_path, idf_target,  args.port)
         sys.exit(0)
 
     if (os.path.exists(args.privkey) is False):
@@ -193,10 +198,19 @@ def main():
     if args.configure_ds is not False:
         # Burn hmac_key on the efuse block (if it is empty) or read it
         # from the efuse block (if the efuse block already contains a key).
-        hmac_key = configure_ds.configure_efuse_key_block(args, idf_target,
-                                                          hmac_key_file)
+        efuse_purpose = 'HMAC_DOWN_DIGITAL_SIGNATURE'
+        hmac_key = configure_efuse_key_block(idf_path, idf_target, args.port,
+                                             hmac_key_file, args.efuse_key_id,
+                                             efuse_purpose, args.production)
+
         if hmac_key is None:
+            print(f'Failed to configure the eFuse key block'
+                  f'{args.efuse_key_id} for Digital Signature')
             sys.exit(-1)
+        else:
+            if args.keep_ds_data is True:
+                with open(hmac_key_file, 'wb') as key_file:
+                    key_file.write(hmac_key)
 
         # Calculate the encrypted private key data along
         # with all other parameters
