@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import argparse
 import os
+import subprocess
 import sys
 from esp_secure_cert import nvs_format, custflash_format
 from esp_secure_cert import configure_ds, tlv_format
@@ -36,16 +37,25 @@ supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
 # @info
 # The partition shall be flashed at the offset provided
 # for the --sec_cert_part_offset option
-def flash_esp_secure_cert_partition(args, idf_target):
+def flash_esp_secure_cert_partition(idf_path, idf_target,
+                                    port, sec_cert_part_offset,
+                                    flash_filename):
     print('Flashing the esp_secure_cert partition at {0} offset'
-          .format(args.sec_cert_part_offset))
+          .format(sec_cert_part_offset))
     print('Note: You can skip this step by providing --skip_flash argument')
-
-    os.system('python {0}/components/esptool_py/esptool/esptool.py '
-              '--chip {1} -p {2} write_flash '
-              '{3} {4}'
-              .format((idf_path), (idf_target), (args.port),
-                      args.sec_cert_part_offset, bin_filename))
+    flash_command = f"python {idf_path}/components/esptool_py/" + \
+                    f"esptool/esptool.py --chip {idf_target} " + \
+                    f"-p {port} write_flash " + \
+                    f" {sec_cert_part_offset} {flash_filename}"
+    try:
+        flash_command_output = subprocess.check_output(
+            flash_command,
+            shell=True
+        )
+        print(flash_command_output.decode('utf-8'))
+    except subprocess.CalledProcessError as e:
+        print(e.output.decode("utf-8"))
+        sys.exit(-1)
 
 
 def cleanup(args):
@@ -262,7 +272,10 @@ def main():
         nvs_format.generate_partition(csv_filename, bin_filename)
 
     if args.skip_flash is False:
-        flash_esp_secure_cert_partition(args, idf_target)
+        flash_esp_secure_cert_partition(idf_path, idf_target,
+                                        args.port,
+                                        args.sec_cert_part_offset,
+                                        bin_filename)
 
     cleanup(args)
 

@@ -159,10 +159,10 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
 
         if os.path.exists(efuse_key_file):
             print('Key file present, using the same key')
-            with open(efuse_key_file, 'wb') as key_file:
+            with open(efuse_key_file, 'rb+') as key_file:
                 new_efuse_key = key_file.read()
                 if len(new_efuse_key) != 32:
-                    print(f'The key present at {efuse_key_file} is not of'
+                    print(f'The key present at {efuse_key_file} is not of '
                           f'length 256 bits\n'
                           f'Generating a new key and '
                           f'overwriting the existing key')
@@ -172,6 +172,7 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
                 else:
                     print('Using the provided key')
         else:
+            print('Key file not present, generating a new key')
             new_efuse_key = os.urandom(32)
             with open(efuse_key_file, 'wb') as key_file:
                 key_file.write(new_efuse_key)
