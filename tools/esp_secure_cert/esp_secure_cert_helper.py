@@ -32,7 +32,7 @@ def load_private_key(key_file_path: str, password: str = None) -> Dict[str, str]
     try:
         # Attempt to load the key as a PEM-encoded private key
         private_key = serialization.load_pem_private_key(key, password=password, backend=default_backend())
-        result["encoding"] = serialization.Encoding.PEM
+        result["encoding"] = serialization.Encoding.PEM.value
         result["bytes"] = private_key.private_bytes(encoding=serialization.Encoding.PEM,
                                                     format=serialization.PrivateFormat.TraditionalOpenSSL,
                                                     encryption_algorithm=serialization.NoEncryption())
@@ -42,7 +42,7 @@ def load_private_key(key_file_path: str, password: str = None) -> Dict[str, str]
 
     try:
         private_key = serialization.load_der_private_key(key, password=password, backend=default_backend())
-        result["encoding"] = serialization.Encoding.DER
+        result["encoding"] = serialization.Encoding.DER.value
         result["bytes"] = private_key.private_bytes(encoding=serialization.Encoding.DER,
                                                     format=serialization.PrivateFormat.TraditionalOpenSSL,
                                                     encryption_algorithm=serialization.NoEncryption())
@@ -77,7 +77,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
 
     try:
         cert = load_pem_x509_certificate(cert_data, backend=default_backend())
-        result["encoding"] = serialization.Encoding.PEM
+        result["encoding"] = serialization.Encoding.PEM.value
         result["bytes"] = cert.public_bytes(encoding=serialization.Encoding.PEM)
         return result
     except ValueError:
@@ -85,7 +85,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
 
     try:
         cert = load_der_x509_certificate(cert_data, backend=default_backend())
-        result["encoding"] = serialization.Encoding.DER
+        result["encoding"] = serialization.Encoding.DER.value
         result["bytes"] = cert.public_bytes(encoding=serialization.Encoding.DER)
         return result
     except ValueError:
