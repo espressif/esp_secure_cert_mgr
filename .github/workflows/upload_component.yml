@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Upload esp_secure_cert_mgr to component service
-        uses: espressif/github-actions/upload_components@master
+        uses: espressif/upload-components-ci-action@v1
         with:
           name: esp_secure_cert_mgr
           namespace: "espressif"
