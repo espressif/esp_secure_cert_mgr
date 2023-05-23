@@ -241,4 +241,22 @@ void app_main()
     } else {
         ESP_LOGE(TAG, "Failed to obtain and verify the contents of the esp_secure_cert partition");
     }
+
+    esp_secure_cert_key_type_t priv_key;
+    esp_ret = esp_secure_cert_get_priv_key_type(&priv_key);
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Successfully obtained priv key type, %d", priv_key);
+    } else {
+        ESP_LOGE(TAG, "Failed to obtain priv key type");
+    }
+
+    if (priv_key == ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY) {
+        uint8_t priv_key_id = 0;
+        esp_ret = esp_secure_cert_get_priv_key_efuse_id(&priv_key_id);
+        if (esp_ret == ESP_OK) {
+            ESP_LOGI(TAG, "Successfully obtained priv key id, %d", priv_key_id);
+        } else {
+            ESP_LOGE(TAG, "Failed to obtain priv key id");
+        }
+    }
 }
