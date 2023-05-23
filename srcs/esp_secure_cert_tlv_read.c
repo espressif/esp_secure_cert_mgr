@@ -583,6 +583,19 @@ esp_err_t esp_secure_cert_free_priv_key(char *buffer)
     return ESP_OK;
 }
 
+#else /* !CONFIG_ESP_SECURE_CERT_DS_PEIPHERAL */
+
+esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void)
+{
+    return esp_secure_cert_tlv_get_ds_ctx();
+}
+
+void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
+{
+    esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
+}
+#endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
+
 esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key_type) {
     esp_err_t err;
     if (priv_key_type == NULL) {
@@ -607,18 +620,6 @@ esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key
     }
     return ESP_OK;
 }
-#else /* !CONFIG_ESP_SECURE_CERT_DS_PEIPHERAL */
-
-esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void)
-{
-    return esp_secure_cert_tlv_get_ds_ctx();
-}
-
-void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
-{
-    esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
-}
-#endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
 
 esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id) {
     esp_err_t err;
