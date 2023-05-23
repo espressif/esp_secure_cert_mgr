@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.3.1
+* Make esp_secure_cert_get_key_type API available for DS peripheral case as well.
+
 ## v2.3.0
 * Added support to obtain the priv key type
 * Added support for getting the efuse key id for priv key
