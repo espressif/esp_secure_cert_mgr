@@ -209,9 +209,20 @@ def main():
         # Burn hmac_key on the efuse block (if it is empty) or read it
         # from the efuse block (if the efuse block already contains a key).
         efuse_purpose = 'HMAC_DOWN_DIGITAL_SIGNATURE'
+
+        if not os.path.exists(hmac_key_file):
+            new_hmac_key = os.urandom(32)
+            with open(hmac_key_file, "wb+") as key_file:
+                key_file.write(new_hmac_key)
+
         hmac_key = configure_efuse_key_block(idf_path, idf_target, args.port,
                                              hmac_key_file, args.efuse_key_id,
                                              efuse_purpose, args.production)
+
+        # delete the file in case of production mode
+        if args.production:
+            if os.path.exists(hmac_key_file):
+                os.remove(hmac_key_file)
 
         if hmac_key is None:
             print(f'Failed to configure the eFuse key block'

@@ -74,7 +74,7 @@ def efuse_burn_key(idf_path: str, idf_target: str, port: str,
                    efuse_key_file: str, efuse_key_id: int,
                    efuse_purpose: str, production: bool):
     """
-    Burns an HMAC key to the efuse using the "espefuse.py" script.
+    Burns a key to the efuse using the "espefuse.py" script.
 
     Args:
         idf_path (str): Path to the ESP-IDF directory.
@@ -120,10 +120,10 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
     """
     Configures the provided efuse key_block.
 
-    If the provided efuse key_block is empty the function generates
-    a new HMAC key and burns it in the efuse key_block.
+    If the provided efuse key_block is empty the function burns the key
+    read from the keyfile into the efuse
     If the key_block already contains a key the function reads
-    the key from the efuse key_block
+    the key from the efuse key_block and returns the key read
 
     Args:
         idf_path (str): Path to the ESP-IDF directory.
@@ -160,31 +160,19 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
         if os.path.exists(efuse_key_file):
             print('Key file present, using the same key')
             with open(efuse_key_file, 'rb+') as key_file:
-                new_efuse_key = key_file.read()
-                if len(new_efuse_key) != 32:
+                efuse_key = key_file.read()
+                if len(efuse_key) != 32:
                     print(f'The key present at {efuse_key_file} is not of '
-                          f'length 256 bits\n'
-                          f'Generating a new key and '
-                          f'overwriting the existing key')
-
-                    new_efuse_key = os.urandom(32)
-                    key_file.write(new_efuse_key)
+                          f'length 256 bits\n')
+                    raise RuntimeError('Invalid key')
                 else:
                     print('Using the provided key')
         else:
-            print('Key file not present, generating a new key')
-            new_efuse_key = os.urandom(32)
-            with open(efuse_key_file, 'wb') as key_file:
-                key_file.write(new_efuse_key)
+            raise RuntimeError('Key file not present')
 
         # Burn efuse key
         efuse_burn_key(idf_path, idf_target, port, efuse_key_file,
                        efuse_key_id, efuse_purpose, production)
-
-        # delete the file in case of production mode
-        if production:
-            if os.path.exists(efuse_key_file):
-                os.remove(efuse_key_file)
 
         if production is False:
             # Read fresh summary of the efuse to read the
@@ -197,7 +185,7 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
             efuse_key_read = new_efuse_summary_json[key_blk]['value']
             print(efuse_key_read)
             efuse_key_read = bytes.fromhex(efuse_key_read)
-            if new_efuse_key == efuse_key_read:
+            if efuse_key == efuse_key_read:
                 print(f'Key was successfully written to the efuse '
                       f'(KEY BLOCK {efuse_key_id})')
             else:
@@ -215,7 +203,7 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
                 print(f'ERROR: Failed to verify the key purpose of '
                       f'the key block{efuse_key_id})')
                 return None
-            efuse_key_read = new_efuse_key
+            efuse_key_read = efuse_key
     else:
         # If the efuse key block is readable, then read the key from
         # efuse block and provide it as the return argument
