@@ -23,6 +23,7 @@ esp_secure_cert_data_dir = 'esp_secure_cert_data'
 # hmac_key_file is generated when HMAC_KEY is calculated,
 # it is used when burning HMAC_KEY to efuse
 hmac_key_file = os.path.join(esp_secure_cert_data_dir, 'hmac_key.bin')
+ecdsa_key_file = os.path.join(esp_secure_cert_data_dir, 'ecdsa_key.bin')
 # csv and bin filenames are default filenames
 # for nvs partition files created with this script
 csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
@@ -55,6 +56,7 @@ def flash_esp_secure_cert_partition(idf_path, idf_target,
         print(flash_command_output.decode('utf-8'))
     except subprocess.CalledProcessError as e:
         print(e.output.decode("utf-8"))
+        print('ERROR: Failed to execute the flash command')
         sys.exit(-1)
 
 
@@ -146,6 +148,13 @@ def main():
              'contains/will contain HMAC_KEY, default is 1')
 
     parser.add_argument(
+        '--efuse_key_file',
+        help='eFuse key file which contains the '
+             'key that shall be burned in '
+             'the eFuse (e.g. HMAC key, ECDSA key)',
+        nargs=1, metavar='[/path/to/efuse key file]')
+
+    parser.add_argument(
         '--port', '-p',
         dest='port',
         metavar='[port]',
@@ -170,6 +179,13 @@ def main():
         default='0xD000',
         help='The flash offset of esp_secure_cert partition'
              ' Hex value must be given e.g. 0xD000')
+
+    parser.add_argument(
+        '--priv_key_algo',
+        help='Signing algorithm used by the private key '
+             ', e.g. RSA 2048, ECDSA 256',
+        nargs=2, required=True,
+        metavar='[sign algorithm, key size]')
 
     args = parser.parse_args()
 
@@ -206,39 +222,90 @@ def main():
     key_size = None
 
     if args.configure_ds is not False:
-        # Burn hmac_key on the efuse block (if it is empty) or read it
-        # from the efuse block (if the efuse block already contains a key).
-        efuse_purpose = 'HMAC_DOWN_DIGITAL_SIGNATURE'
+        if args.priv_key_algo[0] == 'RSA':
+            sign_algo = args.priv_key_algo[0]
+            sign_algo_key_size = args.priv_key_algo[1]
+            configure_ds.validate_ds_algorithm(sign_algo,
+                                               sign_algo_key_size,
+                                               idf_target)
 
-        if not os.path.exists(hmac_key_file):
-            new_hmac_key = os.urandom(32)
-            with open(hmac_key_file, "wb+") as key_file:
-                key_file.write(new_hmac_key)
+            # Burn hmac_key on the efuse block (if it is empty) or read it
+            # from the efuse block (if the efuse block already contains a key).
+            efuse_purpose = 'HMAC_DOWN_DIGITAL_SIGNATURE'
+            efuse_key_file = args.efuse_key_file
+            hmac_key = None
+            if (args.efuse_key_file is None
+                    or not os.path.exists(efuse_key_file)):
+                if not os.path.exists(hmac_key_file):
+                    hmac_key = os.urandom(32)
+                    with open(hmac_key_file, "wb+") as key_file:
+                        key_file.write(hmac_key)
 
-        hmac_key = configure_efuse_key_block(idf_path, idf_target, args.port,
-                                             hmac_key_file, args.efuse_key_id,
-                                             efuse_purpose, args.production)
+                efuse_key_file = hmac_key_file
+            else:
+                with open(efuse_key_file, "rb") as key_file:
+                    hmac_key = key_file.read()
 
-        # delete the file in case of production mode
-        if args.production:
-            if os.path.exists(hmac_key_file):
-                os.remove(hmac_key_file)
+                print(f'Using the eFuse key given at {args.efuse_key_file}'
+                      'as the HMAC key')
 
-        if hmac_key is None:
-            print(f'Failed to configure the eFuse key block'
-                  f'{args.efuse_key_id} for Digital Signature')
-            sys.exit(-1)
+            configure_efuse_key_block(idf_path,
+                                      idf_target,
+                                      args.port,
+                                      efuse_key_file,
+                                      args.efuse_key_id,
+                                      efuse_purpose,
+                                      args.production)
+
+            # delete the newly generated file in case of production mode
+            if args.production:
+                if os.path.exists(hmac_key_file):
+                    os.remove(hmac_key_file)
+
+            with open(efuse_key_file, "rb") as key_file:
+                hmac_key = key_file.read()
+
+            # Calculate the encrypted private key data along
+            # with all other parameters
+            c, iv, key_size = configure_ds.calculate_rsa_ds_params(args.privkey,  # type: ignore # noqa: E501
+                                                                   args.priv_key_pass,  # type: ignore # noqa: E501
+                                                                   hmac_key,
+                                                                   idf_target)
+
+        elif args.priv_key_algo[0] == 'ECDSA':
+            sign_algo = args.priv_key_algo[0]
+            sign_algo_key_size = args.priv_key_algo[1]
+            configure_ds.validate_ds_algorithm(sign_algo,
+                                               sign_algo_key_size,
+                                               idf_target)
+
+            # efuse key length
+            expected_key_len = 32
+            ecdsa_key = configure_ds.get_ecdsa_key_bytes(args.privkey,
+                                                         args.priv_key_pass,
+                                                         expected_key_len)
+            if not os.path.exists(ecdsa_key_file):
+                with open(ecdsa_key_file, "wb+") as key_file:
+                    key_file.write(ecdsa_key)
+            efuse_key_file = ecdsa_key_file
+            efuse_purpose = 'ECDSA_KEY'
+            try:
+                configure_efuse_key_block(idf_path, idf_target,
+                                          args.port,
+                                          args.privkey,
+                                          args.efuse_key_id,
+                                          efuse_purpose,
+                                          args.production)
+            except OSError:
+                print('Hint: For ECDSA peripheral esptool version'
+                      ' must be >= v4.6, Please make sure the '
+                      'requirement is satisfied')
+                raise
+
         else:
-            if args.keep_ds_data is True:
-                with open(hmac_key_file, 'wb') as key_file:
-                    key_file.write(hmac_key)
+            raise ValueError('Invalid priv key algorithm '
+                             f'{args.priv_key_algo[0]}')
 
-        # Calculate the encrypted private key data along
-        # with all other parameters
-        c, iv, key_size = configure_ds.calculate_ds_params(args.privkey,
-                                                           args.priv_key_pass,
-                                                           hmac_key,
-                                                           idf_target)
     else:
         print('--configure_ds option not set. '
               'Configuring without use of DS peripheral.')
@@ -246,16 +313,33 @@ def main():
               'the private shall be stored as plaintext')
 
     if args.sec_cert_type == 'cust_flash_tlv':
+        key_type = tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY  # type: ignore # noqa: E501
+        tlv_priv_key = tlv_format.tlv_priv_key_t(key_type,
+                                                 args.privkey,
+                                                 args.priv_key_pass)
+
         if args.configure_ds is not False:
-            tlv_format.generate_partition_ds(c, iv, args.efuse_key_id,
-                                             key_size, args.device_cert,
-                                             ca_cert, idf_target,
-                                             bin_filename)
-        else:
-            tlv_format.generate_partition_no_ds(args.device_cert,
-                                                ca_cert, args.privkey,
-                                                args.priv_key_pass,
-                                                idf_target, bin_filename)
+            if args.priv_key_algo[0] == 'RSA':
+                tlv_priv_key.key_type = tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_RSA_DS_PERIPHERAL_KEY  # type: ignore # noqa: E501
+                tlv_priv_key.ciphertext = c
+                tlv_priv_key.iv = iv
+                tlv_priv_key.efuse_key_id = args.efuse_key_id
+                tlv_priv_key.priv_key_len = key_size
+
+                tlv_format.generate_partition_ds(tlv_priv_key,
+                                                 args.device_cert,
+                                                 ca_cert, idf_target,
+                                                 bin_filename)
+            if args.priv_key_algo[0] == 'ECDSA':
+                tlv_priv_key.key_type = tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY  # type: ignore # noqa: E501
+                print('Generating ECDSA partition')
+                tlv_priv_key.efuse_key_id = args.efuse_key_id
+                priv_key_len = int(args.priv_key_algo[1], 10)
+                tlv_priv_key.priv_key_len = priv_key_len
+                tlv_format.generate_partition_ds(tlv_priv_key,
+                                                 args.device_cert,
+                                                 ca_cert, idf_target,
+                                                 bin_filename)
 
     elif args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:

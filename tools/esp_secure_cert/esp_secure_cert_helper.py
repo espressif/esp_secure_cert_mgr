@@ -52,7 +52,7 @@ def load_private_key(key_file_path: str,
             format=priv_key_format,
             encryption_algorithm=key_enc_alg
         )
-
+        result["key_instance"] = private_key
         return result
     except ValueError:
         pass
@@ -72,6 +72,7 @@ def load_private_key(key_file_path: str,
             format=priv_key_format,
             encryption_algorithm=key_enc_alg
         )
+        result["key_instance"] = private_key
         return result
     except ValueError:
         raise ValueError("Unsupported key encoding format,"
@@ -108,6 +109,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
         result["encoding"] = serialization.Encoding.PEM.value
         cert_encoding = serialization.Encoding.PEM
         result["bytes"] = cert.public_bytes(encoding=cert_encoding)
+        result["cert_instance"] = cert
         return result
     except ValueError:
         pass
@@ -117,6 +119,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
         result["encoding"] = serialization.Encoding.DER.value
         cert_encoding = serialization.Encoding.DER
         result["bytes"] = cert.public_bytes(encoding=cert_encoding)
+        result["cert_instance"] = cert
         return result
     except ValueError:
         raise ValueError("Unsupported certificate encoding format,"

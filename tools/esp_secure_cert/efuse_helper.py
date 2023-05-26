@@ -3,6 +3,7 @@ import subprocess
 import sys
 import json
 from typing import Union
+from esp_secure_cert.esp_secure_cert_helper import load_private_key
 
 
 def get_efuse_summary_json(idf_path: str,
@@ -106,11 +107,17 @@ def efuse_burn_key(idf_path: str, idf_target: str, port: str,
 
     if not os.path.isfile(efuse_key_file):
         raise FileNotFoundError(f"Key file not found: {efuse_key_file}")
+    try:
+        op = os.system(f'python {idf_path}/components/esptool_py/esptool/'
+                       f'espefuse.py --chip {idf_target} -p {port} burn_key '
+                       f'BLOCK_KEY{efuse_key_id} {efuse_key_file} '
+                       f'{efuse_purpose} {key_block_status}')
+    except OSError:
+        print('Failed to burn the eFuse key')
+        raise
 
-    os.system(f'python {idf_path}/components/esptool_py/esptool/espefuse.py '
-              f'--chip {idf_target} -p {port} burn_key '
-              f'BLOCK_KEY{efuse_key_id} {efuse_key_file} {efuse_purpose}'
-              f' {key_block_status}')
+    if (op != 0):
+        raise RuntimeError('Failed to burn efuse key')
 
 
 def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
@@ -150,60 +157,27 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
     efuse_key_read = None
 
     # If the efuse key block is writable (empty) then generate and write
-    # the new hmac key and check again
+    # the new efuse key and check again
     # If the efuse key block is not writable (already contains a key)
     # then check if it is readable
     if kb_writeable is True:
         print(f'Provided key block (KEY BLOCK {efuse_key_id}) is writable\n'
               f'Generating a new key and burning it in the efuse..\n')
 
-        if os.path.exists(efuse_key_file):
-            print('Key file present, using the same key')
-            with open(efuse_key_file, 'rb+') as key_file:
-                efuse_key = key_file.read()
-                if len(efuse_key) != 32:
-                    print(f'The key present at {efuse_key_file} is not of '
-                          f'length 256 bits\n')
-                    raise RuntimeError('Invalid key')
-                else:
-                    print('Using the provided key')
-        else:
-            raise RuntimeError('Key file not present')
+        if not os.path.exists(efuse_key_file):
+            raise FileNotFoundError('Key file not present')
 
         # Burn efuse key
         efuse_burn_key(idf_path, idf_target, port, efuse_key_file,
                        efuse_key_id, efuse_purpose, production)
 
-        if production is False:
-            # Read fresh summary of the efuse to read the
-            # key value from efuse.
-            # If the key read from efuse matches with the key generated
-            # on host then burn_key operation was successful
-            new_efuse_summary_json = get_efuse_summary_json(idf_path,
-                                                            idf_target,
-                                                            port)
-            efuse_key_read = new_efuse_summary_json[key_blk]['value']
-            print(efuse_key_read)
-            efuse_key_read = bytes.fromhex(efuse_key_read)
-            if efuse_key == efuse_key_read:
-                print(f'Key was successfully written to the efuse '
-                      f'(KEY BLOCK {efuse_key_id})')
-            else:
-                print(f'ERROR: Failed to burn the hmac key to efuse '
-                      f'(KEY BLOCK {efuse_key_id}),'
-                      f'\nPlease execute the script again using '
-                      f'a different key id')
-                return None
-        else:
-            new_efuse_summary_json = get_efuse_summary_json(idf_path,
-                                                            idf_target,
-                                                            port)
-            if (new_efuse_summary_json[key_purpose]['value']
-                    != efuse_purpose):
-                print(f'ERROR: Failed to verify the key purpose of '
-                      f'the key block{efuse_key_id})')
-                return None
-            efuse_key_read = efuse_key
+        new_efuse_summary_json = get_efuse_summary_json(idf_path,
+                                                        idf_target,
+                                                        port)
+        if (new_efuse_summary_json[key_purpose]['value']
+                != efuse_purpose):
+            raise RuntimeError(f'ERROR: Failed to verify the key purpose '
+                               f'of the key block{efuse_key_id})')
     else:
         # If the efuse key block is readable, then read the key from
         # efuse block and provide it as the return argument
@@ -213,14 +187,35 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
         if kb_readable is True:
             if (efuse_summary_json[key_purpose]['value'] ==
                     efuse_purpose):
-                print(f'Provided efuse key block (KEY BLOCK {efuse_key_id}) '
-                      f'already contains a key with '
-                      f'key_purpose={efuse_purpose},'
-                      f'\nusing the same key for encrypting the '
-                      f'private key data...\n'.format(efuse_key_id,
-                                                      efuse_purpose))
                 efuse_key_read = efuse_summary_json[key_blk]['value']
                 efuse_key_read = bytes.fromhex(efuse_key_read)
+                if (efuse_purpose == 'ECDSA_KEY'):
+
+                    # Convert hex value to bytes object
+                    original_bytes = efuse_key_read
+                    # Reverse the byte order from little endian to big endian
+                    reversed_bytes = original_bytes[::-1]
+                    reversed_hex_value = reversed_bytes.hex()
+                    reversed_number = int(reversed_hex_value, 16)
+                    key = load_private_key(efuse_key_file, None)
+                    private_value = key["key_instance"].private_numbers().private_value  # type: ignore # noqa: E501
+                    if (reversed_number != private_value):
+                        raise RuntimeError('The private key given does not '
+                                           'match with the one burned in the '
+                                           'efuse, Please burn the key in a '
+                                           'different key block')
+
+                    print('Using the same ECDSA key burned '
+                          f'in the efuse {key_blk}')
+
+                if (efuse_purpose == 'HMAC_DOWN_DIGITAL_SIGNATURE'
+                        or efuse_purpose == 'HMAC_UP'):
+
+                    with open(efuse_key_file, 'wb') as hmac_key_file:
+                        hmac_key_file.write(efuse_key_read)
+
+                    print('Using the same hmac key burned '
+                          f'in efuse {key_blk}')
 
             else:
                 print(f'ERROR: Provided efuse key block'
@@ -229,11 +224,10 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
                       f'than {efuse_purpose},'
                       f'\nplease execute the script again with '
                       f'a different value of the efuse key id.')
-                return None
+                raise RuntimeError('ERROR: key block already used')
         else:
             print(f'ERROR: Provided efuse key block (KEY BLOCK {efuse_key_id})'
                   f' is not readable and writeable,'
                   f'\nplease execute the script again '
                   f'with a different value of the efuse key id.')
-            return None
-    return efuse_key_read
+            raise RuntimeError('ERROR: Key block already used')

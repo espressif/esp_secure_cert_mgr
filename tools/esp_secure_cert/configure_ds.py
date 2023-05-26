@@ -4,16 +4,21 @@ import os
 import struct
 import sys
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.utils import int_to_bytes
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 
-supported_key_size = {'esp32s2': [1024, 2048, 3072, 4096],
-                      'esp32c3': [1024, 2048, 3072],
-                      'esp32s3': [1024, 2048, 3072, 4096],
-                      'esp32c6': [1024, 2048, 3072],
-                      'esp32h2': [1024, 2048, 3072]}
+supported_targets_rsa_ds = ['esp32s2', 'esp32s3', 'esp32c3',
+                            'esp32c6', 'esp32h2']
+supported_key_size_rsa = {'esp32s2': [1024, 2048, 3072, 4096],
+                          'esp32c3': [1024, 2048, 3072],
+                          'esp32s3': [1024, 2048, 3072, 4096],
+                          'esp32c6': [1024, 2048, 3072],
+                          'esp32h2': [1024, 2048, 3072]}
+
+supported_targets_ecdsa = ['esp32h2']
+supported_key_size_ecdsa = {'esp32h2': [256]}
 
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):
@@ -44,9 +49,9 @@ def number_as_bytes(number, pad_bits=None):
 #       Consult the DS documentation (available for the ESP32-S2)
 #       in the esp-idf programming guide for more details
 #       about the variables and calculations.
-def calculate_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
+def calculate_rsa_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
     private_key_data = load_private_key(privkey, priv_key_pass)
-    private_key = private_key_data["bytes"]
+    private_key = private_key_data["key_instance"]
     if not isinstance(private_key, rsa.RSAPrivateKey):
         print('ERROR: Only RSA private keys are supported')
         sys.exit(-1)
@@ -59,11 +64,11 @@ def calculate_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
     Y = priv_numbers.d
     M = pub_numbers.n
     key_size = private_key.key_size
-    if key_size not in supported_key_size[idf_target]:
+    if key_size not in supported_key_size_rsa[idf_target]:
         print('ERROR: Private key size {0} not supported for the target {1},'
               '\nthe supported key sizes are {2}'
               .format(key_size, idf_target,
-                      str(supported_key_size[idf_target])))
+                      str(supported_key_size_rsa[idf_target])))
         sys.exit(-1)
 
     iv = os.urandom(16)
@@ -75,7 +80,7 @@ def calculate_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
     length = key_size // 32 - 1
 
     # get max supported key size for the respective target
-    max_len = max(supported_key_size[idf_target])
+    max_len = max(supported_key_size_rsa[idf_target])
     aes_key = hmac.HMAC(hmac_key, b'\xFF' * 32, hashlib.sha256).digest()
 
     md_in = number_as_bytes(Y, max_len) + \
@@ -112,3 +117,54 @@ def calculate_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
     encryptor = cipher.encryptor()
     c = encryptor.update(p) + encryptor.finalize()
     return c, iv, key_size
+
+
+def validate_ds_algorithm(ds_algo, key_size_bits, target_chip):
+    if ds_algo == 'RSA':
+        if target_chip not in supported_targets_rsa_ds:
+            print(f'ERROR: Target {target_chip} does not '
+                  'support RSA DS peripheral')
+            sys.exit(-1)
+        key_size_bits = int(key_size_bits, 10)
+        if key_size_bits not in supported_key_size_rsa[target_chip]:
+            print(f'ERROR: Target {target_chip} does not support '
+                  f'{ds_algo} {key_size_bits}, supported key sizes are '
+                  f'{supported_key_size_rsa[target_chip]}')
+            sys.exit(-1)
+
+    elif ds_algo == 'ECDSA':
+        if target_chip not in supported_targets_ecdsa:
+            print(f'ERROR: Target {target_chip} does not support '
+                  'ECDSA peripheral')
+            sys.exit(-1)
+
+        key_size_bits = int(key_size_bits, 10)
+        if key_size_bits not in supported_key_size_ecdsa[target_chip]:
+            print(f'ERROR: Target {target_chip} does not support '
+                  f'{ds_algo} {key_size_bits}, supported key sizes are '
+                  f'{supported_key_size_ecdsa[target_chip]}')
+            sys.exit(-1)
+
+    else:
+        print(f'ERROR: Invalid DS algorithm {ds_algo} {key_size_bits}')
+        sys.exit(-1)
+
+
+# Returns ecdsa key bytearray
+def get_ecdsa_key_bytes(privkey, priv_key_pass, key_length_bytes):
+    private_key_data = load_private_key(privkey, priv_key_pass)
+    private_key = private_key_data["key_instance"]
+    if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+        print('ERROR: Invalid private key format.'
+              ' Only ECC private keys are supported')
+        sys.exit(-1)
+    key_length_bits = key_length_bytes * 8
+    if (private_key.key_size != key_length_bits):
+        print(f'ERROR: key size {private_key.key_size} does not match'
+              f' with required key size {key_length_bytes}')
+        sys.exit(-1)
+
+    priv_numbers = private_key.private_numbers()
+    private = priv_numbers.private_value
+    ecdsa_key = private.to_bytes(key_length_bytes, byteorder='big')
+    return ecdsa_key
