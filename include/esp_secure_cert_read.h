@@ -183,7 +183,7 @@ void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
  *      The API is only supported for the TLV format
  *
  * @params
- *      - priv_key_type(in/out)    Pointer to store the obtained key type
+ *      - priv_key_type(out)    Pointer to store the obtained key type
  * @return
  *      - ESP_OK    On success
  *      - ESP_FAIL/other relevant esp error code
@@ -192,19 +192,19 @@ void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
 esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key_type);
 
 /* @info
- *  Get the efuse key block id in which the private key is stored.
+ *  Get the efuse block id in which the private key is stored.
  * @note
  *      The API is only supported for the TLV format.
- *      For now only ECDSA type of private key can be stored in the eFuse key blocks
+ *      For now only ECDSA type of private key can be stored in the efuse block
  *
  * @params
- *      - efuse_key_id(in/out)    Pointer to store the obtained key id
+ *      - efuse_block_id(out)    Pointer to store the obtained efuse block id
  * @return
  *      - ESP_OK    On success
  *      - ESP_FAIL/other relevant esp error code
  *                  On failure
  */
-esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id);
+esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_block_id);
 #endif
 
 #ifdef __cplusplus

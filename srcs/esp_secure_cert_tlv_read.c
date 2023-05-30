@@ -621,10 +621,10 @@ esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key
     return ESP_OK;
 }
 
-esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id) {
+esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_block_id) {
     esp_err_t err;
     esp_secure_cert_tlv_header_t *tlv_header = NULL;
-    if (efuse_key_id == NULL) {
+    if (efuse_block_id == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -636,7 +636,7 @@ esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_key_id) {
 
     esp_secure_cert_tlv_sec_cfg_t *tlv_sec_cfg;
     tlv_sec_cfg = (esp_secure_cert_tlv_sec_cfg_t *) tlv_header->value;
-    *efuse_key_id = tlv_sec_cfg->priv_key_efuse_id;
+    *efuse_block_id = tlv_sec_cfg->priv_key_efuse_id;
 
     return ESP_OK;
 }
