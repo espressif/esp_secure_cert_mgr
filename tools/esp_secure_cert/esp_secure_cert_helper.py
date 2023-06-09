@@ -1,20 +1,26 @@
 from typing import Dict
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
-from cryptography.x509 import load_pem_x509_certificate, load_der_x509_certificate
+from cryptography.x509 import (
+    load_pem_x509_certificate,
+    load_der_x509_certificate
+)
 
-def load_private_key(key_file_path: str, password: str = None) -> Dict[str, str]:
+
+def load_private_key(key_file_path: str,
+                     password: str = None) -> Dict[str, str]:
     """
     Load a private key from a file in either PEM or DER format.
 
     Args:
         key_file_path (str): Path to the private key file.
-        password (str): Password to decrypt the private key, if it is encrypted.
-
+        password (str): Password to decrypt the private key,
+                        if it is encrypted.
     Returns:
         Dict[str, str]: A dictionary with the `"encoding"` and `"bytes"` keys.
-        The `"encoding"` key holds a value of type `str` (a member of the `serialization.Encoding`
-        enum) and the `"bytes"` key holds a value of type `bytes`.
+        The `"encoding"` key holds a value
+        of type `str` (a member of the `serialization.Encoding` enum)
+        and the `"bytes"` key holds a value of type `bytes`.
 
     Raises:
         FileNotFoundError: If the private key file cannot be found or read.
@@ -31,24 +37,46 @@ def load_private_key(key_file_path: str, password: str = None) -> Dict[str, str]
 
     try:
         # Attempt to load the key as a PEM-encoded private key
-        private_key = serialization.load_pem_private_key(key, password=password, backend=default_backend())
+        private_key = serialization.load_pem_private_key(
+                key,
+                password=password,
+                backend=default_backend())
+
         result["encoding"] = serialization.Encoding.PEM.value
-        result["bytes"] = private_key.private_bytes(encoding=serialization.Encoding.PEM,
-                                                    format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                                    encryption_algorithm=serialization.NoEncryption())
+        key_encoding = serialization.Encoding.PEM
+        key_enc_alg = serialization.NoEncryption()
+        priv_key_format = serialization.PrivateFormat.TraditionalOpenSSL
+
+        result["bytes"] = private_key.private_bytes(
+            encoding=key_encoding,
+            format=priv_key_format,
+            encryption_algorithm=key_enc_alg
+        )
+        result["key_instance"] = private_key
         return result
     except ValueError:
         pass
 
     try:
-        private_key = serialization.load_der_private_key(key, password=password, backend=default_backend())
+        private_key = serialization.load_der_private_key(
+            key,
+            password=password,
+            backend=default_backend()
+        )
         result["encoding"] = serialization.Encoding.DER.value
-        result["bytes"] = private_key.private_bytes(encoding=serialization.Encoding.DER,
-                                                    format=serialization.PrivateFormat.TraditionalOpenSSL,
-                                                    encryption_algorithm=serialization.NoEncryption())
+        key_encoding = serialization.Encoding.DER
+        priv_key_format = serialization.PrivateFormat.TraditionalOpenSSL
+        key_enc_alg = serialization.NoEncryption()
+        result["bytes"] = private_key.private_bytes(
+            encoding=key_encoding,
+            format=priv_key_format,
+            encryption_algorithm=key_enc_alg
+        )
+        result["key_instance"] = private_key
         return result
     except ValueError:
-        raise ValueError("Unsupported key encoding format, Please provide PEM or DER encoded key")
+        raise ValueError("Unsupported key encoding format,"
+                         " Please provide PEM or DER encoded key")
 
 
 def load_certificate(cert_file_path: str) -> Dict[str, str]:
@@ -60,8 +88,9 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
 
     Returns:
         Dict[str, str]: A dictionary with the `"encoding"` and `"bytes"` keys.
-        The `"encoding"` key holds a value of type `str` (a member of the `serialization.Encoding`
-        enum) and the `"bytes"` key holds a value of type `bytes`.
+        The `"encoding"` key holds a value of
+        type `str` (a member of the `serialization.Encoding enum)
+        and the `"bytes"` key holds a value of type `bytes`.
 
     Raises:
         FileNotFoundError: If the certificate file cannot be found or read.
@@ -78,7 +107,9 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
     try:
         cert = load_pem_x509_certificate(cert_data, backend=default_backend())
         result["encoding"] = serialization.Encoding.PEM.value
-        result["bytes"] = cert.public_bytes(encoding=serialization.Encoding.PEM)
+        cert_encoding = serialization.Encoding.PEM
+        result["bytes"] = cert.public_bytes(encoding=cert_encoding)
+        result["cert_instance"] = cert
         return result
     except ValueError:
         pass
@@ -86,8 +117,10 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
     try:
         cert = load_der_x509_certificate(cert_data, backend=default_backend())
         result["encoding"] = serialization.Encoding.DER.value
-        result["bytes"] = cert.public_bytes(encoding=serialization.Encoding.DER)
+        cert_encoding = serialization.Encoding.DER
+        result["bytes"] = cert.public_bytes(encoding=cert_encoding)
+        result["cert_instance"] = cert
         return result
     except ValueError:
-        raise ValueError("Unsupported certificate encoding format, Please provide PEM or DER encoded certificate")
-
+        raise ValueError("Unsupported certificate encoding format,"
+                         "Please provide PEM or DER encoded certificate")
