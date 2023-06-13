@@ -340,7 +340,11 @@ def main():
                                                  args.device_cert,
                                                  ca_cert, idf_target,
                                                  bin_filename)
-
+        else:
+            tlv_format.generate_partition_no_ds(tlv_priv_key,
+                                                args.device_cert,
+                                                ca_cert, idf_target,
+                                                bin_filename)
     elif args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
             custflash_format.generate_partition_ds(c, iv, args.efuse_key_id,
