@@ -296,10 +296,9 @@ def generate_partition_ds(priv_key: tlv_priv_key_t,
 # @info
 #       This function generates the cust_flash partition of
 #       the encrypted private key parameters when DS is disabled.
-def generate_partition_no_ds(device_cert,
-                             ca_cert,
-                             priv_key: tlv_priv_key_t,
-                             idf_target, op_file):
+def generate_partition_no_ds(priv_key: tlv_priv_key_t,
+                             device_cert, ca_cert, idf_target,
+                             op_file):
     # cust_flash partition is of size 0x2000 i.e. 8192 bytes
     tlv_data_length = 0
     with open(op_file, 'wb') as output_file:
