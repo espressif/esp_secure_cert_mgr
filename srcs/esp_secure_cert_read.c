@@ -379,7 +379,7 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
     esp_err_t ret;
     switch (current_partition_format) {
     case ESP_SECURE_CERT_PF_TLV:
-        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, buffer, len);
+        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, 0, buffer, len);
 
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
@@ -436,7 +436,7 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 
     switch (current_partition_format) {
     case ESP_SECURE_CERT_PF_TLV:
-        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, buffer, len);
+        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, 0, buffer, len);
 
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
@@ -494,7 +494,7 @@ esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 
     switch (current_partition_format) {
     case ESP_SECURE_CERT_PF_TLV:
-        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, buffer, len);
+        return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, 0, buffer, len);
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
         return esp_secure_cert_get_addr(ESP_SECURE_CERT_PRIV_KEY_OFFSET, buffer, len);;

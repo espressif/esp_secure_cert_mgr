@@ -129,7 +129,7 @@ const void *esp_secure_cert_get_mapped_addr(void)
  * tlv_address              Void pointer to store tlv address
  *
  */
-esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_cert_tlv_type_t type, void **tlv_address)
+esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_cert_tlv_type_t type, uint8_t subtype, void **tlv_address)
 {
     /* start from the begining of the partition */
     uint16_t tlv_offset = 0;
@@ -152,7 +152,7 @@ esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_
         padding_length = (padding_length == MIN_ALIGNMENT_REQUIRED) ? 0 : padding_length;
         // crc_data_len = header_len + data_len + padding
         size_t crc_data_len = sizeof(esp_secure_cert_tlv_header_t) + tlv_header->length + padding_length;
-        if (((esp_secure_cert_tlv_type_t)tlv_header->type) == type) {
+        if ((((esp_secure_cert_tlv_type_t)tlv_header->type) == type) && (tlv_header->subtype == subtype)) {
             *tlv_address = (void *) tlv_header;
             uint32_t data_crc = esp_crc32_le(UINT32_MAX, (const uint8_t * )tlv_header, crc_data_len);
             esp_secure_cert_tlv_footer_t *tlv_footer = (esp_secure_cert_tlv_footer_t *)(esp_secure_cert_addr + crc_data_len + tlv_offset);
@@ -179,7 +179,7 @@ This function retrieves the header of a specific ESP Secure Certificate TLV reco
         ESP_FAIL/
         relevant error  Failure
 */
-static esp_err_t esp_secure_cert_tlv_get_header(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_header_t **tlv_header)
+static esp_err_t esp_secure_cert_tlv_get_header(esp_secure_cert_tlv_type_t type, uint8_t subtype, esp_secure_cert_tlv_header_t **tlv_header)
 {
     esp_err_t err = ESP_FAIL;
     char *esp_secure_cert_addr = (char *)esp_secure_cert_get_mapped_addr();
@@ -187,21 +187,21 @@ static esp_err_t esp_secure_cert_tlv_get_header(esp_secure_cert_tlv_type_t type,
         ESP_LOGE(TAG, "Error in obtaining esp_secure_cert memory mapped address");
         return ESP_FAIL;
     }
-    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, type, (void **)tlv_header);
+    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, type, subtype, (void **)tlv_header);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Could not find the tlv of type %d", type);
+        ESP_LOGD(TAG, "Could not find the tlv of type %d and subtype %d", type, subtype);
         return err;
     }
     return err;
 }
 
-esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, char **buffer, uint32_t *len)
+esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, uint8_t subtype, char **buffer, uint32_t *len)
 {
     esp_err_t err;
     esp_secure_cert_tlv_header_t *tlv_header = NULL;
-    err = esp_secure_cert_tlv_get_header(type, &tlv_header);
+    err = esp_secure_cert_tlv_get_header(type, subtype, &tlv_header);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Could not find header for TLV type %d", type);
+        ESP_LOGD(TAG, "Could not find header for TLV type %d and subtype %d", type, subtype);
         return err;
     }
     *buffer = (char *)&tlv_header->value;
@@ -445,7 +445,7 @@ static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
     // Obtain the salt stored in the esp_secure_cert partition
     uint8_t *salt = NULL;
     uint32_t salt_len = 0;
-    err = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT, (void *)&salt, &salt_len);
+    err = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT, 0, (void *)&salt, &salt_len);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading salt, returned %04X", err);
     }
@@ -504,14 +504,14 @@ esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void)
 
     uint32_t len;
     esp_ds_data_t *esp_ds_data;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, (void *) &esp_ds_data, &len);
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, 0, (void *) &esp_ds_data, &len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading ds_data, returned %04X", esp_ret);
         goto exit;
     }
 
     esp_ds_data_ctx_t *ds_data_ctx_flash;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_CONTEXT_TLV, (void *) &ds_data_ctx_flash, &len);
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_CONTEXT_TLV, 0, (void *) &ds_data_ctx_flash, &len);
     memcpy(ds_data_ctx, ds_data_ctx_flash, len);
     ds_data_ctx->esp_ds_data = esp_ds_data;
     if (esp_ret != ESP_OK) {
@@ -547,7 +547,7 @@ bool esp_secure_cert_is_tlv_partition(void)
 #ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
 esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, 0, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_device_cert(char *buffer)
@@ -558,7 +558,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer)
 
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, 0, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
@@ -570,7 +570,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, 0, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_priv_key(char *buffer)
@@ -602,7 +602,7 @@ esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key
         return ESP_ERR_INVALID_ARG;
     }
     esp_secure_cert_tlv_header_t *tlv_header = NULL;
-    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_PRIV_KEY_TLV, &tlv_header);
+    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_PRIV_KEY_TLV, 0, &tlv_header);
     if (err != ESP_OK) {
         *priv_key_type = ESP_SECURE_CERT_INVALID_KEY;
         ESP_LOGE(TAG, "Could not find header for priv key");
@@ -628,7 +628,7 @@ esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_block_id) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_TLV_SEC_CFG, &tlv_header);
+    err = esp_secure_cert_tlv_get_header(ESP_SECURE_CERT_TLV_SEC_CFG, 0,  &tlv_header);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Could not find header for TLV security configurations");
         return ESP_ERR_NOT_SUPPORTED;
