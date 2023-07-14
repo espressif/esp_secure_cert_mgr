@@ -1,6 +1,7 @@
 # This file contains the list of changes across different versions
 
-# Latest (unreleased)
+## v2.4.0
+* Added support for multiple entries of the same type by adding a new field called subtype.
 * Fixed API for obtaining CA cert for the legacy flash formats (9b091ee)
 
 ## v2.3.1
