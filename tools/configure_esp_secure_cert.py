@@ -152,7 +152,7 @@ def main():
         help='eFuse key file which contains the '
              'key that shall be burned in '
              'the eFuse (e.g. HMAC key, ECDSA key)',
-        nargs=1, metavar='[/path/to/efuse key file]')
+        metavar='[/path/to/efuse key file]')
 
     parser.add_argument(
         '--port', '-p',
