@@ -118,6 +118,72 @@ const void *esp_secure_cert_get_mapped_addr(void)
 }
 
 /*
+ * Get the padding length applicable for the given TLV
+ *
+ * @input   The pointer to the start of the TLV (TLV Header)
+ * @note    The padding length is defined in the design of the TLV.
+ *          It says that each TLV data entry should be a multiple of MIN_ALIGNMENT_REQUIRED
+ *          The actual tlv data is automatically padded to the nearest multiple of MIN_ALIGNMENT_REQUIRED
+ */
+static uint8_t esp_secure_cert_get_padding_length(esp_secure_cert_tlv_header_t *tlv_header)
+{
+    return ((MIN_ALIGNMENT_REQUIRED - (tlv_header->length % MIN_ALIGNMENT_REQUIRED)) % MIN_ALIGNMENT_REQUIRED);
+}
+
+/*
+ * Get the total length of the TLV pointed by tlv_header
+ * @input
+ * tlv_header   The pointer to the start of the TLV (TLV Header)
+ *
+ * @note
+ *          The total length of the TLV consists of following parts
+ *          1) TLV Header
+ *          2) TLV data
+ *          3) Padding
+ *          4) TLV footer
+ *
+ *          It is ensured by design that this length shall always be a multiple of MIN_ALIGNMENT_REQUIRED
+ *
+ */
+static uint16_t esp_secure_cert_get_tlv_total_length(esp_secure_cert_tlv_header_t *tlv_header)
+{
+    uint16_t padding_length = esp_secure_cert_get_padding_length(tlv_header);
+    uint16_t total_length = sizeof(esp_secure_cert_tlv_header_t) + tlv_header->length + padding_length + sizeof(esp_secure_cert_tlv_footer_t);
+    return total_length;
+}
+
+/*
+ * Verify the TLV integrity
+ *
+ * @input
+ * tlv_header   The pointer to the start of the TLV (TLV header)
+ *
+ * @note
+ *      This API calculates the crc value of header + tlv_data + padding
+ *      This value is compared with the value stored in the TLV footer.
+ *
+ * @return
+ *      True    TLV integrity verified
+ *      False   TLV intefrity could not be verified
+ */
+static bool esp_secure_cert_verify_tlv_integrity(esp_secure_cert_tlv_header_t *tlv_header)
+{
+    ESP_LOGD(TAG, "Verifying the TLV integrity");
+    uint8_t padding_length = esp_secure_cert_get_padding_length(tlv_header);
+    ESP_LOGD(TAG, "Padding length obtained = %u", padding_length);
+
+    size_t crc_data_len = sizeof(esp_secure_cert_tlv_header_t) + tlv_header->length + padding_length;
+    uint32_t data_crc = esp_crc32_le(UINT32_MAX, (const uint8_t * )tlv_header, crc_data_len);
+    esp_secure_cert_tlv_footer_t *tlv_footer = (esp_secure_cert_tlv_footer_t *)((void*)tlv_header + crc_data_len);
+    if (tlv_footer->crc != data_crc) {
+        ESP_LOGD(TAG, "Calculated crc = %04X does not match with crc"
+                 " read from esp_secure_cert partition = %04X", (unsigned int)data_crc, (unsigned int)tlv_footer->crc);
+        return false;
+    }
+    return true;
+}
+
+/*
  * Find the offset of tlv structure of given type in the esp_secure_cert partition
  *
  * Note: This API also validates the crc of the respective tlv before returning the offset
@@ -125,6 +191,7 @@ const void *esp_secure_cert_get_mapped_addr(void)
  * esp_secure_cert_addr     Memory mapped address of the esp_secure_cert partition
  * type                     Type of the tlv structure.
  *                          for calculating current crc for esp_secure_cert
+ * subtype                  Subtype of the given tlv structure. If subtype is given as ESP_SECURE_CERT_SUBTYPE_MAX then the entry with highest value of subtype is given as output
  *
  * tlv_address              Void pointer to store tlv address
  *
@@ -133,39 +200,66 @@ esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_
 {
     /* start from the begining of the partition */
     uint16_t tlv_offset = 0;
+    uint8_t latest_subtype = 0;
+    esp_secure_cert_tlv_header_t *latest_tlv_header = NULL;
+    bool read_latest_tlv = 0;
+
+    if (subtype == ESP_SECURE_CERT_SUBTYPE_MAX) {
+        read_latest_tlv = 1;
+    }
+
     while (1) {
         esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)(esp_secure_cert_addr + tlv_offset);
         ESP_LOGD(TAG, "Reading from offset of %d from base of esp_secure_cert", tlv_offset);
         if (tlv_header->magic != ESP_SECURE_CERT_TLV_MAGIC) {
+            if (read_latest_tlv) {
+                if (latest_tlv_header != NULL) {
+                    // Verifying the latest TLV here because we only need to verify the last TLV entry of given subtype
+                    // instead of all available entries of the given subtype
+                    ESP_LOGD(TAG, "Verify integrity of latest tlv obtained of subtype = %d", latest_subtype);
+                    if (esp_secure_cert_verify_tlv_integrity(latest_tlv_header)) {
+                        ESP_LOGD(TAG, "tlv structure of type %d and subtype %d found and verified", type, latest_subtype);
+                        *tlv_address = (void *)latest_tlv_header;
+                        return ESP_OK;
+                    } else {
+                        return ESP_FAIL;
+                    }
+                }
+            }
             if (type == ESP_SECURE_CERT_TLV_END) {
-                /* The invalid magic means last tlv read successfully was the last tlv structure present,
+                /* The invalid magic means last tlv read successfully was the last valid tlv structure present,
                  * so send the end address of the tlv.
                  * This address can be used to add a new tlv structure. */
-                *tlv_address = (void *) tlv_header;
+                *tlv_address = (void *)tlv_header;
                 return ESP_OK;
             }
             ESP_LOGD(TAG, "Unable to find tlv of type: %d", type);
             ESP_LOGD(TAG, "Expected magic byte is %04X, obtained magic byte = %04X", ESP_SECURE_CERT_TLV_MAGIC, (unsigned int) tlv_header->magic);
             return ESP_FAIL;
         }
-        uint8_t padding_length = MIN_ALIGNMENT_REQUIRED - (tlv_header->length % MIN_ALIGNMENT_REQUIRED);
-        padding_length = (padding_length == MIN_ALIGNMENT_REQUIRED) ? 0 : padding_length;
-        // crc_data_len = header_len + data_len + padding
-        size_t crc_data_len = sizeof(esp_secure_cert_tlv_header_t) + tlv_header->length + padding_length;
-        if ((((esp_secure_cert_tlv_type_t)tlv_header->type) == type) && (tlv_header->subtype == subtype)) {
-            *tlv_address = (void *) tlv_header;
-            uint32_t data_crc = esp_crc32_le(UINT32_MAX, (const uint8_t * )tlv_header, crc_data_len);
-            esp_secure_cert_tlv_footer_t *tlv_footer = (esp_secure_cert_tlv_footer_t *)(esp_secure_cert_addr + crc_data_len + tlv_offset);
-            if (tlv_footer->crc != data_crc) {
-                ESP_LOGE(TAG, "Calculated crc = %04X does not match with crc"
-                         "read from esp_secure_cert partition = %04X", (unsigned int)data_crc, (unsigned int)tlv_footer->crc);
-                return ESP_FAIL;
+
+        if (((esp_secure_cert_tlv_type_t)tlv_header->type) == type) {
+            if (read_latest_tlv) {
+                ESP_LOGD(TAG, "TLV entry of type: %d and subtype:%d found", tlv_header->type, tlv_header->subtype);
+                ESP_LOGD(TAG, "Continuing to find more recent entry of given subtype");
+                latest_subtype = tlv_header->subtype;
+                // Store the tlv address of the latest entry found with given type
+                latest_tlv_header = (void *)tlv_header;
+                // Dont stop here and keep traversing till last TLV entry
+            } else {
+                if (tlv_header->subtype == subtype) {
+                    if (esp_secure_cert_verify_tlv_integrity(tlv_header)) {
+                        ESP_LOGD(TAG, "tlv structure of type %d and subtype %d found and verified", type, subtype);
+                        *tlv_address = (void *)tlv_header;
+                        return ESP_OK;
+                    } else {
+                        return ESP_FAIL;
+                    }
+                }
             }
-            ESP_LOGD(TAG, "tlv structure of type %d found and verified", type);
-            return ESP_OK;
-        } else {
-            tlv_offset = tlv_offset + crc_data_len + sizeof(esp_secure_cert_tlv_footer_t);
         }
+        // Move the offset to the start of the next tlv entry
+        tlv_offset = tlv_offset + esp_secure_cert_get_tlv_total_length(tlv_header);
     }
 }
 
@@ -195,11 +289,11 @@ static esp_err_t esp_secure_cert_tlv_get_header(esp_secure_cert_tlv_type_t type,
     return err;
 }
 
-esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, uint8_t subtype, char **buffer, uint32_t *len)
+esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_subtype_t subtype, char **buffer, uint32_t *len)
 {
     esp_err_t err;
     esp_secure_cert_tlv_header_t *tlv_header = NULL;
-    err = esp_secure_cert_tlv_get_header(type, subtype, &tlv_header);
+    err = esp_secure_cert_tlv_get_header(type, (uint8_t)subtype, &tlv_header);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Could not find header for TLV type %d and subtype %d", type, subtype);
         return err;
@@ -504,7 +598,7 @@ esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void)
 
     uint32_t len;
     esp_ds_data_t *esp_ds_data;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, 0, (void *) &esp_ds_data, &len);
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, (void *) &esp_ds_data, &len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading ds_data, returned %04X", esp_ret);
         goto exit;
@@ -538,7 +632,7 @@ bool esp_secure_cert_is_tlv_partition(void)
     }
     esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)(esp_secure_cert_addr );
     if (tlv_header->magic == ESP_SECURE_CERT_TLV_MAGIC) {
-        ESP_LOGI(TAG, "TLV partition identified");
+        ESP_LOGD(TAG, "TLV partition identified");
         return 1;
     }
     return 0;
@@ -547,7 +641,7 @@ bool esp_secure_cert_is_tlv_partition(void)
 #ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
 esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, 0, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_device_cert(char *buffer)
@@ -558,7 +652,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer)
 
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, 0, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
@@ -570,7 +664,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, 0, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_priv_key(char *buffer)

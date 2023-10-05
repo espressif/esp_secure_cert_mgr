@@ -49,12 +49,14 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *     len                  Pointer to store the length of the data
  *
  * Note: If tlv type = ESP_SECURE_CERT_TLV_END then the address returned shall be the end address of current tlv formatted data.
+ * If tlv subtype = ESP_SECURE_CERT_SUBTYPE_MAX then the the address of tlv of given type and highest subtype found shall be returned.
  * @return
+ *
  *      - ESP_OK    On success
  *      - ESP_FAIL/other relevant esp error code
  *                  On failure
  */
-esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, uint8_t subtype, char **buffer, uint32_t *len);
+esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_subtype_t subtype, char **buffer, uint32_t *len);
 
 /* @info
  *  Get the device cert from the esp_secure_cert partition
@@ -65,6 +67,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, uint8_t 
  *       The pointer can be freed in this case (NVS) using respective free API
  *
  *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
+ *       This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
  *
  * @params
  *      - buffer(out)       This value shall be filled with the device cert address
@@ -104,6 +107,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer);
  *
  *      The esp_secure_cert_free_ca_cert API needs to be called in order to free the memory.
  *      The API shall only free the memory if it has been dynamically allocated.
+ *      This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
  *
  * @params
  *      - buffer(out)       This value shall be filled with the ca cert address
@@ -146,6 +150,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
  *      The API shall only free the memory if it has been dynamically allocated.
  *
  *      The private key(buffer) shall be returned as NULL when private key type is ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY.
+ *      This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
  *
  * @params
  *      - buffer(out)       This value shall be filled with the private key address
@@ -197,6 +202,7 @@ void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
 
 /* @info
  *  Get the private key type from the esp_secure_cert partition
+ *  This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
  *
  * @note
  *      The API is only supported for the TLV format
