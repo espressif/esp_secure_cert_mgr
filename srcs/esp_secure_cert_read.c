@@ -440,7 +440,7 @@ esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
-        return esp_secure_cert_get_addr(ESP_SECURE_CERT_DEV_CERT_OFFSET, buffer, len);;
+        return esp_secure_cert_get_addr(ESP_SECURE_CERT_CA_CERT_OFFSET, buffer, len);
 
     case ESP_SECURE_CERT_PF_NVS:
         ret = nvs_get(nvs_namespace_name, ESP_SECURE_CERT_CA_CERT, NULL, (size_t *)len, NVS_STR);
