@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+# Latest (unreleased)
+* Fixed API for obtaining CA cert for the legacy flash formats (9b091ee)
+
 ## v2.3.1
 * Make esp_secure_cert_get_key_type API available for DS peripheral case as well.
 
