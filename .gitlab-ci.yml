@@ -31,8 +31,7 @@ variables:
   before_script: &setup_idf
     - *setup_env
     - git --version
-    - git submodule update --init --recursive --depth 1
-    - git clone --recursive --single-branch -b release/v4.4 --reference-if-able /local_references/gitlab/ https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.espressif.cn:6688/espressif/esp-idf.git
+    - git clone --recursive --single-branch -b release/v5.1 https://github.com/espressif/esp-idf --shallow-submodules --depth 1
     - cd esp-idf
     - ./install.sh
     - . export.sh
@@ -71,9 +70,9 @@ build_demo_esp32:
 qemu_test_tlv_esp32:
   stage: qemu_test
   image: $QEMU_IMAGE
-  artifacts:
-    paths:
-      - qemu_test/qemu_test_bins
+  before_script: *setup_idf
+  tags:
+    - qemu_test
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS

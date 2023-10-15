@@ -7,7 +7,7 @@ arg_projname="$4"
 arg_flashimg=$5
 
 if [ -z "$1" -o -z "$2" -o -z "$3" ]; then
-    echo "Usage: make-qemu-img.sh esp_secure_cert_partition partition_table image_name"
+    echo "Usage: make-qemu-img.sh esp_secure_cert_partition partition_table path_to_build_dir project_name image_name"
     exit 1
 fi
 
