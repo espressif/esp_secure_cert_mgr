@@ -1,6 +1,6 @@
 stages:
-  - build
   - qemu_test
+  - build
 
 variables:
   BATCH_BUILD: "1"
@@ -26,16 +26,6 @@ variables:
     - echo -e "Host gitlab.espressif.cn\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
     - git --version
     - git submodule update --init --recursive
-
-.setup_idf: &setup_idf
-  before_script: &setup_idf
-    - *setup_env
-    - git --version
-    - git clone --recursive --single-branch -b release/v5.1 https://github.com/espressif/esp-idf --shallow-submodules --depth 1
-    - cd esp-idf
-    - ./install.sh
-    - . export.sh
-    - cd ..
 
 .build_idf_template:
   stage: build
@@ -70,18 +60,22 @@ build_demo_esp32:
 qemu_test_tlv_esp32:
   stage: qemu_test
   image: $QEMU_IMAGE
-  before_script: *setup_idf
   tags:
     - qemu_test
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
-    - cd examples/esp_secure_cert_app/qemu_test
-    - ./build_qemu_image tlv
+    - export ROOT_PATH=$PWD
+    - git clone --recursive --single-branch -b v5.2-dev https://github.com/espressif/esp-idf --shallow-submodules --depth 1 /opt/esp-idf
+    - cd /opt/esp-idf
+    - bash install.sh
+    - . ./export.sh
+    - cd $ROOT_PATH/examples/esp_secure_cert_app/qemu_test
+    - ./build_qemu_images.sh tlv
     - cd ../
     - pytest --target esp32
     - cd qemu_test
-    - ./build_qemu_image legacy_format
+    - ./build_qemu_images.sh legacy_format
     - cd ../
     - pytest --target esp32
 
