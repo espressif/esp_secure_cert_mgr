@@ -1,63 +1,40 @@
-̌# ESP Secure cert partition tests
+# ESP Secure cert partition tests
 
-This folder contains the test setup for testing he different flash formats supported by esp_secure_cert partition. The test is based on qemu and needs the qemu executables to be downloaded from [qemu/releases](https://github.com/espressif/qemu/releases)
+This folder contains the test setup for testing the different flash formats supported by esp_secure_cert partition. The tests are based on the QEMU emulater.
 
-## Generate qemu image
+## Requirements
 
-1) Go to esp_secure_cert_app directory: 
-```
-cd ../examples/esp_secure_cert_app/
-```
+* **QEMU emulator**:
+   	
+   	The test is based on qemu and needs the qemu emulator support.
+   	
+   	* For Linux Distributions, the executables to be downloaded from [qemu/releases](https://github.com/espressif/qemu/releases)
+   	 
+    * For macOS you need to build the binaries for specific release locally on machine. see [Compiling Qemu](https://github.com/espressif/esp-toolchain-docs/blob/main/qemu/esp32/README.md#compiling-qemu) for more details.
 
-2) Configure the project:
-Please enable following menuconfig option to support all the formats:
-* `Component config > ESP Secure Cert Manager -> Enable support for legacy formats`
-
-2) Build the firmware:
-
-```
-idf.py build
-```
-
-3) Generate the qemu images for different flash formats:
+* **Pytest**:
+    Install the pytest environment by executing following command
+    
+    ```pip install -r requirements.txt```
+ 
+## Testing
+The script [`build_qemu_images.sh`](./build_qemu_images.sh) can be used to generate the respective qemu images. These images are then provided to pytest framework for execution.
 
 
-- i) qemu image for cust_flash_tlv format:
-```
-./make-qemu-img.sh cust_flash_tlv/cust_flash_tlv.bin cust_flash_tlv/partition-table.bin cust_flash_tlv_qemu.img
-```
-> In this case the partition name in the partition table is `esp_secure_cert`.
+### Test the TLV support on esp32
+The TLV support can be tested with following commands:
 
-- ii) qemu image for cust_flash_legacy format:
-```
-./make-qemu-img.sh cust_flash_legacy/cust_flash_legacy.bin cust_flash_legacy/partition-table.bin cust_flash_legacy_qemu.img
-```
-> In this case the partition name in the partition table is `esp_secure_cert`.
+* ```./build_qemu_images.sh tlv```
 
-- iii) qemu image for cust_flash format:
-```
-./make-qemu-img.sh cust_flash/cust_flash.bin cust_flash/partition-table.bin cust_flash_qemu.img
-```
-> In this case the partition name in the partition table is `pre_prov`.
+* ``` cd ..```
 
-- iv) qemu image for nvs format:
-```
-./make-qemu-img.sh nvs/nvs.bin nvs/partition-table.bin nvs_qemu.img
-```
-> In this case the partition name in the partition table is `esp_secure_cert` and the nvs namespace name is `esp_secure_cert`.
+* ``pytest --target esp32``
+ 
+### Test the legacy flash format support on esp32
+The TLV support can be tested with following commands:
 
-- v) qemu image for nvs_legacy format:
-```
-./make-qemu-img.sh nvs_legacy/nvs_legacy.bin nvs_legacy/partition-table.bin nvs_legacy_qemu_new_part_name.img
-```
-> In this case the partition name in the partition table is `pre_prov` and the nvs namespace name is `pre_prov`.
+* ```./build_qemu_images.sh legacy```
 
-- vi) qemu image for nvs_legacy format with new partition name:
-```
-./make-qemu-img.sh nvs_legacy/nvs_legacy.bin nvs/partition-table.bin nvs_legacy_qemu.img
-```
-> In this case the partition name in the partition table is `esp_secure_cert` and the nvs namespace name is `pre_prov`
-4) Execute the binaries with qemu using following command:
-```
-qemu/bin/qemu-system-xtensa -nographic -machine esp32 -drive file=/* path to resp image*/,if=mtd,format=raw
-```
+* ``` cd ..```
+
+* ``pytest --target esp32``
