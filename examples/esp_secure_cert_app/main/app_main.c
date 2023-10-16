@@ -241,4 +241,20 @@ void app_main()
     } else {
         ESP_LOGE(TAG, "Failed to obtain and verify the contents of the esp_secure_cert partition");
     }
+
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_USER_DATA_1, ESP_SECURE_CERT_SUBTYPE_0, &addr, &len);
+    if (esp_ret == ESP_OK) {
+        ESP_LOG_BUFFER_HEX(TAG, addr, len);
+    }
+
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_1, &addr, &len);
+    if (esp_ret == ESP_OK) {
+        printf("Device Cert: \n%s", addr);
+    }
+
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, ESP_SECURE_CERT_SUBTYPE_1, &addr, &len);
+    if (esp_ret == ESP_OK) {
+        printf("Priv Key: \n%s", addr);
+    }
+
 }
