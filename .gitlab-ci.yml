@@ -1,4 +1,5 @@
 stages:
+  - qemu_test
   - build
 
 variables:
@@ -6,6 +7,7 @@ variables:
   V: "0"
   MAKEFLAGS: "-j5 --no-keep-going"
   GIT_SUBMODULE_STRATEGY: recursive
+  QEMU_IMAGE: ${CI_DOCKER_REGISTRY}/qemu-v5.2:2-20230522
 
 # before each job, we need to check if this job is filtered by bot stage/job filter
 .apply_bot_filter: &apply_bot_filter
@@ -54,6 +56,33 @@ build_demo_esp32:
   extends: .build_idf_template
   variables:
     IDF_TARGET: esp32
+
+qemu_test_tlv_esp32:
+  stage: qemu_test
+  image: $QEMU_IMAGE
+  tags:
+    - qemu_test
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - git clone --recursive --single-branch -b v5.2-dev https://github.com/espressif/esp-idf --shallow-submodules --depth 1 /opt/esp-idf
+    - cd /opt/esp-idf
+    - bash install.sh
+    - . ./export.sh
+    - cd $ROOT_PATH/examples/esp_secure_cert_app/qemu_test
+    - ./build_qemu_images.sh tlv
+    - cd ../
+    - pytest --target esp32
+    - cd qemu_test
+    - ./build_qemu_images.sh legacy_format
+    - cd ../
+    - pytest --target esp32
+
+build_demo_esp32s2:
+  extends: .build_idf_template
+  variables:
+    IDF_TARGET: esp32s2
 
 build_demo_esp32s3:
   extends: .build_idf_template
