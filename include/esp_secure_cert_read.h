@@ -57,7 +57,6 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *  of whether it is allocated dynamically or not, the API internally takes care of all possible scenarios.
  *
  *  This API also validates the crc of the respective tlv before returning the offset.
- *  The offset is not the physical address but the address where it is mapped in the memory space.
  *
  * @input
  *     type                 Type of the TLV entry
@@ -65,7 +64,7 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *     buffer               Pointer to the buffer to store the data address
  *     len                  Pointer to store the length of the data
  *
- * Note: If tlv type = ESP_SECURE_CERT_TLV_END then the address returned shall be the end address of current tlv formatted data.
+ * Note: If tlv type = ESP_SECURE_CERT_TLV_END then the address returned shall be the end address of current tlv formatted data and the length returned shall be the total length of TLV structures.
  * If tlv subtype = ESP_SECURE_CERT_SUBTYPE_MAX then the the address of tlv of given type and highest subtype found shall be returned.
  * @return
  *
@@ -91,8 +90,16 @@ esp_err_t esp_secure_cert_tlv_free_addr(char *buffer);
  *       the required memory to store the device cert and return the pointer.
  *       The pointer can be freed in this case (NVS) using respective free API
  *
- *       In case of cust_flash partition, a read only flash pointer shall be returned here. This pointer should not be freed
- *       This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
+ *       In case of cust_flash partition, a read only flash pointer shall be returned here.
+ *
+ *       A respective call to the esp_secure_cert_free_device_cert() should be made to free any memory (if allocated)
+ *
+ *       IMPORTANT: This API shall provide only the first entry of type Device cert (ESP_SECURE_CERT_DEV_CERT_TLV) present in the esp_secure_cert partition with subtype set as 0.
+ *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_tlv_get_addr with the appropriate type and subtype.
+ *       Please find example usage of esp_secure_cert_tlv_get_addr to obtain the device cert as follows:
+ *       The type in this case shall be ESP_SECURE_CERT_DEV_CERT_TLV
+ *       and the subtype shall be the index of the device cert that needs to be obtained.
+ *       e.g., esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, subtype(index), &buffer, &len);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the device cert address
@@ -132,7 +139,13 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer);
  *
  *      The esp_secure_cert_free_ca_cert API needs to be called in order to free the memory.
  *      The API shall only free the memory if it has been dynamically allocated.
- *      This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
+ *
+ *       IMPORTANT: This API shall provide only the first entry of type CA cert (ESP_SECURE_CERT_CA_CERT_TLV) present in the esp_secure_cert partition subtype set as 0.
+ *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_tlv_get_addr with the appropriate type and subtype.
+ *       Please find example usage of esp_secure_cert_tlv_get_addr to obtain the ca cert as follows:
+ *       The type in this case shall be ESP_SECURE_CERT_CA_CERT_TLV
+ *       and the subtype shall be the index of the device cert that needs to be obtained.
+ *       e.g., esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, subtype(index), &buffer, &len);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the ca cert address
@@ -174,8 +187,12 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
  *      The esp_secure_cert_free_priv_key API needs to be called in order to free the memory.
  *      The API shall only free the memory if it has been dynamically allocated.
  *
- *      The private key(buffer) shall be returned as NULL when private key type is ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY.
- *      This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
+ *       IMPORTANT: This API shall provide only the first entry of type private key (ESP_SECURE_CERT_PRIV_KEY_TLV) present in the esp_secure_cert partition with subtype set as 0.
+ *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_tlv_get_addr with the appropriate type and subtype.
+ *       Please find example usage of esp_secure_cert_tlv_get_addr to obtain the ca cert as follows:
+ *       The type in this case shall be ESP_SECURE_CERT_PRIV_KEY_TLV
+ *       and the subtype shall be the index of the device cert that needs to be obtained.
+ *       e.g., esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, subtype(index), &buffer, &len);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the private key address
@@ -227,10 +244,10 @@ void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
 
 /* @info
  *  Get the private key type from the esp_secure_cert partition
- *  This API shall provide latest entry of the given type. Latest entry shall be considered as the entry with given type and highest value of subtype field.
  *
  * @note
  *      The API is only supported for the TLV format
+ *      This API shall only provide information for the private key with subtype set to ESP_SECURE_CERT_TLV_SUBTYPE_0 (first entry)
  *
  * @params
  *      - priv_key_type(out)    Pointer to store the obtained key type
@@ -246,6 +263,7 @@ esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key
  * @note
  *      The API is only supported for the TLV format.
  *      For now only ECDSA type of private key can be stored in the efuse block
+ *      This API shall only provide information for the private key with subtype set to ESP_SECURE_CERT_TLV_SUBTYPE_0 (first entry)
  *
  * @params
  *      - efuse_block_id(out)    Pointer to store the obtained efuse block id

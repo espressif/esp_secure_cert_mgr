@@ -298,6 +298,13 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
         ESP_LOGD(TAG, "Could not find header for TLV type %d and subtype %d", type, subtype);
         return err;
     }
+
+    if (type == ESP_SECURE_CERT_TLV_END) {
+        *buffer = (char *)tlv_header;
+        const void *esp_secure_cert_addr = esp_secure_cert_get_mapped_addr();
+        *len = (void*)tlv_header - esp_secure_cert_addr;
+    }
+
     *buffer = (char *)&tlv_header->value;
     *len = tlv_header->length;
 
@@ -607,7 +614,7 @@ esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void)
 
     uint32_t len;
     esp_ds_data_t *esp_ds_data;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, (void *) &esp_ds_data, &len);
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, ESP_SECURE_CERT_SUBTYPE_0, (void *) &esp_ds_data, &len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading ds_data, returned %04X", esp_ret);
         goto exit;
@@ -650,7 +657,7 @@ bool esp_secure_cert_is_tlv_partition(void)
 #ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
 esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_0, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_device_cert(char *buffer)
@@ -661,7 +668,7 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer)
 
 esp_err_t esp_secure_cert_get_ca_cert(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_0, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
@@ -673,7 +680,7 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer)
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 esp_err_t esp_secure_cert_get_priv_key(char **buffer, uint32_t *len)
 {
-    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, buffer, len);
+    return esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, ESP_SECURE_CERT_SUBTYPE_0, buffer, len);
 }
 
 esp_err_t esp_secure_cert_free_priv_key(char *buffer)
