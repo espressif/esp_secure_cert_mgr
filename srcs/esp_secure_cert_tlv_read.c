@@ -348,6 +348,15 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
     return ESP_OK;
 }
 
+esp_err_t esp_secure_cert_free_tlv_addr(char* buffer)
+{
+    if (!esp_ptr_in_drom((const void *) buffer)) {
+        /* Free the buffer only if it is not from the drom section */
+        free(buffer);
+    }
+    return ESP_OK;
+}
+
 #if SOC_HMAC_SUPPORTED
 esp_err_t esp_secure_cert_calculate_hmac_encryption_iv(uint8_t *iv)
 {

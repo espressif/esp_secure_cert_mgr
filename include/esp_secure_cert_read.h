@@ -39,9 +39,23 @@ typedef enum key_type {
 esp_err_t esp_secure_cert_init_nvs_partition(void);
 
 /*
- *  Get the flash address of the data of a TLV entry
+ *  Get the memory address where the TLV data is stored.
+ *  This address can be a memory mapped flash region address or dynamically allocated address from heap memory.
  *
- * Note: This API also validates the crc of the respective tlv before returning the offset. The offset is not the physical address but the address where it is mapped in the memory space.
+ *  Note:
+ *  The flash address is returned in cases where the TLV data is stored in plaintext format which does not require
+ *  any additional processing.
+ *  If the TLV data is stored with some additional encryption then it first needs to be decrypted and the decrypted data is
+ *  stored in a dynamically allocated buffer. This buffer address is then returned by the API. This buffer must be freed by the user
+ *  when the data is no longer needed. This is mostly required when Private Key data is stored in the TLV with some encryption algorithm.
+ *
+ *  A call to esp_secure_cert_tlv_free_addr() should be made to free the dynamically allocated data (if any).
+ *  For simplicity it is recommended that a call to the esp_secure_cert_tlv_free_addr() should be made irrespective
+ *  of whether it is allocated dynamically or not, the API internally takes care of all possible scenarios.
+ *
+ *  This API also validates the crc of the respective tlv before returning the offset.
+ *  The offset is not the physical address but the address where it is mapped in the memory space.
+ *
  * @input
  *     type                 Type of the TLV entry
  *     subtype              Subtype of the TLV entry (index)
@@ -57,6 +71,14 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *                  On failure
  */
 esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_subtype_t subtype, char **buffer, uint32_t *len);
+
+/*
+ * Free buffer containing the TLV data
+ *
+ * This API only frees the data if it is allocated dynamically.
+ * If address from flash region is provided, then it is ignored.
+ */
+esp_err_t esp_secure_cert_tlv_free_addr(char *buffer);
 
 /* @info
  *  Get the device cert from the esp_secure_cert partition
