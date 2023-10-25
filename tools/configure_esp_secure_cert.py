@@ -9,7 +9,8 @@ from esp_secure_cert import nvs_format, custflash_format
 from esp_secure_cert import configure_ds, tlv_format
 from esp_secure_cert.efuse_helper import (
     log_efuse_summary,
-    configure_efuse_key_block
+    configure_efuse_key_block,
+    get_efuse_summary_json
 )
 
 idf_path = os.getenv('IDF_PATH')
@@ -44,10 +45,15 @@ def flash_esp_secure_cert_partition(idf_path, idf_target,
     print('Flashing the esp_secure_cert partition at {0} offset'
           .format(sec_cert_part_offset))
     print('Note: You can skip this step by providing --skip_flash argument')
+    efuse_summary_json = get_efuse_summary_json(idf_path, idf_target, port)
+    esptool_encrypt = ""
+    if efuse_summary_json["SPI_BOOT_CRYPT_CNT"]['value'] == 'Enable':
+        esptool_encrypt = "--encrypt"
+        print('flash encryption enabled, esptool will encrypt cert partition')
     flash_command = f"python {idf_path}/components/esptool_py/" + \
                     f"esptool/esptool.py --chip {idf_target} " + \
-                    f"-p {port} write_flash " + \
-                    f" {sec_cert_part_offset} {flash_filename}"
+                    f"-p {port} --no-stub write_flash " + \
+                    f" {esptool_encrypt} {sec_cert_part_offset} {flash_filename}"
     try:
         flash_command_output = subprocess.check_output(
             flash_command,
