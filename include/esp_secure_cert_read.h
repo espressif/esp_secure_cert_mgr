@@ -47,7 +47,10 @@ esp_err_t esp_secure_cert_init_nvs_partition(void);
  *  any additional processing.
  *  If the TLV data is stored with some additional encryption then it first needs to be decrypted and the decrypted data is
  *  stored in a dynamically allocated buffer. This buffer address is then returned by the API. This buffer must be freed by the user
- *  when the data is no longer needed. This is mostly required when Private Key data is stored in the TLV with some encryption algorithm.
+ *  when the data is no longer needed.
+ *  TLV Algorithms:
+ *  This API automatically decrypts any encryption applied to the TLV by supported algorithms. For this the API searches some other
+ *  TLV entries of custom types. These TLV entries must be of the same subtype as of the private key TLV. Please see documentation regarding supported TLV storage algorithms in the TLV documentation.
  *
  *  A call to esp_secure_cert_tlv_free_addr() should be made to free the dynamically allocated data (if any).
  *  For simplicity it is recommended that a call to the esp_secure_cert_tlv_free_addr() should be made irrespective

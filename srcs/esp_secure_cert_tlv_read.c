@@ -70,7 +70,7 @@ static const char *TAG = "esp_secure_cert_tlv";
 
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
-static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len);
+static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, char *output_buf, size_t buf_len);
 #define ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE  121
 #endif
 
@@ -330,7 +330,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
             ESP_LOGE(TAG, "Failed to allocate memory");
             return ESP_ERR_NO_MEM;
         }
-        err = esp_secure_cert_gen_ecdsa_key(output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
+        err = esp_secure_cert_gen_ecdsa_key(subtype, output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
         if (err != ESP_OK) {
             free(output_buf);
             ESP_LOGE(TAG, "Failed to generate ECDSA key, returned %04X", err);
@@ -537,7 +537,7 @@ exit:
  * buf_len     The length of the buffer in bytes. This must be exactly ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE bytes.
  *
  */
-static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
+static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, char *output_buf, size_t buf_len)
 {
     esp_err_t err = ESP_FAIL;
     int ret = 0;
@@ -548,7 +548,7 @@ static esp_err_t esp_secure_cert_gen_ecdsa_key(char *output_buf, size_t buf_len)
     // Obtain the salt stored in the esp_secure_cert partition
     uint8_t *salt = NULL;
     uint32_t salt_len = 0;
-    err = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT, 0, (void *)&salt, &salt_len);
+    err = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT, subtype, (void *)&salt, &salt_len);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading salt, returned %04X", err);
     }
