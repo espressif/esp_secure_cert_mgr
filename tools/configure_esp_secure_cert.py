@@ -168,12 +168,6 @@ def main():
              'on host machine for testing purpose')
 
     parser.add_argument(
-        '--production', '-prod',
-        dest='production', action='store_true',
-        help='Enable production configurations. '
-             'e.g.keep efuse key block read protection enabled')
-
-    parser.add_argument(
         '--sec_cert_part_offset',
         dest='sec_cert_part_offset',
         default='0xD000',
@@ -254,13 +248,7 @@ def main():
                                       args.port,
                                       efuse_key_file,
                                       args.efuse_key_id,
-                                      efuse_purpose,
-                                      args.production)
-
-            # delete the newly generated file in case of production mode
-            if args.production:
-                if os.path.exists(hmac_key_file):
-                    os.remove(hmac_key_file)
+                                      efuse_purpose)
 
             with open(efuse_key_file, "rb") as key_file:
                 hmac_key = key_file.read()
@@ -294,8 +282,7 @@ def main():
                                           args.port,
                                           args.privkey,
                                           args.efuse_key_id,
-                                          efuse_purpose,
-                                          args.production)
+                                          efuse_purpose)
             except OSError:
                 print('Hint: For ECDSA peripheral esptool version'
                       ' must be >= v4.6, Please make sure the '
