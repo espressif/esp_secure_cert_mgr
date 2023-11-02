@@ -6,7 +6,6 @@
 #pragma once
 #include "esp_err.h"
 
-#include "esp_secure_cert_tlv_config.h"
 #include "soc/soc_caps.h"
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 #include "rsa_sign_alt.h"
@@ -38,50 +37,6 @@ typedef enum key_type {
  */
 esp_err_t esp_secure_cert_init_nvs_partition(void);
 
-/*
- *  Get the memory address where the TLV data is stored.
- *  This address can be a memory mapped flash region address or dynamically allocated address from heap memory.
- *
- *  Note:
- *  The flash address is returned in cases where the TLV data is stored in plaintext format which does not require
- *  any additional processing.
- *  If the TLV data is stored with some additional encryption then it first needs to be decrypted and the decrypted data is
- *  stored in a dynamically allocated buffer. This buffer address is then returned by the API. This buffer must be freed by the user
- *  when the data is no longer needed.
- *  TLV Algorithms:
- *  This API automatically decrypts any encryption applied to the TLV by supported algorithms. For this the API searches some other
- *  TLV entries of custom types. These TLV entries must be of the same subtype as of the private key TLV. Please see documentation regarding supported TLV storage algorithms in the TLV documentation.
- *
- *  A call to esp_secure_cert_tlv_free_addr() should be made to free the dynamically allocated data (if any).
- *  For simplicity it is recommended that a call to the esp_secure_cert_tlv_free_addr() should be made irrespective
- *  of whether it is allocated dynamically or not, the API internally takes care of all possible scenarios.
- *
- *  This API also validates the crc of the respective tlv before returning the offset.
- *
- * @input
- *     type                 Type of the TLV entry
- *     subtype              Subtype of the TLV entry (index)
- *     buffer               Pointer to the buffer to store the data address
- *     len                  Pointer to store the length of the data
- *
- * Note: If tlv type = ESP_SECURE_CERT_TLV_END then the address returned shall be the end address of current tlv formatted data and the length returned shall be the total length of TLV structures.
- * If tlv subtype = ESP_SECURE_CERT_SUBTYPE_MAX then the the address of tlv of given type and highest subtype found shall be returned.
- * @return
- *
- *      - ESP_OK    On success
- *      - ESP_FAIL/other relevant esp error code
- *                  On failure
- */
-esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_subtype_t subtype, char **buffer, uint32_t *len);
-
-/*
- * Free buffer containing the TLV data
- *
- * This API only frees the data if it is allocated dynamically.
- * If address from flash region is provided, then it is ignored.
- */
-esp_err_t esp_secure_cert_tlv_free_addr(char *buffer);
-
 /* @info
  *  Get the device cert from the esp_secure_cert partition
  *
@@ -95,11 +50,9 @@ esp_err_t esp_secure_cert_tlv_free_addr(char *buffer);
  *       A respective call to the esp_secure_cert_free_device_cert() should be made to free any memory (if allocated)
  *
  *       IMPORTANT: This API shall provide only the first entry of type Device cert (ESP_SECURE_CERT_DEV_CERT_TLV) present in the esp_secure_cert partition with subtype set as 0.
- *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_tlv_get_addr with the appropriate type and subtype.
- *       Please find example usage of esp_secure_cert_tlv_get_addr to obtain the device cert as follows:
+ *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_get_tlv_info with the appropriate type and subtype.
  *       The type in this case shall be ESP_SECURE_CERT_DEV_CERT_TLV
  *       and the subtype shall be the index of the device cert that needs to be obtained.
- *       e.g., esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, subtype(index), &buffer, &len);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the device cert address
@@ -141,11 +94,9 @@ esp_err_t esp_secure_cert_free_device_cert(char *buffer);
  *      The API shall only free the memory if it has been dynamically allocated.
  *
  *       IMPORTANT: This API shall provide only the first entry of type CA cert (ESP_SECURE_CERT_CA_CERT_TLV) present in the esp_secure_cert partition subtype set as 0.
- *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_tlv_get_addr with the appropriate type and subtype.
- *       Please find example usage of esp_secure_cert_tlv_get_addr to obtain the ca cert as follows:
+ *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_get_tlv_info with the appropriate type and subtype.
  *       The type in this case shall be ESP_SECURE_CERT_CA_CERT_TLV
  *       and the subtype shall be the index of the device cert that needs to be obtained.
- *       e.g., esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_CA_CERT_TLV, subtype(index), &buffer, &len);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the ca cert address
@@ -188,11 +139,9 @@ esp_err_t esp_secure_cert_free_ca_cert(char *buffer);
  *      The API shall only free the memory if it has been dynamically allocated.
  *
  *       IMPORTANT: This API shall provide only the first entry of type private key (ESP_SECURE_CERT_PRIV_KEY_TLV) present in the esp_secure_cert partition with subtype set as 0.
- *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_tlv_get_addr with the appropriate type and subtype.
- *       Please find example usage of esp_secure_cert_tlv_get_addr to obtain the ca cert as follows:
+ *       If you have multiple entries of the given type with different subtypes then please use the generic API esp_secure_cert_get_tlv_info with the appropriate type and subtype.
  *       The type in this case shall be ESP_SECURE_CERT_PRIV_KEY_TLV
  *       and the subtype shall be the index of the device cert that needs to be obtained.
- *       e.g., esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, subtype(index), &buffer, &len);
  *
  * @params
  *      - buffer(out)       This value shall be filled with the private key address
@@ -224,19 +173,25 @@ esp_err_t esp_secure_cert_free_priv_key(char *buffer);
  *       This function returns the flash esp_ds_context which can then be
  *       directly provided to an esp-tls connection through its config structure.
  *       The memory for the context is dynamically allocated.
+ * @note
+ *       This shall generate the DS context only for the
+ *       TLV entry with subtype 0 (First TLV entry for DS context)
+ *       Internally this API assumes that the TLV entries with
+ *       type ESP_SECURE_CERT_DS_CTX_TLV and ESP_SECURE_CERT_DS_DATA_TLV and subtype 0
+ *       are present.
+ *       A call to esp_secure_cert_free_ds_ctx() should be made
+ *       to free the allocated memory
  *
- * @params
- *      - ds_ctx    The pointer to the DS context
  * @return
+ *      - ds_ctx    The pointer to the DS context, On success
  *      - NULL      On failure
  */
 esp_ds_data_ctx_t *esp_secure_cert_get_ds_ctx(void);
 
 /*
- *@info
- *      Free the ds context
+ * @info
+ *      Free the DS context
  */
-
 void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx);
 #endif /* CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL */
 

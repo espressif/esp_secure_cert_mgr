@@ -9,6 +9,7 @@
 #include "esp_err.h"
 #include "esp_partition.h"
 #include "esp_crc.h"
+#include "inttypes.h"
 
 #if __has_include("esp_idf_version.h")
 #include "esp_idf_version.h"
@@ -34,6 +35,7 @@
 
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_config.h"
+#include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_cert_tlv_private.h"
 #include "esp_secure_cert_crypto.h"
 
@@ -169,9 +171,12 @@ static uint16_t esp_secure_cert_get_tlv_total_length(esp_secure_cert_tlv_header_
 static bool esp_secure_cert_verify_tlv_integrity(esp_secure_cert_tlv_header_t *tlv_header)
 {
     ESP_LOGD(TAG, "Verifying the TLV integrity");
+    if (!(tlv_header->magic == ESP_SECURE_CERT_TLV_MAGIC)) {
+        return false;
+    }
+
     uint8_t padding_length = esp_secure_cert_get_padding_length(tlv_header);
     ESP_LOGD(TAG, "Padding length obtained = %u", padding_length);
-
     size_t crc_data_len = sizeof(esp_secure_cert_tlv_header_t) + tlv_header->length + padding_length;
     uint32_t data_crc = esp_crc32_le(UINT32_MAX, (const uint8_t * )tlv_header, crc_data_len);
     esp_secure_cert_tlv_footer_t *tlv_footer = (esp_secure_cert_tlv_footer_t *)((void*)tlv_header + crc_data_len);
@@ -299,10 +304,14 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
         return err;
     }
 
+    // Special case : We return the end address of the last
+    // valid TLV in this case
+    // and length is set to the total length of valid TLV entries
     if (type == ESP_SECURE_CERT_TLV_END) {
         *buffer = (char *)tlv_header;
         const void *esp_secure_cert_addr = esp_secure_cert_get_mapped_addr();
         *len = (void*)tlv_header - esp_secure_cert_addr;
+        return ESP_OK;
     }
 
     *buffer = (char *)&tlv_header->value;
@@ -355,13 +364,135 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
     return ESP_OK;
 }
 
-esp_err_t esp_secure_cert_free_tlv_addr(char* buffer)
+esp_err_t esp_secure_cert_get_tlv_info(esp_secure_cert_tlv_config_t *tlv_config, esp_secure_cert_tlv_info_t *tlv_info)
 {
-    if (!esp_ptr_in_drom((const void *) buffer)) {
-        /* Free the buffer only if it is not from the drom section */
-        free(buffer);
+    if (tlv_config == NULL || tlv_info == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    memset(tlv_info, 0, sizeof(esp_secure_cert_tlv_info_t));
+    esp_err_t esp_ret;
+
+    esp_secure_cert_tlv_header_t *tlv_header = NULL;
+
+    // Try to obtain the TLV header
+    esp_ret = esp_secure_cert_tlv_get_header(tlv_config->type, tlv_config->subtype, &tlv_header);
+    if (esp_ret != ESP_OK) {
+        return esp_ret;
+    }
+
+    // Try to obtain the TLV data
+    esp_ret = esp_secure_cert_tlv_get_addr(tlv_config->type, tlv_config->subtype, &tlv_info->data, &tlv_info->length);
+    if (esp_ret != ESP_OK) {
+        tlv_info->data = NULL;
+        tlv_info->length = 0;
+        return esp_ret;
+    }
+
+    // Everything successfully obtained, copy to output tlv_info
+    tlv_info->type = tlv_header->type;
+    tlv_info->subtype = tlv_header->subtype;
+    tlv_info->flags = tlv_header->flags;
+
+    // Special case
+    if (tlv_info->type == ESP_SECURE_CERT_TLV_END) {
+        // In this case the user is requesting the end address
+        // of the TLV entries, invalidate the subtype field
+        // in the tlv_info struct
+        tlv_info->subtype = ESP_SECURE_CERT_SUBTYPE_INVALID;
+    }
+    return esp_ret;
+}
+
+esp_err_t esp_secure_cert_free_tlv_info(esp_secure_cert_tlv_info_t *tlv_info)
+{
+    if (tlv_info) {
+        if (!esp_ptr_in_drom((const void *) tlv_info->data)) {
+            /* Free the buffer only if it is not from the drom section */
+            free(tlv_info->data);
+        }
     }
     return ESP_OK;
+}
+
+esp_err_t esp_secure_cert_iterate_to_next_tlv(esp_secure_cert_tlv_iterator_t *tlv_iterator)
+{
+    if (tlv_iterator == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)tlv_iterator->iterator;
+    if (tlv_header == NULL) {
+        ESP_LOGD(TAG, "tlv_header value is NULL, finding the first TLV entry");
+        tlv_header = (esp_secure_cert_tlv_header_t *) esp_secure_cert_get_mapped_addr();
+        // Verify the TLV entry integrity before returning
+        if (esp_secure_cert_verify_tlv_integrity(tlv_header)) {
+            tlv_iterator->iterator = (void*)tlv_header;
+            return ESP_OK;
+        } else {
+            ESP_LOGI(TAG, "The esp_secure_cert partition does not appear to be valid");
+            return ESP_FAIL;
+        }
+    }
+
+    // Verify the current TLV entry integrity
+    if (!esp_secure_cert_verify_tlv_integrity(tlv_header)) {
+        ESP_LOGE(TAG, "Invalid iterator value provided");
+        return ESP_FAIL;
+    }
+
+    // Move to the next TLV entry
+    tlv_header = ((void*) tlv_header + esp_secure_cert_get_tlv_total_length(tlv_header));
+    if (esp_secure_cert_verify_tlv_integrity(tlv_header)) {
+        // Verify the TLV entry integrity before returning
+        tlv_iterator->iterator = (void*)tlv_header;
+        return ESP_OK;
+    }
+
+    // We shall come here if the integrity verification
+    // fails above, this means no more valid TLV entries
+    ESP_LOGD(TAG, "Iterator is at the last TLV entry");
+    // Keeping the log level as debug as this
+    // is acceptable failure in some cases
+    return ESP_FAIL;
+}
+
+esp_err_t esp_secure_cert_get_tlv_info_from_iterator(esp_secure_cert_tlv_iterator_t *tlv_iterator, esp_secure_cert_tlv_info_t *tlv_info)
+{
+    if (tlv_iterator == NULL || tlv_info == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t*)tlv_iterator->iterator;
+    if (!esp_secure_cert_verify_tlv_integrity(tlv_header)) {
+        ESP_LOGE(TAG, "Iterator does not point to a valid TLV entry");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_secure_cert_tlv_config_t tlv_config = {};
+    tlv_config.type = tlv_header->type;
+    tlv_config.subtype = tlv_header->subtype;
+    return esp_secure_cert_get_tlv_info(&tlv_config, tlv_info);
+}
+
+static void esp_secure_cert_print_tlv_info(esp_secure_cert_tlv_info_t *tlv_info)
+{
+    if (tlv_info != NULL) {
+        ESP_LOGI(TAG, "Type: %d, Subtype: %d, Data length: %"PRIu32"", tlv_info->type, tlv_info->subtype, tlv_info->length);
+        ESP_LOGI(TAG, "Flags: %X", tlv_info->flags);
+    }
+}
+
+void esp_secure_cert_list_tlv_entries(void)
+{
+    esp_secure_cert_tlv_iterator_t tlv_iterator = {};
+    size_t count = 0;
+    while (esp_secure_cert_iterate_to_next_tlv(&tlv_iterator) == ESP_OK) {
+        esp_secure_cert_tlv_info_t tlv_info;
+        if (esp_secure_cert_get_tlv_info_from_iterator(&tlv_iterator, &tlv_info) == ESP_OK) {
+            count++;
+            printf("\n");
+            ESP_LOGI(TAG, "TLV Entry No: %d", count);
+            esp_secure_cert_print_tlv_info(&tlv_info);
+        }
+    }
 }
 
 #if SOC_HMAC_SUPPORTED

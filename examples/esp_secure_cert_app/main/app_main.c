@@ -16,6 +16,7 @@
 #include <inttypes.h>
 #include "esp_log.h"
 #include "esp_secure_cert_read.h"
+#include "esp_secure_cert_tlv_read.h"
 
 #include "mbedtls/ssl.h"
 #include "mbedtls/pk.h"
@@ -242,19 +243,15 @@ void app_main()
         ESP_LOGE(TAG, "Failed to obtain and verify the contents of the esp_secure_cert partition");
     }
 
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_USER_DATA_1, ESP_SECURE_CERT_SUBTYPE_0, &addr, &len);
+    esp_secure_cert_tlv_config_t tlv_config = {};
+    tlv_config.type = ESP_SECURE_CERT_DEV_CERT_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
+    esp_secure_cert_tlv_info_t tlv_info = {};
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
     if (esp_ret == ESP_OK) {
-        ESP_LOG_BUFFER_HEX(TAG, addr, len);
+        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", tlv_info.length, tlv_info.data);
     }
 
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DEV_CERT_TLV, ESP_SECURE_CERT_SUBTYPE_1, &addr, &len);
-    if (esp_ret == ESP_OK) {
-        printf("Device Cert: \n%s", addr);
-    }
-
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_PRIV_KEY_TLV, ESP_SECURE_CERT_SUBTYPE_1, &addr, &len);
-    if (esp_ret == ESP_OK) {
-        printf("Priv Key: \n%s", addr);
-    }
-
+    ESP_LOGI(TAG, "Printing a list of TLV entries");
+    esp_secure_cert_list_tlv_entries();
 }

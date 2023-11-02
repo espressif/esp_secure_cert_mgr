@@ -125,7 +125,25 @@ const void *esp_secure_cert_get_mapped_addr(void);
  */
 esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_cert_tlv_type_t type, uint8_t subtype, void **tlv_address);
 
-
+/*
+ *  Get the flash address of the data of a TLV entry
+ *
+ * Note: This API also validates the crc of the respective tlv before returning the offset. The offset is not the physical address but the address where it is mapped in the memory space.
+ * @input
+ *     type                 Type of the TLV entry
+ *     subtype              Subtype of the TLV entry (index)
+ *     buffer               Pointer to the buffer to store the data address
+ *     len                  Pointer to store the length of the data
+ *
+ * Note: If tlv type = ESP_SECURE_CERT_TLV_END then the address returned shall be the end address of current tlv formatted data.
+ * If tlv subtype = ESP_SECURE_CERT_SUBTYPE_MAX then the the address of tlv of given type and highest subtype found shall be returned.
+ * @return
+ *
+ *      - ESP_OK    On success
+ *      - ESP_FAIL/other relevant esp error code
+ *                  On failure
+ */
+esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secure_cert_tlv_subtype_t subtype, char **buffer, uint32_t *len);
 
 /*
  * Identify if esp_secure_cert partition of type TLV is present.

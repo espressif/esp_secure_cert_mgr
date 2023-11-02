@@ -47,8 +47,7 @@ The `esp_secure_cert_mgr` component also supports following algorithms for TLV. 
     - HMAC key: This is the first key stored on the device with purpose `HMAC_UP`.
     Both of these entities are used as input for the pbkdf2 algorithm to generate the ECDSA key.
 
-It is the responsibility of the party which is storing the TLV entry to enable respective flags and store the data in respective format.
-
+Please ensure that appropriate TLV flags are enabled to take care of the underlying security configuration for the given TLV entry. On top of these security configuration, if platform flash encryption is enabled then the secure cert partition contents shall be stored in an encrypted manner on the external flash storage
 
 ## Legacy formats for `esp_secure_cert` partition
 
