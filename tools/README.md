@@ -1,4 +1,6 @@
 # esp_secure_cert Configuration Tool
+> WARNING: This tool is to be used only for development purpose. It does not enable any kind security feature for the protection of the sensitive data in the `esp_secure_cert` partition.
+
 The script [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) is used for configuring the ESP platform with PKI credentials into the esp_secure_cert partition which shall reside on its flash storage.
 It also configures the DS peripheral on the ESP32-S2/ESP32-S3/ESP32-C3 SoC. The steps in the script are based on technical details of certain operations in the Digital Signature calculation, which can be found in the Digital Signature Section of [ESP32-S2 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-s2_technical_reference_manual_en.pdf).
 
@@ -32,7 +34,7 @@ openssl x509 -req -days 365 -in client.csr -CA cacert.pem -CAkey prvtkey.pem  -s
 Following commands can be used to configure the DS peripheral and generate the `esp_secure_cert` partition.
 The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
 
-* When configuring the DS peripheral, by default the configuration script does not enable the read protection for the efuse key block in which the DS key is programmed. This is done for allowing flexibility while using the script for development purpose. Please provide the `--production` option as an additional argument to below command/s to enable the read protection for the respective efuse key block.
+* When configuring the DS peripheral, by default the configuration script does not enable the read protection for the efuse key block in which the DS key is programmed. This is done for allowing flexibility while using the script for development purpose.
 
 * Please remove the `--configure_ds` argument from these commands if use of the DS peripheral is disabled in the menu config.
 > **WARNING**: This is not recommended for production purpose as the private key shall be stored as plaintext.

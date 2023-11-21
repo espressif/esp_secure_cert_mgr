@@ -73,7 +73,7 @@ def log_efuse_summary(idf_path: str, idf_target: str, port: str) -> None:
 
 def efuse_burn_key(idf_path: str, idf_target: str, port: str,
                    efuse_key_file: str, efuse_key_id: int,
-                   efuse_purpose: str, production: bool):
+                   efuse_purpose: str):
     """
     Burns a key to the efuse using the "espefuse.py" script.
 
@@ -84,8 +84,6 @@ def efuse_burn_key(idf_path: str, idf_target: str, port: str,
         efuse_key_file (str): Path to the key file.
         efuse_key_id (int): The eFuse key id to use for burning the key.
         efuse_purpose (str): The purpose to be set for the eFuse key block
-        production (bool): If True, read protection
-        will be enabled by default.
 
     Raises:
         FileNotFoundError: If the key file cannot be found or read.
@@ -94,16 +92,8 @@ def efuse_burn_key(idf_path: str, idf_target: str, port: str,
     # we dont enable the read protection.
     key_block_status = '--no-read-protect'
 
-    if production:
-        # Whitespace character will have no additional
-        # effect on the command and
-        # read protection will be enabled as the default
-        # behaviour of the command
-        key_block_status = ' '
-    else:
-        print('WARNING:Efuse key block shall not be read '
-              'protected in development mode (default)\n'
-              'Enable production mode to read protect the key block')
+    print('WARNING:Efuse key block shall not be read '
+          'protected in development mode (default)\n')
 
     if not os.path.isfile(efuse_key_file):
         raise FileNotFoundError(f"Key file not found: {efuse_key_file}")
@@ -122,8 +112,7 @@ def efuse_burn_key(idf_path: str, idf_target: str, port: str,
 
 def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
                               efuse_key_file: str, efuse_key_id: int,
-                              efuse_purpose: str,
-                              production: bool) -> Union[bytes, None]:
+                              efuse_purpose: str) -> Union[bytes, None]:
     """
     Configures the provided efuse key_block.
 
@@ -139,7 +128,6 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
         efuse_key_file (str): Path to the key file.
         efuse_key_id (int): The eFuse key id to use for burning the key.
         efuse_purpose (str): The purpose to be set for the eFuse key block.
-        production (bool): If True, read protection will be enabled by default.
 
     Returns:
         bytes: 256-bit key written in the given
@@ -169,7 +157,7 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
 
         # Burn efuse key
         efuse_burn_key(idf_path, idf_target, port, efuse_key_file,
-                       efuse_key_id, efuse_purpose, production)
+                       efuse_key_id, efuse_purpose)
 
         new_efuse_summary_json = get_efuse_summary_json(idf_path,
                                                         idf_target,

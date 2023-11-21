@@ -32,6 +32,23 @@ Please note that, TLV format uses compact data representation and hence partitio
 
 When flash encryption is enabled for the device it is imporatant to encrypt the `esp_secure_cert` partition as well. Adding the encrypted flag in the partition table as done above can ensure that this is done. When flash encryption is not enabled this flag shall be ignored.
 
+## TLV storage algorithms
+    
+The `esp_secure_cert_mgr` component also supports following algorithms for TLV. In this case the TLV data is not stored directly but is stored by using one of the following algorithms. The information about the algorithms is a part of the TLV itself.
+
+-  HMAC based AES-GCM encryption:
+    In this case the first key stored on the device with purpose `HMAC_UP` is used to derive an AES key and the salt.
+    This key is used to encrypt the TLV contents.
+    This algorithm is suitable where the platform encryption is not enabled.
+
+- HMAC based ECDSA key derivation:
+    In this case the ECDSA key is derived using following two values
+    - Salt: This is the salt stored in a different tlv with type `ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT`
+    - HMAC key: This is the first key stored on the device with purpose `HMAC_UP`.
+    Both of these entities are used as input for the pbkdf2 algorithm to generate the ECDSA key.
+
+Please ensure that appropriate TLV flags are enabled to take care of the underlying security configuration for the given TLV entry. On top of these security configuration, if platform flash encryption is enabled then the secure cert partition contents shall be stored in an encrypted manner on the external flash storage
+
 ## Legacy formats for `esp_secure_cert` partition
 
 `esp_secure_cert` partition also supports two legacy flash formats.

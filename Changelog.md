@@ -1,8 +1,22 @@
 # This file contains the list of changes across different versions
 
-## v2.4.0
+## v2.4.1
+* Added a new API `esp_secure_cert_get_tlv_info` for obtaining TLV information
+* Added `esp_secure_cert_free_tlv_info` API for freeing TLV information.
+* Added `esp_secure_cert_iterate_to_next_tlv` API for iterating the TLV entries
+* Updated the API documentation for available `esp_secure_cert_get_*` APIs
+
+## v2.4.0 (yanked)
 * Added support for multiple entries of the same type by adding a new field called subtype.
 * Fixed API for obtaining CA cert for the legacy flash formats (9b091ee)
+
+### Yank explanation
+This version was later yanked due to following reason.
+
+* The API `esp_secure_cert_tlv_get_addr` which was made public in this version has incorrect documentation and the respective free API was not present.
+* The changes in this version also modifiy the behaviour of existing APIs to obtain the TLV entry of latest subtype. While no current users shall be affected, this may cause inconsistency in the available API usage going forward.
+
+Please note that the yanked version does not affect any of existing users. The yanking is done due to future API usage considerations and to avoid any possible inconsistencies.
 
 ## v2.3.1
 * Make esp_secure_cert_get_key_type API available for DS peripheral case as well.
