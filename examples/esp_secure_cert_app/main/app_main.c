@@ -174,82 +174,77 @@ exit:
 
 void app_main()
 {
-    uint32_t len = 0;
-    char *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;
 
-    esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
+    esp_secure_cert_tlv_config_t tlv_config = {};
+    esp_secure_cert_tlv_info_t tlv_info = {};
+
+    tlv_config.type = ESP_SECURE_CERT_DEV_CERT_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", len, (char *)addr);
-    } else {
-        ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
+        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", tlv_info.length, (char *)tlv_info.data);
     }
 
-    esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
+    tlv_config.type = ESP_SECURE_CERT_PRIV_KEY_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "CA Cert: \nLength: %"PRIu32"\n%s", len, (char *)addr);
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, addr, len, ESP_LOG_DEBUG);
-    } else {
-        ESP_LOGE(TAG, "Failed to obtain flash address of ca_cert");
+        ESP_LOGI(TAG, "PEM Key Length: %"PRIu32"", tlv_info.length);
     }
-
-#ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
-    esp_ret = esp_secure_cert_get_priv_key(&addr, &len);
-    if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "PEM KEY: \nLength: %"PRIu32"\n%s", len, (char *)addr);
-    } else {
-        ESP_LOGE(TAG, "Failed to obtain flash address of private_key");
-    }
-    uint32_t dev_cert_len = 0;
-    char *dev_cert_addr = NULL;
-    esp_ret = esp_secure_cert_get_device_cert(&dev_cert_addr, &dev_cert_len);
-    if (esp_ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to obtain the dev cert flash address");
-    }
-
-    esp_ret = test_priv_key_validity((unsigned char *)addr, len, (unsigned char *)dev_cert_addr, dev_cert_len);
+    esp_secure_cert_tlv_info_t dev_cert_tlv_info = {};
+    tlv_config.type = ESP_SECURE_CERT_DEV_CERT_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &dev_cert_tlv_info);
+    esp_ret = test_priv_key_validity((unsigned char *)tlv_info.data, tlv_info.length, (unsigned char *)dev_cert_tlv_info.data, dev_cert_tlv_info.length);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to validate the private key and device certificate");
     }
-#else
-    esp_ds_data_ctx_t *ds_data = NULL;
-    ds_data = esp_secure_cert_get_ds_ctx();
-    if (ds_data != NULL) {
-        ESP_LOGI(TAG, "Successfully obtained the ds context");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->c, ESP_DS_C_LEN, ESP_LOG_DEBUG);
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, ds_data->esp_ds_data->iv, ESP_DS_IV_LEN, ESP_LOG_DEBUG);
-        ESP_LOGI(TAG, "The value of rsa length is %d", ds_data->rsa_length_bits);
-        ESP_LOGI(TAG, "The value of efuse key id is %d", ds_data->efuse_key_id);
-    } else {
-        ESP_LOGE(TAG, "Failed to obtain the ds context");
-    }
-
-    /* Read the dev_cert addr again */
-    esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
-    if (esp_ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to obtain the dev cert flash address");
-    }
-
-    esp_ret = test_ciphertext_validity(ds_data, (unsigned char *)addr, len);
-    if (esp_ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to validate ciphertext");
-    } else {
-        ESP_LOGI(TAG, "Ciphertext validated succcessfully");
-    }
-#endif
     if (esp_ret == ESP_OK) {
         ESP_LOGI(TAG, "Successfully obtained and verified the contents of esp_secure_cert partition");
     } else {
         ESP_LOGE(TAG, "Failed to obtain and verify the contents of the esp_secure_cert partition");
     }
 
-    esp_secure_cert_tlv_config_t tlv_config = {};
-    tlv_config.type = ESP_SECURE_CERT_DEV_CERT_TLV;
+    tlv_config.type = ESP_SECURE_CERT_USER_DATA_1;
     tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
-    esp_secure_cert_tlv_info_t tlv_info = {};
     esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", tlv_info.length, tlv_info.data);
+        ESP_LOGI(TAG, "Custom Data 1: \nLength: %"PRIu32"\nData: '%s'", tlv_info.length, (char *)tlv_info.data);
+    }
+
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_1;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Custom Data 2: \nLength: %"PRIu32"\nData: '%s'", tlv_info.length, (char *)tlv_info.data);
+    }
+
+    tlv_config.type = ESP_SECURE_CERT_USER_DATA_2;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Custom Data 3: \nLength: %"PRIu32"\nData: '%s'", tlv_info.length, (char *)tlv_info.data);
+    }
+
+    tlv_config.type = ESP_SECURE_CERT_CA_CERT_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "CA Cert 0: \nLength: %"PRIu32"\n%s", tlv_info.length, (char *)tlv_info.data);
+    }
+
+    tlv_config.type = ESP_SECURE_CERT_CA_CERT_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_1;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "CA Cert 1: \nLength: %"PRIu32"\n%s", tlv_info.length, (char *)tlv_info.data);
+    }
+
+    tlv_config.type = ESP_SECURE_CERT_CA_CERT_TLV;
+    tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_2;
+    esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "CA Cert 2: \nLength: %"PRIu32"\n%s", tlv_info.length, (char *)tlv_info.data);
     }
 
     ESP_LOGI(TAG, "Printing a list of TLV entries");
