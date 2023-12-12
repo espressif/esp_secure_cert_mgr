@@ -41,10 +41,19 @@ The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` 
 
 ## Generate `esp_secure_cert` partition of type `cust_flash_tlv`:
 
-This command shall generate a binary partition containing the PKI credentials stored in the TLV format.
+This command shall generate a binary partition containing the PKI credentials stored in the TLV format and flash it at the default offset of `0xD000`.
+
 ```
 configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash_tlv --configure_ds
 ```
+
+* When [Flash Encryption](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html) is enabled for the device, the option ``--skip_flash`` (explained below) can be used to prevent the flashing opereation and only save the `esp_secure_cert.bin` on the host machine. It can then be flashed on the target using below command:
+
+	```esptool.py -p /* Serial Port*/ write_flash 0xD000 esp_secure_cert.bin --encrypt```
+
+	More details regarding [esptool.py](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/index.html#esptool-py) utility can be found [here](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/index.html).
+
+    Note: This is only applicable for [Development mode](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html#flash-enc-development-mode) of Flash Encryption.
 
 ## Legacy partition formats:
 
