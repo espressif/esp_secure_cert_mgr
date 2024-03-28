@@ -10,15 +10,17 @@ from cryptography.utils import int_to_bytes
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 
 supported_targets_rsa_ds = ['esp32s2', 'esp32s3', 'esp32c3',
-                            'esp32c6', 'esp32h2']
+                            'esp32c6', 'esp32h2', 'esp32p4']
 supported_key_size_rsa = {'esp32s2': [1024, 2048, 3072, 4096],
                           'esp32c3': [1024, 2048, 3072],
                           'esp32s3': [1024, 2048, 3072, 4096],
                           'esp32c6': [1024, 2048, 3072],
-                          'esp32h2': [1024, 2048, 3072]}
+                          'esp32h2': [1024, 2048, 3072],
+                          'esp32p4': [1024, 2048, 3072, 4096]}
 
-supported_targets_ecdsa = ['esp32h2']
-supported_key_size_ecdsa = {'esp32h2': [256]}
+supported_targets_ecdsa = ['esp32h2', 'esp32p4']
+supported_key_size_ecdsa = {'esp32h2': [256],
+                            'esp32p4': [256]}
 
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):
