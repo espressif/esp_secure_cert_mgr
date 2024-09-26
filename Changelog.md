@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.5.0
+* Assigned 2 project specific entries for Matter project in the list of TLV entries
+
 ## v2.4.1
 * Added a new API `esp_secure_cert_get_tlv_info` for obtaining TLV information
 * Added `esp_secure_cert_free_tlv_info` API for freeing TLV information.
