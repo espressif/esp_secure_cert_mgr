@@ -6,7 +6,7 @@ import sys
 
 
 def get_install_requires():
-    with open('requirements.txt') as f:
+    with open("requirements.txt") as f:
         required = f.read().splitlines()
         return required
 
@@ -53,17 +53,16 @@ setup(
     name="esp-secure-cert-tool",
     version=VERSION,
     description="A python utility which helps to configure and provision"
-                "the ESP platform with PKI credentials "
-                "into the esp_secure_cert partition",
+    "the ESP platform with PKI credentials "
+    "into the esp_secure_cert partition",
     long_description=long_description,
-    long_description_content_type='text/x-rst',
-    url="https://github.com/espressif/"
-        "esp_secure_cert_mgr/blob/main/tools",
+    long_description_content_type="text/x-rst",
+    url="https://github.com/espressif/" "esp_secure_cert_mgr/blob/main/tools",
     project_urls={
         "Documentation": "https://github.com/espressif/"
-                         "esp_secure_cert_mgr/blob/main/tools/README.md",
+        "esp_secure_cert_mgr/blob/main/tools/README.md",
         "Source": "https://github.com/espressif/esp_secure_cert_mgr/"
-                  "blob/main/tools/configure_esp_secure_cert.py",
+        "blob/main/tools/configure_esp_secure_cert.py",
     },
     author="Espressif Systems",
     author_email="",
@@ -76,12 +75,13 @@ setup(
         "Operating System :: Microsoft :: Windows",
         "Operating System :: MacOS :: MacOS X",
         "Topic :: Software Development :: Embedded Systems",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     setup_requires=(["wheel"] if "bdist_wheel" in sys.argv else []),
     install_requires=get_install_requires(),
     include_package_data=True,
