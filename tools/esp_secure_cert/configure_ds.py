@@ -3,8 +3,9 @@ import hmac
 import os
 import struct
 import sys
+
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa, ec
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.utils import int_to_bytes
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
