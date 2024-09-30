@@ -242,7 +242,7 @@ void app_main()
     } else {
         ESP_LOGE(TAG, "Failed to obtain and verify the contents of the esp_secure_cert partition");
     }
-
+#ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
     esp_secure_cert_tlv_config_t tlv_config = {};
     tlv_config.type = ESP_SECURE_CERT_DEV_CERT_TLV;
     tlv_config.subtype = ESP_SECURE_CERT_SUBTYPE_0;
@@ -254,4 +254,6 @@ void app_main()
 
     ESP_LOGI(TAG, "Printing a list of TLV entries");
     esp_secure_cert_list_tlv_entries();
+#endif
+
 }
