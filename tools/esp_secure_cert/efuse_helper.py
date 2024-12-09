@@ -90,7 +90,7 @@ def efuse_burn_key(idf_path: str, idf_target: str, port: str,
     """
     # In case of a development (default) usecase
     # we dont enable the read protection.
-    key_block_status = '--no-read-protect'
+    key_block_status = '--no-read-protect --show-sensitive-info'
 
     print('WARNING:Efuse key block shall not be read '
           'protected in development mode (default)\n')
@@ -209,13 +209,13 @@ def configure_efuse_key_block(idf_path: str, idf_target: str, port: str,
                 print(f'ERROR: Provided efuse key block'
                       f'((KEY BLOCK {efuse_key_id})) '
                       f'contains a key with key purpose different '
-                      f'than {efuse_purpose},'
+                      f'than {efuse_purpose}, '
                       f'\nplease execute the script again with '
                       f'a different value of the efuse key id.')
                 raise RuntimeError('ERROR: key block already used')
         else:
             print(f'ERROR: Provided efuse key block (KEY BLOCK {efuse_key_id})'
-                  f' is not readable and writeable,'
+                  f' is not readable and writeable, '
                   f'\nplease execute the script again '
                   f'with a different value of the efuse key id.')
             raise RuntimeError('ERROR: Key block already used')
