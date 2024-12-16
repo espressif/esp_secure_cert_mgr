@@ -15,6 +15,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include "esp_log.h"
+#include "soc/soc_caps.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
 
@@ -26,6 +27,10 @@
 #include "mbedtls/error.h"
 #include "esp_idf_version.h"
 
+#if SOC_ECDSA_SUPPORTED
+#include "ecdsa/ecdsa_alt.h"
+#include "esp_efuse.h"
+#endif
 #define TAG "esp_secure_cert_app"
 
 
@@ -120,17 +125,48 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
         goto exit;
     }
 
-#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
-    ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0);
-#else
-    ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
-#endif
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to parse the key");
-        esp_ret = ESP_FAIL;
+    esp_secure_cert_key_type_t key_type = ESP_SECURE_CERT_DEFAULT_FORMAT_KEY;
+#ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
+    esp_ret = esp_secure_cert_get_priv_key_type(&key_type);
+    if (esp_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to obtain the priv key type");
         goto exit;
+    }
+#endif
+    if (key_type == ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY) {
+#if SOC_ECDSA_SUPPORTED
+        ESP_LOGI(TAG, "Setting up the ECDSA key from eFuse");
+        uint8_t efuse_block_id;
+        esp_ret = esp_secure_cert_get_priv_key_efuse_id(&efuse_block_id);
+        if (esp_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to obtain efuse key id");
+            goto exit;
+        }
+        ESP_LOGI(TAG, "Using key from eFuse block %d for ECDSA key", efuse_block_id);
+        esp_ecdsa_pk_conf_t pk_conf = {
+            .grp_id = MBEDTLS_ECP_DP_SECP256R1,
+            .efuse_block = efuse_block_id,
+        };
+        if (esp_ecdsa_set_pk_context(&pk, &pk_conf) != 0) {
+            ESP_LOGE(TAG, "Failed to set ECDSA context");
+            esp_ret = ESP_FAIL;
+            goto exit;
+        }
+        ESP_LOGI(TAG, "Successfully set ECDSA key context");
+#endif
     } else {
-        ESP_LOGI(TAG, "Successfully parsed the key");
+#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
+        ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0);
+#else
+        ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
+#endif
+        if (ret != 0) {
+            ESP_LOGE(TAG, "Failed to parse the key");
+            esp_ret = ESP_FAIL;
+            goto exit;
+        } else {
+            ESP_LOGI(TAG, "Successfully parsed the key");
+        }
     }
 
     static uint32_t hash[8] = {[0 ... 7] = 0xAABBCCDD};

@@ -9,9 +9,9 @@ from esp_secure_cert import nvs_format, custflash_format
 from esp_secure_cert import configure_ds, tlv_format
 from esp_secure_cert.efuse_helper import (
     log_efuse_summary,
-    configure_efuse_key_block
+    configure_efuse_key_block,
 )
-
+from esp_secure_cert.esp_secure_cert_helper import convert_der_key_to_pem
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):
     raise Exception('IDF_PATH not found')
@@ -45,9 +45,9 @@ def flash_esp_secure_cert_partition(idf_path, idf_target,
           .format(sec_cert_part_offset))
     print('Note: You can skip this step by providing --skip_flash argument')
     flash_command = f"python {idf_path}/components/esptool_py/" + \
-                    f"esptool/esptool.py --chip {idf_target} " + \
-                    f"-p {port} write_flash " + \
-                    f" {sec_cert_part_offset} {flash_filename}"
+        f"esptool/esptool.py --chip {idf_target} " + \
+        f"-p {port} write_flash " + \
+        f" {sec_cert_part_offset} {flash_filename}"
     try:
         flash_command_output = subprocess.check_output(
             flash_command,
@@ -272,15 +272,24 @@ def main():
             ecdsa_key = configure_ds.get_ecdsa_key_bytes(args.privkey,
                                                          args.priv_key_pass,
                                                          expected_key_len)
-            if not os.path.exists(ecdsa_key_file):
-                with open(ecdsa_key_file, "wb+") as key_file:
-                    key_file.write(ecdsa_key)
-            efuse_key_file = ecdsa_key_file
-            efuse_purpose = 'ECDSA_KEY'
+
+            with open(ecdsa_key_file, "wb+") as key_file:
+                key_file.write(ecdsa_key)
+
+            temp_ecdsa_key_file = os.path.join(esp_secure_cert_data_dir,
+                                               'temp_ecdsa_key.pem')
             try:
+                pem_key = convert_der_key_to_pem(args.privkey)
+
+                with open(temp_ecdsa_key_file, "wb+") as key_file:
+                    key_file.write(pem_key)
+
+                efuse_key_file = temp_ecdsa_key_file
+                efuse_purpose = 'ECDSA_KEY'
+
                 configure_efuse_key_block(idf_path, idf_target,
                                           args.port,
-                                          args.privkey,
+                                          efuse_key_file,
                                           args.efuse_key_id,
                                           efuse_purpose)
             except OSError:
@@ -288,7 +297,9 @@ def main():
                       ' must be >= v4.6, Please make sure the '
                       'requirement is satisfied')
                 raise
-
+            finally:
+                if os.path.exists(temp_ecdsa_key_file):
+                    os.remove(temp_ecdsa_key_file)
         else:
             raise ValueError('Invalid priv key algorithm '
                              f'{args.priv_key_algo[0]}')
