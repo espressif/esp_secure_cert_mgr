@@ -11,7 +11,6 @@ from esp_secure_cert.efuse_helper import (
     log_efuse_summary,
     configure_efuse_key_block,
 )
-from esp_secure_cert.esp_secure_cert_helper import convert_der_key_to_pem
 idf_path = os.getenv('IDF_PATH')
 if not idf_path or not os.path.exists(idf_path):
     raise Exception('IDF_PATH not found')
@@ -217,89 +216,17 @@ def main():
 
     if args.configure_ds is not False:
         if args.priv_key_algo[0] == 'RSA':
-            sign_algo = args.priv_key_algo[0]
-            sign_algo_key_size = args.priv_key_algo[1]
-            configure_ds.validate_ds_algorithm(sign_algo,
-                                               sign_algo_key_size,
-                                               idf_target)
-
-            # Burn hmac_key on the efuse block (if it is empty) or read it
-            # from the efuse block (if the efuse block already contains a key).
-            efuse_purpose = 'HMAC_DOWN_DIGITAL_SIGNATURE'
             efuse_key_file = args.efuse_key_file
-            hmac_key = None
-            if (args.efuse_key_file is None
-                    or not os.path.exists(efuse_key_file)):
-                if not os.path.exists(hmac_key_file):
-                    hmac_key = os.urandom(32)
-                    with open(hmac_key_file, "wb+") as key_file:
-                        key_file.write(hmac_key)
-
-                efuse_key_file = hmac_key_file
-            else:
-                with open(efuse_key_file, "rb") as key_file:
-                    hmac_key = key_file.read()
-
-                print(f'Using the eFuse key given at {args.efuse_key_file}'
-                      'as the HMAC key')
-
-            configure_efuse_key_block(idf_path,
-                                      idf_target,
-                                      args.port,
-                                      efuse_key_file,
-                                      args.efuse_key_id,
-                                      efuse_purpose)
-
-            with open(efuse_key_file, "rb") as key_file:
-                hmac_key = key_file.read()
-
+            hmac_key =  configure_ds.configure_efuse_for_rsa(idf_target, args.port, hmac_key_file, efuse_key_file, args.priv_key_algo[1], args.privkey, args.priv_key_pass, args.efuse_key_id)
             # Calculate the encrypted private key data along
             # with all other parameters
             c, iv, key_size = configure_ds.calculate_rsa_ds_params(args.privkey,  # type: ignore # noqa: E501
                                                                    args.priv_key_pass,  # type: ignore # noqa: E501
                                                                    hmac_key,
                                                                    idf_target)
-
         elif args.priv_key_algo[0] == 'ECDSA':
-            sign_algo = args.priv_key_algo[0]
-            sign_algo_key_size = args.priv_key_algo[1]
-            configure_ds.validate_ds_algorithm(sign_algo,
-                                               sign_algo_key_size,
-                                               idf_target)
-
-            # efuse key length
-            expected_key_len = 32
-            ecdsa_key = configure_ds.get_ecdsa_key_bytes(args.privkey,
-                                                         args.priv_key_pass,
-                                                         expected_key_len)
-
-            with open(ecdsa_key_file, "wb+") as key_file:
-                key_file.write(ecdsa_key)
-
-            temp_ecdsa_key_file = os.path.join(esp_secure_cert_data_dir,
-                                               'temp_ecdsa_key.pem')
-            try:
-                pem_key = convert_der_key_to_pem(args.privkey)
-
-                with open(temp_ecdsa_key_file, "wb+") as key_file:
-                    key_file.write(pem_key)
-
-                efuse_key_file = temp_ecdsa_key_file
-                efuse_purpose = 'ECDSA_KEY'
-
-                configure_efuse_key_block(idf_path, idf_target,
-                                          args.port,
-                                          efuse_key_file,
-                                          args.efuse_key_id,
-                                          efuse_purpose)
-            except OSError:
-                print('Hint: For ECDSA peripheral esptool version'
-                      ' must be >= v4.6, Please make sure the '
-                      'requirement is satisfied')
-                raise
-            finally:
-                if os.path.exists(temp_ecdsa_key_file):
-                    os.remove(temp_ecdsa_key_file)
+            efuse_key_file = args.efuse_key_file
+            configure_ds.configure_efuse_for_ecdsa(idf_target, args.port, ecdsa_key_file, efuse_key_file, esp_secure_cert_data_dir, args.priv_key_algo[1], args.privkey, args.priv_key_pass, args.efuse_key_id)
         else:
             raise ValueError('Invalid priv key algorithm '
                              f'{args.priv_key_algo[0]}')
