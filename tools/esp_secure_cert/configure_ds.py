@@ -27,11 +27,6 @@ supported_targets_ecdsa = ['esp32h2', 'esp32p4']
 supported_key_size_ecdsa = {'esp32h2': [256],
                             'esp32p4': [256]}
 
-idf_path = os.getenv('IDF_PATH')
-if not idf_path or not os.path.exists(idf_path):
-    raise Exception('IDF_PATH not found')
-
-
 def number_as_bytes(number, pad_bits=None):
     """
     Given a number, format as a little endian array of bytes
@@ -200,7 +195,7 @@ def configure_efuse_for_rsa(idf_target, port, hmac_key_file, efuse_key_file, rsa
         print(f'Using the eFuse key given at {args.efuse_key_file}'
                       'as the HMAC key')
 
-    configure_efuse_key_block(idf_path, idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
+    configure_efuse_key_block(idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
 
     with open(efuse_key_file, "rb") as key_file:
         hmac_key = key_file.read()
@@ -229,7 +224,7 @@ def configure_efuse_for_ecdsa(idf_target, port, ecdsa_key_file, efuse_key_file, 
            efuse_key_file = temp_ecdsa_key_file
            efuse_purpose = 'ECDSA_KEY'
 
-           configure_efuse_key_block(idf_path, idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
+           configure_efuse_key_block(idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
         except OSError:
                 print('Hint: For ECDSA peripheral esptool version'
                       ' must be >= v4.6, Please make sure the '
