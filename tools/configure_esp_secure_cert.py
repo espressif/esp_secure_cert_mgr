@@ -11,9 +11,6 @@ from esp_secure_cert.efuse_helper import (
     log_efuse_summary,
     configure_efuse_key_block,
 )
-idf_path = os.getenv('IDF_PATH')
-if not idf_path or not os.path.exists(idf_path):
-    raise Exception('IDF_PATH not found')
 
 # Check python version is proper or not to avoid script failure
 assert sys.version_info >= (3, 6, 0), 'Python version too low.'
@@ -37,14 +34,13 @@ supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
 # @info
 # The partition shall be flashed at the offset provided
 # for the --sec_cert_part_offset option
-def flash_esp_secure_cert_partition(idf_path, idf_target,
+def flash_esp_secure_cert_partition(idf_target,
                                     port, sec_cert_part_offset,
                                     flash_filename):
     print('Flashing the esp_secure_cert partition at {0} offset'
           .format(sec_cert_part_offset))
     print('Note: You can skip this step by providing --skip_flash argument')
-    flash_command = f"python {idf_path}/components/esptool_py/" + \
-        f"esptool/esptool.py --chip {idf_target} " + \
+    flash_command = f"esptool.py --chip {idf_target} " + \
         f"-p {port} write_flash " + \
         f" {sec_cert_part_offset} {flash_filename}"
     try:
@@ -191,7 +187,7 @@ def main():
     idf_target = str(idf_target)
 
     if args.summary is not False:
-        log_efuse_summary(idf_path, idf_target,  args.port)
+        log_efuse_summary(idf_target, args.port)
         sys.exit(0)
 
     if (os.path.exists(args.privkey) is False):
@@ -296,7 +292,7 @@ def main():
         nvs_format.generate_partition(csv_filename, bin_filename)
 
     if args.skip_flash is False:
-        flash_esp_secure_cert_partition(idf_path, idf_target,
+        flash_esp_secure_cert_partition(idf_target,
                                         args.port,
                                         args.sec_cert_part_offset,
                                         bin_filename)
