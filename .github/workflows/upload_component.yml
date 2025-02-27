@@ -7,7 +7,7 @@ on:
 
 jobs:
   upload_components:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # 22.04 is the last version with Python 3.7
     steps:
       - uses: actions/checkout@v2
 
