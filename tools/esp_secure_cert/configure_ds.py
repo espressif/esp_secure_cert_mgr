@@ -192,7 +192,7 @@ def configure_efuse_for_rsa(idf_target, port, hmac_key_file, efuse_key_file, rsa
         with open(efuse_key_file, "rb") as key_file:
             hmac_key = key_file.read()
 
-        print(f'Using the eFuse key given at {args.efuse_key_file}'
+        print(f'Using the eFuse key given at {efuse_key_file}'
                       'as the HMAC key')
 
     configure_efuse_key_block(idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
