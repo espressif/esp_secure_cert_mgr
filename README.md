@@ -46,6 +46,10 @@ When the device is pre-provisioned with help of the DS peripheral then by defaul
 
 As listed above, the data only contains the public certificates and the encrypted private key and hence it is completely secure in itself. There is no need to further encrypt this data with any additional security algorithm.
 
+## Trying Out the `esp_secure_cert` Tool
+
+The `esp_secure_cert` tool provides a convenient way to generate the `esp_secure_cert` partition for your ESP device, including support for advanced use cases such as Digital Signature (DS) peripheral and custom partition layouts. You can use the tool to create the partition from a CSV configuration file, and test the process using `QEMU` (an emulator) before flashing to real hardware.
+
 ### Partition Format
 
 The *esp_secure_cert* partition uses TLV format by default. Please take a look at the [format document](https://github.com/espressif/esp_secure_cert_mgr/tree/main/docs/format.md) for more details.

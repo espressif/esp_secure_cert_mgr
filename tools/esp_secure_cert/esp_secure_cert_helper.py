@@ -6,6 +6,10 @@ from cryptography.x509 import (
     load_der_x509_certificate
 )
 
+import os
+
+
+esp_secure_cert_data_dir = 'esp_secure_cert_data'
 
 def load_private_key(key_file_path: str,
                      password: str = None) -> Dict[str, str]:
@@ -169,3 +173,45 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
     except ValueError:
         raise ValueError("Unsupported certificate encoding format,"
                          "Please provide PEM or DER encoded certificate")
+
+def get_efuse_key_file(efuse_key_spec):
+    """
+    Get efuse key file path:
+    - None or empty: return None (auto-generate)
+    - file path: return path if exists
+    - otherwise: return None (auto-generate)
+    """
+    if not efuse_key_spec:
+        return None
+    
+    if os.path.exists(efuse_key_spec):
+        print(f"Using custom efuse key file: {efuse_key_spec}")
+        return efuse_key_spec
+    else:
+        print(f"Warning: efuse key file '{efuse_key_spec}' not found, using auto-generated key")
+        return None
+
+def _write_data_to_temp_file(data, data_type_prefix, tlv_type, text_mode=True, convert_newlines=False):
+    """
+    Helper function to write data to a temporary file for certificate/key processing
+    
+    Args:
+        data: The data to write (str or bytes)
+        data_type_prefix: Prefix for the temp file name (e.g., 'string', 'hex', 'b64')
+        tlv_type: TLV type number for unique naming
+        text_mode: True for text mode ('w'), False for binary mode ('wb')
+        convert_newlines: True to convert \\n to actual newlines
+    
+    Returns:
+        str: Path to the created temporary file
+    """
+    temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_{data_type_prefix}_{tlv_type}_{hash(str(data)) % 10000}.pem')
+    os.makedirs(esp_secure_cert_data_dir, exist_ok=True)
+    
+    mode = 'w' if text_mode else 'wb'
+    with open(temp_file, mode) as f:
+        if convert_newlines and isinstance(data, str):
+            data = data.replace('\\n', '\n')
+        f.write(data)
+    
+    return temp_file

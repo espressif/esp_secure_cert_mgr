@@ -31,6 +31,114 @@ openssl x509 -req -days 365 -in client.csr -CA cacert.pem -CAkey prvtkey.pem  -s
 ```
 
 # Generate `esp_secure_cert` partition
+
+## 1. Creating `esp_secure_cert` partition using CSV file
+
+You can create an `esp_secure_cert` partition using a CSV file that lists all certificates, keys, and custom data you want to include. The CSV format makes it easy to specify what goes into the partition, including support for advanced features like DS/ECDSA peripherals and custom TLV entries.
+
+For details on the CSV format and examples, see [docs/esp_secure_cert_tools/configure_esp_secure_cert_csv.md](../docs/esp_secure_cert_tools/configure_esp_secure_cert_csv.md).
+
+> **NOTE:** Before creating the `esp_secure_cert` partition on actual hardware, it is recommended to first test your configuration and process using `QEMU` (the ESP32 emulator). This allows you to validate your CSV, partition generation, and flashing workflow in a safe environment before applying changes to real hardware.
+
+### Generate `esp_secure_cert` partition using QEMU
+
+QEMU is a free, open-source emulator that lets you run and test software for different hardware platforms on your computer, without needing the actual device. Currently, QEMU supports ESP32, ESP32C3, and ESP32S3. For more information, refer to https://github.com/espressif/esp-toolchain-docs/blob/main/README.md
+
+1. Set the target:
+```
+cd examples/esp_secure_cert_app
+idf.py set-target <target>
+```
+
+2. Modify the sdkconfig file according to requirement and build the application:
+```
+idf.py build
+```
+
+3. Create the `qemu_flash.bin` and `qemu_efuse.bin`, which emulate the application and efuse:
+```
+cd build
+esptool.py --chip esp32c3 merge_bin --fill-flash-size 4MB -o flash_image.bin @flash_args
+```
+
+- For efuse, create efuse, create `efuse.hex` and copy the following data into it:
+```
+000000000000000000000000000000000000000000000000000000000000
+00000000000000000c000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000000000000000
+00000000
+```
+- Convert this `.hex` into `.bin` using `xxd -p`
+```
+xxd -r -p efuse.hex qemu_efuse.bin
+```
+
+
+4. Start the `qemu` as server (Download mode), which listen on TCP port `socket://localhost:5555`:
+```
+qemu-system-riscv32 -nographic \
+    -machine esp32c3 \
+    -drive file=flash_image.bin,if=mtd,format=raw \
+    -global driver=esp32c3.gpio,property=strap_mode,value=0x02 \
+    -drive file=qemu_efuse.bin,if=none,format=raw,id=efuse \
+    -global driver=nvram.esp32c3.efuse,property=drive,value=efuse \
+    -serial tcp::5555,server,nowait
+```
+
+5. Create the `esp_secure_cert.bin` file:
+```
+../../tools/configure_esp_secure_cert.py --esp_secure_cert_csv esp_secure_cert_config_examples.csv --port socket://localhost:5555 --target_chip esp32c3 --skip_flash
+```
+- If required then `BURN` the efuse.
+
+6. Flash the `esp_secure_cert.bin` on device with TCP port `socket://localhost:5555`
+```
+esptool.py --before no_reset --no-stub --after no_reset --chip esp32c3 -p socket://localhost:5555 write_flash 0xD000 esp_secure_cert_data/esp_secure_cert.bin
+```
+
+7. Exit from the `Download Mode` and start with `Boot Mode`:
+```
+qemu-system-riscv32 -nographic \
+    -machine esp32c3 \
+    -drive file=flash_image.bin,if=mtd,format=raw \
+    -global driver=esp32c3.gpio,property=strap_mode,value=0x08 \
+    -drive file=qemu_efuse.bin,if=none,format=raw,id=efuse \
+    -global driver=nvram.esp32c3.efuse,property=drive,value=efuse \
+```
+
+## 2. Creating `esp_secure_cert` parition without using CSV:
+
 Following commands can be used to configure the DS peripheral and generate the `esp_secure_cert` partition.
 The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
 
