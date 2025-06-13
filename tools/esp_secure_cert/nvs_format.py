@@ -18,7 +18,8 @@ def generate_csv_file_ds(c, iv, hmac_key_id, key_size,
         if ca_cert is not None:
             f.write('ca_cert,file,string,{}\n'.format(ca_cert))
         f.write('cipher_c,data,hex2bin,{}\n'.format(c.hex()))
-        f.write('dev_cert,file,string,{}\n'.format(device_cert))
+        if device_cert is not None:
+            f.write('dev_cert,file,string,{}\n'.format(device_cert))
         f.write('rsa_len,data,u16,{}\n'.format(key_size))
         f.write('ds_key_id,data,u8,{}\n'.format(hmac_key_id))
         f.write('iv,data,hex2bin,{}\n'.format(iv.hex()))

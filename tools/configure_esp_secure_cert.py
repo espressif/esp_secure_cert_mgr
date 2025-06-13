@@ -86,7 +86,7 @@ def main():
     parser.add_argument(
         '--device-cert',
         dest='device_cert',
-        default='client.crt',
+        default=None,
         metavar='relative/path/to/device-cert',
         help='relative path to device/client certificate '
              '(which contains the public part of the client private key) ')
@@ -194,9 +194,10 @@ def main():
         print('ERROR: The provided private key file does not exist')
         sys.exit(-1)
 
-    if (os.path.exists(args.device_cert) is False):
-        print('ERROR: The provided client cert file does not exist')
-        sys.exit(-1)
+    if (args.device_cert is not None):
+        if (os.path.exists(args.device_cert) is False):
+            print('ERROR: The provided client cert file does not exist')
+            sys.exit(-1)
 
     if (os.path.exists(esp_secure_cert_data_dir) is False):
         os.makedirs(esp_secure_cert_data_dir)
