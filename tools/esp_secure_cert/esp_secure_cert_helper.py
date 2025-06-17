@@ -138,6 +138,11 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
     """
     result = {}
 
+    if (cert_file_path is None):
+        result["encoding"] = None
+        result["bytes"] = b''
+        return result
+
     try:
         with open(cert_file_path, "rb") as cert_file:
             cert_data = cert_file.read()

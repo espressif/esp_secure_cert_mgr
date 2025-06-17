@@ -75,6 +75,8 @@ def _get_tlv_header_key_info_byte(key_type):
 
 
 def prepare_tlv(tlv_type, tlv_type_info, data, data_len):
+    if data_len == 0:
+        return b''
     # Add the magic at start ( unsigned int )
     tlv_header = struct.pack('<I', 0xBA5EBA11)
     # Reserved bytes in TLV header ( 4 bytes)
@@ -117,7 +119,7 @@ def generate_partition_rsa_ds(ciphertext, iv, efuse_key_id, rsa_key_len,
         dev_cert_data = load_certificate(device_cert)
 
         # Write dev cert at specific address
-        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+        if dev_cert_data.get("encoding") == serialization.Encoding.PEM.value:
             dev_cert = dev_cert_data["bytes"] + b'\0'
         else:
             dev_cert = dev_cert_data["bytes"]
