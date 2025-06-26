@@ -205,7 +205,11 @@ def _write_data_to_temp_file(data, data_type_prefix, tlv_type, text_mode=True, c
     Returns:
         str: Path to the created temporary file
     """
-    temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_{data_type_prefix}_{tlv_type}_{hash(str(data)) % 10000}.pem')
+    temp_file = None
+    if text_mode:
+        temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_{data_type_prefix}_{tlv_type}_{hash(str(data)) % 10000}.pem')
+    else:
+        temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_{data_type_prefix}_{tlv_type}_{hash(str(data)) % 10000}.der')
     os.makedirs(esp_secure_cert_data_dir, exist_ok=True)
     
     mode = 'w' if text_mode else 'wb'

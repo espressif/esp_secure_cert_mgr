@@ -32,7 +32,7 @@ openssl x509 -req -days 365 -in client.csr -CA cacert.pem -CAkey prvtkey.pem  -s
 
 # Generate `esp_secure_cert` partition
 
-## 1. Creating `esp_secure_cert` partition using CSV file
+## 1. Generating `esp_secure_cert` partition using CSV file
 
 You can create an `esp_secure_cert` partition using a CSV file that lists all certificates, keys, and custom data you want to include. The CSV format makes it easy to specify what goes into the partition, including support for advanced features like DS/ECDSA peripherals and custom TLV entries.
 
@@ -40,7 +40,46 @@ For details on the CSV format and examples, see [docs/esp_secure_cert_tools/conf
 
 > **NOTE:** Before creating the `esp_secure_cert` partition on actual hardware, it is recommended to first test your configuration and process using `QEMU` (the ESP32 emulator). This allows you to validate your CSV, partition generation, and flashing workflow in a safe environment before applying changes to real hardware.
 
-### Generate `esp_secure_cert` partition using QEMU
+## 2. Creating `esp_secure_cert` partition without using CSV:
+
+Following commands can be used to configure the DS peripheral and generate the `esp_secure_cert` partition.
+The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
+
+* When configuring the DS peripheral, by default the configuration script does not enable the read protection for the efuse key block in which the DS key is programmed. This is done for allowing flexibility while using the script for development purpose.
+
+* Please remove the `--configure_ds` argument from these commands if use of the DS peripheral is disabled in the menu config.
+> **WARNING**: This is not recommended for production purpose as the private key shall be stored as plaintext.
+
+### Generate `esp_secure_cert` partition of type `cust_flash_tlv`:
+
+This command shall generate a binary partition containing the PKI credentials stored in the TLV format and flash it at the default offset of `0xD000`.
+
+```
+configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash_tlv --configure_ds
+```
+
+* When [Flash Encryption](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html) is enabled for the device, the option ``--skip_flash`` (explained below) can be used to prevent the flashing opereation and only save the `esp_secure_cert.bin` on the host machine. It can then be flashed on the target using below command:
+
+	```esptool.py -p /* Serial Port*/ write_flash 0xD000 esp_secure_cert.bin --encrypt```
+
+	More details regarding [esptool.py](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/index.html#esptool-py) utility can be found [here](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/index.html).
+
+    Note: This is only applicable for [Development mode](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html#flash-enc-development-mode) of Flash Encryption.
+
+### Legacy partition formats:
+
+1. Generate `esp_secure_cert` partition of type `cust_flash`:
+
+```
+configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash --configure_ds
+```
+
+2. Generate `esp_secure_cert` partition of type `nvs`:
+```
+configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type nvs --configure_ds
+```
+
+# Test `esp_secure_cert` partition using QEMU
 
 QEMU is a free, open-source emulator that lets you run and test software for different hardware platforms on your computer, without needing the actual device. Currently, QEMU supports ESP32, ESP32C3, and ESP32S3. For more information, refer to https://github.com/espressif/esp-toolchain-docs/blob/main/README.md
 
@@ -135,45 +174,6 @@ qemu-system-riscv32 -nographic \
     -global driver=esp32c3.gpio,property=strap_mode,value=0x08 \
     -drive file=qemu_efuse.bin,if=none,format=raw,id=efuse \
     -global driver=nvram.esp32c3.efuse,property=drive,value=efuse \
-```
-
-## 2. Creating `esp_secure_cert` parition without using CSV:
-
-Following commands can be used to configure the DS peripheral and generate the `esp_secure_cert` partition.
-The script can generate `cust_flash` as well as `nvs` type of `esp_secure_cert` partition. Please refer [upper level README](../README.md) for more details about type of partitions.
-
-* When configuring the DS peripheral, by default the configuration script does not enable the read protection for the efuse key block in which the DS key is programmed. This is done for allowing flexibility while using the script for development purpose.
-
-* Please remove the `--configure_ds` argument from these commands if use of the DS peripheral is disabled in the menu config.
-> **WARNING**: This is not recommended for production purpose as the private key shall be stored as plaintext.
-
-## Generate `esp_secure_cert` partition of type `cust_flash_tlv`:
-
-This command shall generate a binary partition containing the PKI credentials stored in the TLV format and flash it at the default offset of `0xD000`.
-
-```
-configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash_tlv --configure_ds
-```
-
-* When [Flash Encryption](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html) is enabled for the device, the option ``--skip_flash`` (explained below) can be used to prevent the flashing opereation and only save the `esp_secure_cert.bin` on the host machine. It can then be flashed on the target using below command:
-
-	```esptool.py -p /* Serial Port*/ write_flash 0xD000 esp_secure_cert.bin --encrypt```
-
-	More details regarding [esptool.py](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/index.html#esptool-py) utility can be found [here](https://docs.espressif.com/projects/esptool/en/latest/esp32/esptool/index.html).
-
-    Note: This is only applicable for [Development mode](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html#flash-enc-development-mode) of Flash Encryption.
-
-## Legacy partition formats:
-
-1. Generate `esp_secure_cert` partition of type `cust_flash`:
-
-```
-configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type cust_flash --configure_ds
-```
-
-2. Generate `esp_secure_cert` partition of type `nvs`:
-```
-configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse_key_id 1 --ca-cert cacert.pem --device-cert client.crt --private-key client.key --target_chip /* target chip */ --secure_cert_type nvs --configure_ds
 ```
 
 ## Additional options for the utility

@@ -1,5 +1,4 @@
-# ESP Secure Certificate Configuration - Enhanced Format Examples
-# Format: tlv_type,tlv_subtype,data_value,data_type,priv_key_type,algorithm,key_size,efuse_id,efuse_key
+tlv_type,tlv_subtype,data_value,data_type,priv_key_type,algorithm,key_size,efuse_id,efuse_key
 ESP_SECURE_CERT_CA_CERT_TLV,0,cacert.pem,file,,,,,
 ESP_SECURE_CERT_CA_CERT_TLV,1,cacert.pem,file,,,,,
 ESP_SECURE_CERT_DEV_CERT_TLV,0,client.crt,file,,,,,
