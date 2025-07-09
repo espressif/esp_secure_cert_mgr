@@ -5,11 +5,14 @@ import argparse
 import os
 import subprocess
 import sys
+import csv
 from esp_secure_cert import nvs_format, custflash_format
-from esp_secure_cert import configure_ds, tlv_format
+from esp_secure_cert import tlv_format
+from esp_secure_cert.tlv_format_construct import (
+    EspSecureCert
+)
 from esp_secure_cert.efuse_helper import (
     log_efuse_summary,
-    configure_efuse_key_block,
 )
 
 # Check python version is proper or not to avoid script failure
@@ -27,33 +30,6 @@ bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
 supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
                      'esp32c6', 'esp32h2', 'esp32p4'}
-
-
-# Flash esp_secure_cert partition after its generation
-#
-# @info
-# The partition shall be flashed at the offset provided
-# for the --sec_cert_part_offset option
-def flash_esp_secure_cert_partition(idf_target,
-                                    port, sec_cert_part_offset,
-                                    flash_filename):
-    print('Flashing the esp_secure_cert partition at {0} offset'
-          .format(sec_cert_part_offset))
-    print('Note: You can skip this step by providing --skip_flash argument')
-    flash_command = f"esptool.py --chip {idf_target} " + \
-        f"-p {port} write_flash " + \
-        f" {sec_cert_part_offset} {flash_filename}"
-    try:
-        flash_command_output = subprocess.check_output(
-            flash_command,
-            shell=True
-        )
-        print(flash_command_output.decode('utf-8'))
-    except subprocess.CalledProcessError as e:
-        print(e.output.decode("utf-8"))
-        print('ERROR: Failed to execute the flash command')
-        sys.exit(-1)
-
 
 def cleanup(args):
     if args.keep_ds_data is False:
@@ -73,7 +49,7 @@ def main():
     parser.add_argument(
         '--private-key',
         dest='privkey',
-        default='client.key',
+        default=None,
         metavar='relative/path/to/client-priv-key',
         help='relative path to client private key')
 
@@ -94,7 +70,7 @@ def main():
     parser.add_argument(
         '--ca-cert',
         dest='ca_cert',
-        default='ca.crt',
+        default=None,
         metavar='relative/path/to/ca-cert',
         help='relative path to ca certificate which '
              'has been used to sign the client certificate')
@@ -138,7 +114,7 @@ def main():
         '--efuse_key_id',
         dest='efuse_key_id', type=int, choices=range(0, 6),
         metavar='[key_id] ',
-        default=1,
+        default=None,
         help='Provide the efuse key_id which '
              'contains/will contain HMAC_KEY, default is 1')
 
@@ -153,7 +129,7 @@ def main():
         '--port', '-p',
         dest='port',
         metavar='[port]',
-        required=True,
+        required=False,
         help='UART com port to which the ESP device is connected')
 
     parser.add_argument(
@@ -173,8 +149,14 @@ def main():
         '--priv_key_algo',
         help='Signing algorithm used by the private key '
              ', e.g. RSA 2048, ECDSA 256',
-        nargs=2, required=True,
+        nargs=2, required=False,
         metavar='[sign algorithm, key size]')
+
+    parser.add_argument(
+        '--esp_secure_cert_csv',
+        dest='esp_secure_cert_csv',
+        metavar='[/path/to/esp_secure_cert_config.csv]',
+        help='CSV file containing ESP Secure Cert contents (TLV entries, custom data). ')
 
     args = parser.parse_args()
 
@@ -190,83 +172,78 @@ def main():
         log_efuse_summary(idf_target, args.port)
         sys.exit(0)
 
-    if (os.path.exists(args.privkey) is False):
+    if (args.privkey is not None and os.path.exists(args.privkey) is False):
         print('ERROR: The provided private key file does not exist')
         sys.exit(-1)
 
-    if (args.device_cert is not None):
-        if (os.path.exists(args.device_cert) is False):
-            print('ERROR: The provided client cert file does not exist')
-            sys.exit(-1)
+    if (args.device_cert is not None and os.path.exists(args.device_cert) is False):
+        print('ERROR: The provided client cert file does not exist')
+        sys.exit(-1)
+
+    if (args.ca_cert is not None and os.path.exists(args.ca_cert) is False):
+        print('ERROR: The provided ca cert file does not exist')
+        sys.exit(-1)
 
     if (os.path.exists(esp_secure_cert_data_dir) is False):
         os.makedirs(esp_secure_cert_data_dir)
-
-    # Provide CA cert path only if it exists
-    ca_cert = None
-    if (os.path.exists(args.ca_cert) is True):
-        ca_cert = os.path.abspath(args.ca_cert)
 
     c = None
     iv = None
     key_size = None
 
-    if args.configure_ds is not False:
-        if args.priv_key_algo[0] == 'RSA':
-            efuse_key_file = args.efuse_key_file
-            hmac_key =  configure_ds.configure_efuse_for_rsa(idf_target, args.port, hmac_key_file, efuse_key_file, args.priv_key_algo[1], args.privkey, args.priv_key_pass, args.efuse_key_id)
-            # Calculate the encrypted private key data along
-            # with all other parameters
-            c, iv, key_size = configure_ds.calculate_rsa_ds_params(args.privkey,  # type: ignore # noqa: E501
-                                                                   args.priv_key_pass,  # type: ignore # noqa: E501
-                                                                   hmac_key,
-                                                                   idf_target)
-        elif args.priv_key_algo[0] == 'ECDSA':
-            efuse_key_file = args.efuse_key_file
-            configure_ds.configure_efuse_for_ecdsa(idf_target, args.port, ecdsa_key_file, efuse_key_file, esp_secure_cert_data_dir, args.priv_key_algo[1], args.privkey, args.priv_key_pass, args.efuse_key_id)
-        else:
-            raise ValueError('Invalid priv key algorithm '
-                             f'{args.priv_key_algo[0]}')
-
-    else:
-        print('--configure_ds option not set. '
-              'Configuring without use of DS peripheral.')
-        print('WARNING: Not Secure.\n'
-              'the private shall be stored as plaintext')
-
     if args.sec_cert_type == 'cust_flash_tlv':
-        key_type = tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY  # type: ignore # noqa: E501
-        tlv_priv_key = tlv_format.tlv_priv_key_t(key_type,
-                                                 args.privkey,
-                                                 args.priv_key_pass)
+        # Create entry for CA certificate (if provided)
+        if args.ca_cert is not None:
+            entry_ca = {
+                'tlv_type': tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV,
+                'tlv_subtype': 0,
+                'data_value': os.path.abspath(args.ca_cert),
+                'data_type': 'file',
+            }
+            EspSecureCert.add_entry(entry_ca)
 
+        # Create entry for device certificate
+        if args.device_cert is not None:
+            entry_dev = {
+                'tlv_type': tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV,
+                'tlv_subtype': 0,
+                'data_value': os.path.abspath(args.device_cert),
+                'data_type': 'file',
+            }
+            EspSecureCert.add_entry(entry_dev)
+
+        # Create entry for private key
+        priv_key_type = 'plaintext'
         if args.configure_ds is not False:
             if args.priv_key_algo[0] == 'RSA':
-                tlv_priv_key.key_type = tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_RSA_DS_PERIPHERAL_KEY  # type: ignore # noqa: E501
-                tlv_priv_key.ciphertext = c
-                tlv_priv_key.iv = iv
-                tlv_priv_key.efuse_key_id = args.efuse_key_id
-                tlv_priv_key.priv_key_len = key_size
+                priv_key_type = 'rsa_ds'
+            elif args.priv_key_algo[0] == 'ECDSA':
+                priv_key_type = 'ecdsa_peripheral'
 
-                tlv_format.generate_partition_ds(tlv_priv_key,
-                                                 args.device_cert,
-                                                 ca_cert, idf_target,
-                                                 bin_filename)
-            if args.priv_key_algo[0] == 'ECDSA':
-                tlv_priv_key.key_type = tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY  # type: ignore # noqa: E501
-                print('Generating ECDSA partition')
-                tlv_priv_key.efuse_key_id = args.efuse_key_id
-                priv_key_len = int(args.priv_key_algo[1], 10)
-                tlv_priv_key.priv_key_len = priv_key_len
-                tlv_format.generate_partition_ds(tlv_priv_key,
-                                                 args.device_cert,
-                                                 ca_cert, idf_target,
-                                                 bin_filename)
+        if args.privkey is not None:
+            entry_priv = {
+                'tlv_type': tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV,
+                'tlv_subtype': 1,
+                'data_value': os.path.abspath(args.privkey),
+                'data_type': 'file',
+                'priv_key_type': priv_key_type,
+                'algorithm': args.priv_key_algo[0].upper() if args.priv_key_algo else '',
+                'key_size': int(args.priv_key_algo[1]) if args.priv_key_algo and len(args.priv_key_algo) > 1 else 0,
+                'efuse_id': args.efuse_key_id if hasattr(args, 'efuse_key_id') else 0,
+                'efuse_key': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None,
+            }
+            EspSecureCert.add_entry(entry_priv)
+
+        if args.esp_secure_cert_csv is not None:
+            EspSecureCert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
+
+        bin_filename = EspSecureCert.generate_esp_secure_cert(args.target_chip, args.port)
+        if not args.skip_flash:
+            EspSecureCert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
         else:
-            tlv_format.generate_partition_no_ds(tlv_priv_key,
-                                                args.device_cert,
-                                                ca_cert, idf_target,
-                                                bin_filename)
+            print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {bin_filename}')
+        return
+
     elif args.sec_cert_type == 'cust_flash':
         if args.configure_ds is not False:
             custflash_format.generate_partition_ds(c, iv, args.efuse_key_id,
@@ -293,13 +270,12 @@ def main():
         nvs_format.generate_partition(csv_filename, bin_filename)
 
     if args.skip_flash is False:
-        flash_esp_secure_cert_partition(idf_target,
-                                        args.port,
-                                        args.sec_cert_part_offset,
-                                        bin_filename)
+        EspSecureCert.flash_esp_secure_cert_partition(idf_target,
+                                                       args.port,
+                                                       args.sec_cert_part_offset,
+                                                       bin_filename)
 
     cleanup(args)
-
 
 if __name__ == '__main__':
     main()
