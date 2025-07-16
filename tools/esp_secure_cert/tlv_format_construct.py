@@ -8,9 +8,12 @@ import enum
 import csv
 import os
 import sys
+import io
+import tlv_parser
 import zlib
 import struct
 import base64
+import shutil
 import subprocess
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional
@@ -72,6 +75,7 @@ class PrivKeyType(enum.IntEnum):
 MIN_ALIGNMENT_REQUIRED = 16
 TLV_MAGIC = 0xBA5EBA11
 PARTITION_SIZE = 0x2000  # 8KB
+MAGIC_END = 0xFFFF
 
 esp_secure_cert_data_dir = 'esp_secure_cert_data'
 # hmac_key_file is generated when HMAC_KEY is calculated,
@@ -583,9 +587,17 @@ class EspSecureCert:
                             with open(processed_data, 'rb') as f:
                                 processed_data = f.read()
 
-                        print(f"  Adding direct data (subtype {tlv_subtype})")
-                        builder.add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
-                        processed_count += 1
+                        else:
+                            # If processed_data is a .bin file path, read its contents as bytes
+                            if isinstance(processed_data, str) and processed_data.lower().endswith('.bin') and os.path.isfile(processed_data):
+                                with open(processed_data, 'rb') as bin_f:
+                                    bin_data = bin_f.read()
+                                builder._add_tlv_entry(tlv_type, tlv_subtype, bin_data, 0)
+                                print(f"  Added binary data from {processed_data} (subtype {tlv_subtype})")
+                            else:
+                                builder._add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
+                                print(f"  Skipping unknown TLV type {tlv_type} (subtype {tlv_subtype})")
+                            processed_count += 1
 
                 except Exception as e:
                     print(f"Error processing entry {tlv_type}: {e}")
@@ -682,3 +694,336 @@ class EspSecureCert:
                     file_path = os.path.join(esp_secure_cert_data_dir, filename)
                     if os.path.isfile(file_path):
                         os.remove(file_path)
+
+    @staticmethod
+    def parse_esp_secure_cert_bin(bin_file_path):
+        """
+        Parse an esp_secure_cert.bin file and generate CSV from parsed data.
+        - CA/Device cert: extract, save as file, add row to CSV
+        - Custom data: add row to CSV, no file
+        - Private key:
+          - plaintext: extract, save as file, add row to CSV
+          - rsa_ds: add DS_DATA and DS_CONTEXT rows/files instead of priv key
+          - ecdsa_peripheral: add SEC_CFG row/file instead of priv key
+        All files are created in esp_secure_cert_parsed_data and referenced in the CSV.
+        Adds efuse_id, key_size, algorithm, priv_key_type if possible.
+        """
+        output_dir = 'esp_secure_cert_parsed_data'
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
+        os.makedirs(output_dir)
+
+        # Check if the file exists and is a .bin file
+        if not os.path.isfile(bin_file_path):
+            print(f"ERROR: The provided file '{bin_file_path}' does not exist or is not a file.")
+            sys.exit(-1)
+        if not bin_file_path.lower().endswith('.bin'):
+            print(f"ERROR: The provided file '{bin_file_path}' is not a .bin file.")
+            sys.exit(-1)
+        # Check if the file is not empty and has a valid TLV header
+        try:
+            with open(bin_file_path, 'rb') as f:
+                data = f.read()
+            if len(data) == 0:
+                print(f"ERROR: The provided .bin file '{bin_file_path}' is empty.")
+                sys.exit(-1)
+            # Check for valid TLV magic at the start
+            if len(data) < 4:
+                print(f"ERROR: The provided .bin file '{bin_file_path}' is too small to be a valid TLV partition.")
+                sys.exit(-1)
+            magic = int.from_bytes(data[0:4], 'little')
+
+            if magic != TLV_MAGIC:
+                print(f"ERROR: The provided .bin file '{bin_file_path}' does not have a valid TLV_MAGIC header (found 0x{magic:08X}).")
+                sys.exit(-1)
+        except Exception as e:
+            print(f"ERROR: Failed to read or validate the .bin file '{bin_file_path}': {e}")
+            sys.exit(-1)
+
+
+        # Parse TLV entries
+        tlv_entries = EspSecureCert._parse_tlv_entries_from_bin(bin_file_path)
+
+        # Check if any TLV entries were actually parsed
+        if not tlv_entries or len(tlv_entries) == 0:
+            print(f"ERROR: No valid TLV entries found in the provided .bin file '{bin_file_path}'.")
+            print("This file may not be a valid ESP Secure Cert partition or may be corrupted.")
+            sys.exit(-1)
+
+        # Group by type/subtype for lookup
+        entries_by_type = {}
+        for entry in tlv_entries:
+            t = entry['header']['type']
+            s = entry['header']['subtype']
+            if t not in entries_by_type:
+                entries_by_type[t] = {}
+            entries_by_type[t][s] = entry
+        # Prepare CSV rows
+        csv_rows = []
+
+        # Iterate and extract
+        for entry in tlv_entries:
+            t = entry['header']['type']
+            s = entry['header']['subtype']
+            data = entry['data']
+            # CA cert
+            if t == tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV:
+                fname = f"cacert_{t}_{s}.pem"
+                fpath = os.path.join(output_dir, fname)
+                if data.startswith(b'-----BEGIN CERTIFICATE-----'):
+                    with open(fpath, 'w') as f:
+                        f.write(data.rstrip(b'\x00').decode('utf-8'))
+                else:
+                    fname = f"cacert_{t}_{s}.der"
+                    fpath = os.path.join(output_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(data)
+                csv_rows.append({
+                    'tlv_type': 'ESP_SECURE_CERT_CA_CERT_TLV',
+                    'tlv_subtype': s,
+                    'data_value': fname,
+                    'data_type': 'file',
+                    'priv_key_type': '',
+                    'algorithm': '',
+                    'key_size': '',
+                    'efuse_id': '',
+                    'efuse_key': ''
+                })
+            # Device cert
+            elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV:
+                fname = f"devcert_{t}_{s}.pem"
+                fpath = os.path.join(output_dir, fname)
+                if data.startswith(b'-----BEGIN CERTIFICATE-----'):
+                    with open(fpath, 'w') as f:
+                        f.write(data.rstrip(b'\x00').decode('utf-8'))
+                else:
+                    fname = f"devcert_{t}_{s}.der"
+                    fpath = os.path.join(output_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(data)
+                csv_rows.append({
+                    'tlv_type': 'ESP_SECURE_CERT_DEV_CERT_TLV',
+                    'tlv_subtype': s,
+                    'data_value': fname,
+                    'data_type': 'file',
+                    'priv_key_type': '',
+                    'algorithm': '',
+                    'key_size': '',
+                    'efuse_id': '',
+                    'efuse_key': ''
+                })
+            # Private key
+            elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV:
+                # Plaintext
+                fname = f"privkey_{t}_{s}.pem"
+                fpath = os.path.join(output_dir, fname)
+                algo = ''
+                if data.startswith(b'-----BEGIN'):
+                    key_bytes = data.rstrip(b'\x00')
+                    pem_header = key_bytes.split(b'\n', 1)[0]
+                    # Try to infer algorithm from PEM header
+                    if b'RSA' in pem_header:
+                        algo = 'RSA'
+                    elif b'EC' in pem_header or b'ECDSA' in pem_header:
+                        algo = 'ECDSA'
+                    # PKCS#8: -----BEGIN PRIVATE KEY-----
+                    if b'PRIVATE KEY-----' in pem_header and b'RSA' not in pem_header:
+                        # Re-serialize as PKCS#8 using cryptography
+                        from cryptography.hazmat.primitives import serialization
+                        from cryptography.hazmat.backends import default_backend
+                        key = serialization.load_pem_private_key(key_bytes, password=None, backend=default_backend())
+                        pem = key.private_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PrivateFormat.PKCS8,
+                            encryption_algorithm=serialization.NoEncryption()
+                        )
+                        with open(fpath, 'wb') as f:
+                            f.write(pem)
+                    else:
+                        # PKCS#1 or other: write as-is
+                        with open(fpath, 'w') as f:
+                            f.write(key_bytes.decode('utf-8'))
+                else:
+                    fname = f"privkey_{t}_{s}.der"
+                    fpath = os.path.join(output_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(data)
+                csv_rows.append({
+                    'tlv_type': 'ESP_SECURE_CERT_PRIV_KEY_TLV',
+                    'tlv_subtype': s,
+                    'data_value': fname,
+                    'data_type': 'file',
+                    'priv_key_type': 'plaintext',
+                    'algorithm': algo,
+                    'key_size': '',
+                    'efuse_id': '',
+                    'efuse_key': ''
+                })
+            # DS_DATA (if not already handled)
+            elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_DS_DATA_TLV:
+                if not any(r['tlv_type'] == 'ESP_SECURE_CERT_DS_DATA_TLV' and r['tlv_subtype'] == s for r in csv_rows):
+                    fname = f"ds_data_{t}_{s}.bin"
+                    fpath = os.path.join(output_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(data)
+                    key_size = ''
+                    if len(data) >= 4:
+                        key_size_val = struct.unpack('<i', data[:4])[0]
+                        key_size = str((key_size_val + 1) * 32)
+                    csv_rows.append({
+                        'tlv_type': 'ESP_SECURE_CERT_DS_DATA_TLV',
+                        'tlv_subtype': s,
+                        'data_value': fname,
+                        'data_type': 'file',
+                        'priv_key_type': 'rsa_ds',
+                        'algorithm': 'RSA',
+                        'key_size': key_size,
+                        'efuse_id': '',
+                        'efuse_key': ''
+                    })
+            # DS_CONTEXT (if not already handled)
+            elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_DS_CONTEXT_TLV:
+                if not any(r['tlv_type'] == 'ESP_SECURE_CERT_DS_CONTEXT_TLV' and r['tlv_subtype'] == s for r in csv_rows):
+                    fname = f"ds_context_{t}_{s}.bin"
+                    fpath = os.path.join(output_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(data)
+                    efuse_id = ''
+                    ctx_key_size = ''
+                    if len(data) >= 8:
+                        efuse_id = str(data[4])
+                        ctx_key_size = str(int.from_bytes(data[6:8], 'little'))
+                    csv_rows.append({
+                        'tlv_type': 'ESP_SECURE_CERT_DS_CONTEXT_TLV',
+                        'tlv_subtype': s,
+                        'data_value': fname,
+                        'data_type': 'file',
+                        'priv_key_type': 'rsa_ds',
+                        'algorithm': 'RSA',
+                        'key_size': ctx_key_size,
+                        'efuse_id': efuse_id,
+                        'efuse_key': ''
+                    })
+            # # SEC_CFG (if not already handled)
+            elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_SEC_CFG_TLV:
+                if not any(r['tlv_type'] == 'ESP_SECURE_CERT_SEC_CFG_TLV' and r['tlv_subtype'] == s for r in csv_rows):
+                    fname = f"sec_cfg_{t}_{s}.bin"
+                    fpath = os.path.join(output_dir, fname)
+                    with open(fpath, 'wb') as f:
+                        f.write(data)
+                    efuse_id = ''
+                    if len(data) >= 1:
+                        efuse_id = str(data[0] - 4)
+                    csv_rows.append({
+                        'tlv_type': 'ESP_SECURE_CERT_SEC_CFG_TLV',
+                        'tlv_subtype': s,
+                        'data_value': fname,
+                        'data_type': 'file',
+                        'priv_key_type': 'ecdsa_peripheral',
+                        'algorithm': 'ECDSA',
+                        'key_size': '256',
+                        'efuse_id': efuse_id,
+                        'efuse_key': ''
+                    })
+            # Custom user data
+            elif t >= tlv_format.tlv_type_t.ESP_SECURE_CERT_USER_DATA_1_TLV:
+                try:
+                    text = data.decode('utf-8')
+                    if all(c.isprintable() or c.isspace() for c in text):
+                        val = text
+                        dtype = 'string'
+                    else:
+                        val = data.hex().upper()
+                        dtype = 'hex'
+                except Exception:
+                    val = data.hex().upper()
+                    dtype = 'hex'
+                csv_rows.append({
+                    'tlv_type': tlv_format.tlv_type_t(t).name,
+                    'tlv_subtype': s,
+                    'data_value': val,
+                    'data_type': dtype,
+                    'priv_key_type': '',
+                    'algorithm': '',
+                    'key_size': '',
+                    'efuse_id': '',
+                    'efuse_key': ''
+                })
+
+        # Check if any CSV rows were created (i.e., any valid entries were processed)
+        if not csv_rows or len(csv_rows) == 0:
+            print(f"ERROR: No valid TLV entries could be processed from the .bin file '{bin_file_path}'.")
+            print("The file may contain only unknown or invalid TLV types.")
+            sys.exit(-1)
+
+        # Write CSV
+        csv_file_path = os.path.join(output_dir, 'esp_secure_cert_parsed.csv')
+        with open(csv_file_path, 'w', newline='') as csvfile:
+            fieldnames = ['tlv_type', 'tlv_subtype', 'data_value', 'data_type', 'priv_key_type', 'algorithm', 'key_size', 'efuse_id', 'efuse_key']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(csv_rows)
+        print(f"\nSuccessfully parsed binary file!")
+        print(f"Generated files:")
+        print(f"  - CSV file: {csv_file_path}")
+        print(f"  - {len(csv_rows)} rows in CSV")
+        print(f"  - All files in: {output_dir}")
+
+        # Write TLV partition full output to tlv_entries_raw.txt using tlv_parser.py's process_tlv_entries
+        try:
+
+            # Add the tools directory to sys.path if needed
+            tools_dir = os.path.join(os.path.dirname(__file__), '..')
+            tools_dir = os.path.abspath(tools_dir)
+            if tools_dir not in sys.path:
+                sys.path.insert(0, tools_dir)
+
+            # Redirect stdout to capture all prints from process_tlv_entries
+            summary_output = io.StringIO()
+            sys_stdout = sys.stdout
+            sys.stdout = summary_output
+            tlv_parser.process_tlv_entries(bin_file_path)
+            sys.stdout = sys_stdout
+            summary_text = summary_output.getvalue()
+            summary_output.close()
+            # Normalize line endings and remove null bytes
+            summary_text = summary_text.replace('\r\n', '\n').replace('\r', '\n').replace('\x00', '\n')
+            with open(os.path.join(output_dir, 'tlv_entries_raw.txt'), 'w') as f:
+                f.write(summary_text)
+        except Exception as e:
+            print(f"WARNING: Could not write tlv_entries_raw.txt: {e}")
+
+    @staticmethod
+    def _parse_tlv_entries_from_bin(bin_file_path):
+        """
+        Parse TLV entries from binary file using the same logic as tlv_parser.py
+        Returns a list of dicts with header, data, and offset.
+        """
+        with open(bin_file_path, 'rb') as f:
+            data = f.read()
+        if len(data) == 0:
+            raise ValueError("Binary file is empty")
+        offset = 0
+        tlv_entries = []
+        while offset < len(data):
+            try:
+                tlv_header, header_size = tlv_parser.parse_tlv_header(data, offset)
+                if tlv_header['magic'] == MAGIC_END:
+                    break
+                if tlv_header['magic'] != TLV_MAGIC:
+                    break
+                tlv_data_offset = offset + header_size
+                padding_length = _calculate_padding(tlv_header['length'])
+                tlv_data = data[tlv_data_offset:tlv_data_offset + tlv_header['length']]
+                entry = {
+                    'header': tlv_header,
+                    'data': tlv_data,
+                    'offset': offset
+                }
+                tlv_entries.append(entry)
+                total_tlv_size = header_size + tlv_header['length'] + padding_length + 4  # +4 for CRC footer
+                offset += total_tlv_size
+            except Exception as e:
+                print(f"Warning: Error parsing TLV at offset 0x{offset:04X}: {e}")
+                break
+        return tlv_entries

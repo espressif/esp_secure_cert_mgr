@@ -156,6 +156,12 @@ def main():
         metavar='[/path/to/esp_secure_cert_config.csv]',
         help='CSV file containing ESP Secure Cert contents (TLV entries, custom data). ')
 
+    parser.add_argument(
+        '--parse_bin',
+        dest='parse_bin',
+        metavar='[/path/to/esp_secure_cert.bin]',
+        help='Parse an esp_secure_cert.bin file and generate CSV with extracted certificates/keys')
+
     args = parser.parse_args()
 
     idf_target = args.target_chip
@@ -169,6 +175,10 @@ def main():
     if args.summary is not False:
         log_efuse_summary(idf_target, args.port)
         sys.exit(0)
+
+    if args.parse_bin:
+        EspSecureCert.parse_esp_secure_cert_bin(args.parse_bin)
+        return
 
     if (args.privkey is not None and os.path.exists(args.privkey) is False):
         print('ERROR: The provided private key file does not exist')
@@ -256,11 +266,11 @@ def main():
         if args.configure_ds is not False:
             custflash_format.generate_partition_ds(c, iv, args.efuse_key_id,
                                                    key_size, args.device_cert,
-                                                   ca_cert, idf_target,
+                                                   args.ca_cert, idf_target,
                                                    bin_filename)
         else:
             custflash_format.generate_partition_no_ds(args.device_cert,
-                                                      ca_cert,
+                                                      args.ca_cert,
                                                       args.privkey,
                                                       args.priv_key_pass,
                                                       idf_target, bin_filename)
@@ -269,9 +279,9 @@ def main():
         if args.configure_ds is not False:
             nvs_format.generate_csv_file_ds(c, iv, args.efuse_key_id,
                                             key_size, args.device_cert,
-                                            ca_cert, csv_filename)
+                                            args.ca_cert, csv_filename)
         else:
-            nvs_format.generate_csv_file_no_ds(args.device_cert, ca_cert,
+            nvs_format.generate_csv_file_no_ds(args.device_cert, args.ca_cert,
                                                args.privkey,
                                                args.priv_key_pass,
                                                csv_filename)
