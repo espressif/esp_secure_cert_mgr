@@ -10,6 +10,7 @@ import os
 import sys
 import zlib
 import struct
+import base64
 import subprocess
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional
@@ -19,8 +20,8 @@ from pathlib import Path
 from esp_secure_cert.esp_secure_cert_helper import (
     load_private_key,
     load_certificate,
-    _write_data_to_temp_file,
     get_efuse_key_file,
+    get_file_from_data,
 )
 from cryptography.hazmat.primitives import serialization
 from esp_secure_cert import configure_ds, tlv_format
@@ -89,7 +90,7 @@ TlvHeader = Struct(
     "flags" / Int8ul,   # 8-bit flags
     "reserved" / Bytes(3),  # 3 reserved bytes
     "type" / Int8ul,    # TLV type
-    "subtype" / Int8ul, # TLV subtype  
+    "subtype" / Int8ul, # TLV subtype
     "length" / Int16ul, # Little-endian 16-bit length
 )
 
@@ -120,6 +121,27 @@ def _get_flag_byte(key_type: PrivKeyType) -> int:
         flags |= (1 << 3)  # bit 3
     return flags
 
+
+def _detect_pem_format(data_bytes: bytes) -> bool:
+    """
+    Detect if the data is in PEM format by checking for PEM headers.
+    PEM format starts with '-----BEGIN' and contains base64-encoded data.
+    """
+    # Check if it starts with PEM header
+    if data_bytes.startswith(b'-----BEGIN'):
+        return True
+    
+    # Additional check: if it contains newlines and looks like base64 with headers
+    try:
+        # Try to decode as UTF-8 and check for PEM structure
+        text = data_bytes.decode('utf-8', errors='ignore')
+        if '-----BEGIN' in text and '-----END' in text:
+            return True
+    except:
+        pass
+    
+    return False
+
 @dataclass
 class CustomTlvEntry:
     """Represents a custom TLV entry from CSV data"""
@@ -130,49 +152,48 @@ class CustomTlvEntry:
 
 class TlvPartitionBuilder:
     """Builder class for creating TLV partitions with custom data support"""
-    
+
     def __init__(self):
         self.entries: List[Dict] = []
         self.partition_data = bytearray(b'\xff' * PARTITION_SIZE)
         self.current_offset = 0
-    
-    def add_certificate(self, tlv_type: TlvType, cert_path: str, subtype: int = 0) -> None:
+
+    def add_certificate(self, tlv_type: TlvType, cert_path: str | bytes, subtype: int = 0) -> None:
         """Add certificate to partition"""
         cert_data = load_certificate(cert_path)
-        
+
         # Add null terminator for PEM certificates
         if cert_data["encoding"] == serialization.Encoding.PEM.value:
-            cert_bytes = cert_data["bytes"] + b'\0'
+            cert_path = cert_data["bytes"] + b'\0'
         else:
-            cert_bytes = cert_data["bytes"]
-        
-        self._add_tlv_entry(tlv_type, subtype, cert_bytes, 0)
-    
-    def add_private_key(self, key_path: str, key_pass: Any = None, 
+            cert_path = cert_data["bytes"]
+        self._add_tlv_entry(tlv_type, subtype, cert_path, 0)
+
+    def add_private_key(self, key_path: str, key_pass: Any = None,
                        key_type: PrivKeyType = PrivKeyType.DEFAULT_FORMAT_KEY,
                        subtype: int = 0) -> None:
         """Add private key to partition"""
         if key_path and os.path.exists(key_path):
             key_data = load_private_key(key_path, key_pass)
-            
+
             if key_data["encoding"] == serialization.Encoding.PEM.value:
                 key_bytes = key_data["bytes"] + b'\0'
             else:
                 key_bytes = key_data["bytes"]
         else:
             key_bytes = b''  # Empty for peripheral keys
-        
+
         flags = _get_flag_byte(key_type)
         self._add_tlv_entry(TlvType.PRIV_KEY, subtype, key_bytes, flags)
-    
+
     def add_ds_data(self, ciphertext: bytes, iv: bytes, rsa_key_len: int, subtype: int = 0) -> None:
         """Add DS data for RSA hardware acceleration"""
         # Create DS data structure: [key_len_param][iv][ciphertext]
         key_len_param = Int32sl.build(rsa_key_len // 32 - 1)  # Signed little-endian
         ds_data = key_len_param + iv + ciphertext
-        
+
         self._add_tlv_entry(TlvType.DS_DATA, subtype, ds_data, 0)
-    
+
     def add_ds_context(self, efuse_key_id: int, rsa_key_len: int, subtype: int = 0) -> None:
         """Add DS context for hardware acceleration"""
         # DS context structure must match exactly what the legacy code generated
@@ -192,27 +213,27 @@ class TlvPartitionBuilder:
             "padding": 0,
             "rsa_key_len": rsa_key_len,
         })
-        
+
         self._add_tlv_entry(TlvType.DS_CONTEXT, subtype, ds_context, 0)
-    
+
     def add_security_config(self, efuse_key_id: int, subtype: int = 0) -> None:
         """Add security configuration"""
         # Security config: [priv_key_efuse_id:1][reserved:39]
         efuse_block_id = efuse_key_id + 4  # Convert to block ID
         sec_cfg = bytes([efuse_block_id]) + b'\x00' * 39
-        
+
         self._add_tlv_entry(TlvType.SEC_CFG, subtype, sec_cfg, 0)
-    
+
     def add_custom_entry(self, entry: CustomTlvEntry) -> None:
         """Add custom TLV entry"""
         self._add_tlv_entry(entry.tlv_type, entry.subtype, entry.data, entry.flags)
-    
-    def _add_tlv_entry(self, tlv_type: int | TlvType, subtype: int, 
+
+    def _add_tlv_entry(self, tlv_type: int | TlvType, subtype: int,
                       data: bytes, flags: int) -> None:
         """Internal method to add TLV entry to partition"""
         if isinstance(tlv_type, TlvType):
             tlv_type = tlv_type.value
-        
+
         # Build TLV entry using construct
         tlv_data = {
             "header": {
@@ -228,28 +249,28 @@ class TlvPartitionBuilder:
                 "crc": 0,  # Will be calculated below
             }
         }
-        
+
         # Build the TLV without footer first to calculate CRC
         # TlvHeader.build() serializes this to binary
         header_and_data = TlvHeader.build(tlv_data["header"]) + data
         padding_len = _calculate_padding(len(data))
         padding = b'\x00' * padding_len
         crc_data = header_and_data + padding
-        
+
         # Calculate CRC32
         crc = zlib.crc32(crc_data, 0xffffffff) & 0xffffffff
         tlv_data["footer"]["crc"] = crc
-        
+
         # Build complete TLV entry
         complete_tlv = crc_data + TlvFooter.build(tlv_data["footer"])
-        
+
         # Add to partition
         if self.current_offset + len(complete_tlv) > PARTITION_SIZE:
             raise ValueError(f"Partition size exceeded: {self.current_offset + len(complete_tlv)} > {PARTITION_SIZE}")
-        
+
         self.partition_data[self.current_offset:self.current_offset + len(complete_tlv)] = complete_tlv
         self.current_offset += len(complete_tlv)
-        
+
         self.entries.append({
             "type": tlv_type,
             "subtype": subtype,
@@ -257,26 +278,26 @@ class TlvPartitionBuilder:
             "flags": flags,
             "offset": self.current_offset - len(complete_tlv)
         })
-        
+
         print(f"Added TLV entry: type={tlv_type}, subtype={subtype}, length={len(complete_tlv)}")
-    
+
     def build_partition(self, output_file: str) -> None:
         """Write partition to file with proper TLV termination"""
         # Add TLV termination marker at the end
         # This prevents the parser from reading uninitialized flash (0xFFFFFFFF)
         end_marker = struct.pack('<I', 0xFFFF)  # 16-bit end marker as used in the parser
-        
+
         # Ensure we don't exceed partition size
         if self.current_offset + len(end_marker) > PARTITION_SIZE:
             raise ValueError(f"Cannot add end marker: partition size would exceed {PARTITION_SIZE} bytes")
-        
+
         # Add the end marker
         self.partition_data[self.current_offset:self.current_offset + len(end_marker)] = end_marker
         self.current_offset += len(end_marker)
-        
+
         with open(output_file, 'wb') as f:
             f.write(self.partition_data)
-        
+
         print(f"Total TLV entries: {len(self.entries)}")
         print(f"Total partition size used: {self.current_offset} / {PARTITION_SIZE} bytes")
         print(f"Added TLV termination marker at offset: 0x{self.current_offset - len(end_marker):04X}")
@@ -301,7 +322,7 @@ class EspSecureCert:
                 # Skip empty lines and comments
                 if not row or (row.get('tlv_type', '').strip().startswith('#')):
                     continue
-                
+
                 try:
                     tlv_type = row['tlv_type'].strip()
                     if 'tlv_subtype' not in row or not row['tlv_subtype'].strip():
@@ -347,27 +368,30 @@ class EspSecureCert:
                             'algorithm': algorithm if configure_ds_enabled else None,
                             'key_size': key_size if configure_ds_enabled else None,
                             'efuse_id': efuse_id,
-                            'private_key_path': None,
                             'private_key_pass': None,
                             'efuse_key_file': efuse_key if configure_ds_enabled else None,
                             'priv_key_type': priv_key_type if configure_ds_enabled else 'plaintext',
                         })
 
                         # Set private key path for DS configuration if this is a private key entry
-                        if configure_ds_enabled:
-                            if data_type == 'file':
-                                entry['private_key_path'] = data_value
-                            else:
-                                # For string private keys, write to temp file for DS operations
-                                temp_file = _write_data_to_temp_file(data_value, 'string', tlv_type_num, text_mode=True, convert_newlines=True)
-                                entry['private_key_path'] = temp_file
+                        if data_type != 'file':
+                            entry['data_value'] = EspSecureCert.parse_data_from_any_format(data_value, data_type)
+                            entry['data_value'] = get_file_from_data(entry['data_value'], data_type)
+                            entry['data_type'] = 'file'
                     else:
+
                         entry.update({
                             'tlv_type': tlv_type_num,
                             'tlv_subtype': tlv_subtype,
                             'data_value': data_value,
                             'data_type': data_type,
                         })
+
+                        if tlv_type_num in [tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV, tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV]:
+                            if data_type != 'file':
+                                entry['data_value'] = EspSecureCert.parse_data_from_any_format(data_value, data_type)
+                                entry['data_value'] = get_file_from_data(entry['data_value'], data_type)
+                                entry['data_type'] = 'file'
 
                     if not EspSecureCert.check_for_duplicate_tlv_entries(entry):
                         print("ERROR: Validation failed for duplicate entries")
@@ -377,9 +401,9 @@ class EspSecureCert:
 
                 except Exception as e:
                     print(f"Error parsing line {line_num}: {row}, error: {e}")
-                    continue  
+                    continue
         return
-    
+
     @staticmethod
     def check_for_duplicate_tlv_entries(entry):
         """Check for duplicate TLV entries (by tlv_type and tlv_subtype)"""
@@ -396,7 +420,7 @@ class EspSecureCert:
         return True
 
     @staticmethod
-    def process_data_content(data_value, data_type, tlv_type=None):
+    def parse_data_from_any_format(data_value, data_type, tlv_type=None):
         """
         Process data content based on type:
         - 'file': return file path
@@ -407,47 +431,26 @@ class EspSecureCert:
         Returns: (processed_data, is_file_path)
         """
         # Check if this is a certificate or private key that needs file-based processing
-        is_cert_or_key = tlv_type in [
-            tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV,
-            tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV,
-            tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV
-        ]
 
         if data_type == 'file':
             if not os.path.exists(data_value):
                 raise FileNotFoundError(f"File not found: {data_value}")
-            return data_value, True
+            return data_value
 
         elif data_type == 'string':
-            if is_cert_or_key:
-                # For certificates and keys, write to temp file with proper newline handling
-                temp_file = _write_data_to_temp_file(data_value, 'string', tlv_type, text_mode=True, convert_newlines=True)
-                return temp_file, True
-            else:
-                return data_value.encode('utf-8'), False
+            return data_value.encode('utf-8')
 
         elif data_type == 'hex':
             data_bytes = bytes.fromhex(data_value.replace(' ', ''))
-            if is_cert_or_key:
-                # For certificates and keys, write to temp file for proper processing
-                temp_file = _write_data_to_temp_file(data_bytes, 'hex', tlv_type, text_mode=False)
-                return temp_file, True
-            else:
-                return data_bytes, False
+            return data_bytes
 
         elif data_type == 'base64':
-            import base64
             data_bytes = base64.b64decode(data_value)
-            if is_cert_or_key:
-                # For certificates and keys, write to temp file for proper processing
-                temp_file = _write_data_to_temp_file(data_bytes, 'b64', tlv_type, text_mode=False)
-                return temp_file, True
-            else:
-                return data_bytes, False
+            return data_bytes
 
         else:
             raise ValueError(f"Unsupported data_type: {data_type}")
-   
+
     @staticmethod
     def generate_esp_secure_cert(target_chip, port):
         """Process ESP Secure Cert CSV and generate partition"""
@@ -493,11 +496,11 @@ class EspSecureCert:
                         efuse_key_file = get_efuse_key_file(entry['efuse_key_file'])
                         hmac_key = configure_ds.configure_efuse_for_rsa(
                             target_chip, port, hmac_key_file, efuse_key_file,
-                            str(entry['key_size']), entry['private_key_path'],
+                            str(entry['key_size']), entry['data_value'],
                             None, entry['efuse_id']
                         )
                         c, iv, rsa_key_len = configure_ds.calculate_rsa_ds_params(
-                            entry['private_key_path'], None, hmac_key, target_chip
+                            entry['data_value'], None, hmac_key, target_chip
                         )
                         ds_tlv_entry['c'] = c
                         ds_tlv_entry['iv'] = iv
@@ -508,7 +511,7 @@ class EspSecureCert:
                         configure_ds.configure_efuse_for_ecdsa(
                             target_chip, port, ecdsa_key_file, efuse_key_file,
                             esp_secure_cert_data_dir, str(entry['key_size']),
-                            entry['private_key_path'], None, entry['efuse_id']
+                            entry['data_value'], None, entry['efuse_id']
                         )
 
                     ds_tlv_entries.append(ds_tlv_entry)
@@ -541,38 +544,36 @@ class EspSecureCert:
 
                 # Process data based on type
                 try:
-                    processed_data, is_file_path = EspSecureCert.process_data_content(data_value, data_type, tlv_type)
+                    processed_data = EspSecureCert.parse_data_from_any_format(data_value, data_type, tlv_type)
 
-                    if is_file_path:  # File-based processing (files or content written to temp files)
-                        # Handle certificates
-                        if tlv_type in [tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV, tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV]:  # CA_CERT or DEV_CERT
-                            cert_type_name = "CA Certificate" if tlv_type == tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV else "Device Certificate"
-                            print(f"  Adding {cert_type_name} (subtype {tlv_subtype})")
-                            builder.add_certificate(TlvType(tlv_type), processed_data, tlv_subtype)
+                    # Handle certificates
+                    if tlv_type in [tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV, tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV]:  # CA_CERT or DEV_CERT
+                        cert_type_name = "CA Certificate" if tlv_type == tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV else "Device Certificate"
+                        print(f"  Adding {cert_type_name} (subtype {tlv_subtype})")
+                        builder.add_certificate(TlvType(tlv_type), processed_data, tlv_subtype)
+                        processed_count += 1
+                    # Handle private key
+                    elif tlv_type == tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV:  # PRIV_KEY
+                        if priv_key_type == 'plaintext':
+                            print(f"  Adding private key as plaintext for subtype {tlv_subtype}")
+                            builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, tlv_subtype)
                             processed_count += 1
-
-                        # Handle private key
-                        elif tlv_type == tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV:  # PRIV_KEY
-                            if priv_key_type == 'plaintext':
-                                print(f"  Adding private key as plaintext for subtype {tlv_subtype}")
-                                builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, tlv_subtype)
-                                processed_count += 1
-                            elif priv_key_type == 'rsa_ds' and configure_ds_enabled:
-                                print(f"  Skipping private key TLV for subtype {tlv_subtype} (using hardware RSA DS)")
-                                processed_count += 1
-                                pass  # RSA DS private key is handled by DS data and context
-                            elif priv_key_type == 'ecdsa_peripheral' and configure_ds_enabled:
-                                print(f"  Adding private key for hardware ECDSA DS for subtype {tlv_subtype}")
-                                builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY, tlv_subtype)
-                                processed_count += 1
-
-                        # Handle custom file data
-                        elif tlv_type >= tlv_format.tlv_type_t.ESP_SECURE_CERT_USER_DATA_1_TLV:
+                        elif priv_key_type == 'rsa_ds' and configure_ds_enabled:
+                            print(f"  Skipping private key TLV for subtype {tlv_subtype} (using hardware RSA DS)")
+                            processed_count += 1
+                            pass  # RSA DS private key is handled by DS data and context
+                        elif priv_key_type == 'ecdsa_peripheral' and configure_ds_enabled:
+                            print(f"  Adding private key for hardware ECDSA DS for subtype {tlv_subtype}")
+                            builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY, tlv_subtype)
+                            processed_count += 1
+                    # Handle custom file data
+                    elif tlv_type >= tlv_format.tlv_type_t.ESP_SECURE_CERT_USER_DATA_1_TLV:
+                        if data_type == 'file':
                             with open(processed_data, 'rb') as f:
-                                file_data = f.read()
-                            print(f"  Adding user data (subtype {tlv_subtype}) from file")
-                            builder._add_tlv_entry(tlv_type, tlv_subtype, file_data, 0)
-                            processed_count += 1
+                                processed_data = f.read()
+                        print(f"  Adding user data (subtype {tlv_subtype}) from file")
+                        builder._add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
+                        processed_count += 1
 
                     else:  # Direct data processing
                         print(f"  Adding direct data (subtype {tlv_subtype})")
@@ -582,7 +583,7 @@ class EspSecureCert:
                 except Exception as e:
                     print(f"Error processing entry {tlv_type}: {e}")
                     continue
-                
+
             print(f"\nSuccessfully processed {processed_count} out of {len(EspSecureCert.secure_cert_entries)} entries")
 
             # Build partition
@@ -606,22 +607,40 @@ class EspSecureCert:
         if EspSecureCert.check_for_duplicate_tlv_entries(entry):
 
             if entry['tlv_type'] == tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV:
-                if entry['priv_key_type'] == 'rsa_ds' or entry['priv_key_type'] == 'ecdsa_peripheral':
-                    entry['ds_enabled'] = True
-                else:
-                    entry['ds_enabled'] = False
+                # Determine if DS (Digital Signature) is enabled for this private key
+                entry['ds_enabled'] = entry['priv_key_type'] in ('rsa_ds', 'ecdsa_peripheral')
 
-                entry['private_key_path'] = entry['data_value']
-                entry['efuse_key_file'] = entry['efuse_key'] if entry['efuse_key'] else ''
-                if entry['efuse_id'] is None and entry['ds_enabled']:
-                    raise ValueError(f"efuse_id is required but not provided in tlv_type {entry['tlv_type']} and tlv_subtype {entry['tlv_subtype']}")
-                entry['efuse_id'] = entry['efuse_id']
-                entry['key_size'] = entry['key_size'] if entry['key_size'] else 0
-                entry['algorithm'] = entry['algorithm'] if entry['algorithm'] else ''
+                # Convert private key data to file if not already a file
+                if entry['data_type'] != 'file':
+                    entry['data_value'] = EspSecureCert.parse_data_from_any_format(entry['data_value'], entry['data_type'])
+                    entry['data_value'] = get_file_from_data(entry['data_value'], entry['data_type'])
+                    entry['data_type'] = 'file'
+
+                # Set efuse key file (if provided), default to empty string
+                entry['efuse_key_file'] = entry.get('efuse_key', '')
+
+                # efuse_id is required if DS is enabled
+                if entry['ds_enabled'] and entry['efuse_id'] is None:
+                    raise ValueError(
+                        f"efuse_id is required but not provided in tlv_type {entry['tlv_type']} and tlv_subtype {entry['tlv_subtype']}"
+                    )
+
+                # Ensure key_size and algorithm fields are set
+                entry['key_size'] = entry.get('key_size', 0)
+                entry['algorithm'] = entry.get('algorithm', '')
+
+                # Set private_key_pass to None (not used)
                 entry['private_key_pass'] = None
-            
+
+            if entry['tlv_type'] in [tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV, tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV]:
+                if entry['data_type'] != 'file':
+                    entry['data_value'] = EspSecureCert.parse_data_from_any_format(entry['data_value'], entry['data_type'])
+                    entry['data_value'] = get_file_from_data(entry['data_value'], entry['data_type'])
+                    entry['data_type'] = 'file'
+
+            # Add the processed entry to the list
             EspSecureCert.secure_cert_entries.append(entry)
-        
+
         else:
             print(f"ERROR: Duplicate entry found for type {entry.get('tlv_type')}, subtype {entry.get('tlv_subtype')}")
             sys.exit(-1)

@@ -33,6 +33,21 @@
 #endif
 #define TAG "esp_secure_cert_app"
 
+// Modular function to print certificate or key data in PEM or DER format
+static void esp_print_cert_or_key(const char *label, const char *data, uint32_t len)
+{
+    if (len > 0 && data != NULL) {
+        const char *pem_header = "-----BEGIN";
+        if (strncmp(data, pem_header, strlen(pem_header)) == 0) {
+            ESP_LOGI(TAG, "%s (PEM): \nLength: %"PRIu32"\n%s", label, len, data);
+        } else {
+            ESP_LOGI(TAG, "%s (DER): \nLength: %"PRIu32"\n", label, len);
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, len, ESP_LOG_INFO);
+        }
+    } else {
+        ESP_LOGW(TAG, "%s: No data found", label);
+    }
+}
 
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned char *dev_cert, size_t dev_cert_len)
@@ -216,15 +231,14 @@ void app_main()
 
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", len, (char *)addr);
+        esp_print_cert_or_key("Device Cert", (const char *)addr, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
     }
 
     esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "CA Cert: \nLength: %"PRIu32"\n%s", len, (char *)addr);
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, addr, len, ESP_LOG_DEBUG);
+        esp_print_cert_or_key("CA Cert", (const char *)addr, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of ca_cert");
     }
@@ -232,7 +246,7 @@ void app_main()
 #ifndef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
     esp_ret = esp_secure_cert_get_priv_key(&addr, &len);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "PEM KEY: \nLength: %"PRIu32"\n%s", len, (char *)addr);
+        esp_print_cert_or_key("Private Key", (const char *)addr, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of private_key");
     }
@@ -285,7 +299,7 @@ void app_main()
     esp_secure_cert_tlv_info_t tlv_info = {};
     esp_ret = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
     if (esp_ret == ESP_OK) {
-        ESP_LOGI(TAG, "Device Cert: \nLength: %"PRIu32"\n%s", tlv_info.length, tlv_info.data);
+        esp_print_cert_or_key("Device Cert", (const char *)tlv_info.data, tlv_info.length);
     }
 
     ESP_LOGI(TAG, "Printing a list of TLV entries");

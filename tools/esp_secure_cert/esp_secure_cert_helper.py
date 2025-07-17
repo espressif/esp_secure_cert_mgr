@@ -7,7 +7,7 @@ from cryptography.x509 import (
 )
 
 import os
-
+import base64
 
 esp_secure_cert_data_dir = 'esp_secure_cert_data'
 
@@ -183,7 +183,7 @@ def get_efuse_key_file(efuse_key_spec):
     """
     if not efuse_key_spec:
         return None
-    
+
     if os.path.exists(efuse_key_spec):
         print(f"Using custom efuse key file: {efuse_key_spec}")
         return efuse_key_spec
@@ -191,31 +191,10 @@ def get_efuse_key_file(efuse_key_spec):
         print(f"Warning: efuse key file '{efuse_key_spec}' not found, using auto-generated key")
         return None
 
-def _write_data_to_temp_file(data, data_type_prefix, tlv_type, text_mode=True, convert_newlines=False):
-    """
-    Helper function to write data to a temporary file for certificate/key processing
-    
-    Args:
-        data: The data to write (str or bytes)
-        data_type_prefix: Prefix for the temp file name (e.g., 'string', 'hex', 'b64')
-        tlv_type: TLV type number for unique naming
-        text_mode: True for text mode ('w'), False for binary mode ('wb')
-        convert_newlines: True to convert \\n to actual newlines
-    
-    Returns:
-        str: Path to the created temporary file
-    """
-    temp_file = None
-    if text_mode:
-        temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_{data_type_prefix}_{tlv_type}_{hash(str(data)) % 10000}.pem')
-    else:
-        temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_{data_type_prefix}_{tlv_type}_{hash(str(data)) % 10000}.der')
-    os.makedirs(esp_secure_cert_data_dir, exist_ok=True)
-    
-    mode = 'w' if text_mode else 'wb'
-    with open(temp_file, mode) as f:
-        if convert_newlines and isinstance(data, str):
-            data = data.replace('\\n', '\n')
-        f.write(data)
-    
+def get_file_from_data(data_value: str | bytes, data_type: str, password: str = None): 
+
+    temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_key_{hash(str(data_value)) % 10000}.key')
+    with open(temp_file, 'wb') as f:
+        f.write(data_value)
+
     return temp_file
