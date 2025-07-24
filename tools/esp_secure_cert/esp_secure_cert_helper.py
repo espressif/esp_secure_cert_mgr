@@ -7,7 +7,6 @@ from cryptography.x509 import (
 )
 
 import os
-import base64
 
 esp_secure_cert_data_dir = 'esp_secure_cert_data'
 
@@ -191,10 +190,3 @@ def get_efuse_key_file(efuse_key_spec):
         print(f"Warning: efuse key file '{efuse_key_spec}' not found, using auto-generated key")
         return None
 
-def get_file_from_data(data_value: str | bytes, data_type: str, password: str = None): 
-
-    temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_key_{hash(str(data_value)) % 10000}.key')
-    with open(temp_file, 'wb') as f:
-        f.write(data_value)
-
-    return temp_file

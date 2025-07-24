@@ -192,7 +192,11 @@ def main():
     key_size = None
 
     if args.sec_cert_type == 'cust_flash_tlv':
+        # Create instance of EspSecureCert
+        esp_secure_cert = EspSecureCert()
+        
         # Create entry for CA certificate (if provided)
+
         if args.ca_cert is not None:
             entry_ca = {
                 'tlv_type': tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV,
@@ -200,7 +204,7 @@ def main():
                 'data_value': os.path.abspath(args.ca_cert),
                 'data_type': 'file',
             }
-            EspSecureCert.add_entry(entry_ca)
+            esp_secure_cert.add_entry(entry_ca)
 
         # Create entry for device certificate
         if args.device_cert is not None:
@@ -210,7 +214,7 @@ def main():
                 'data_value': os.path.abspath(args.device_cert),
                 'data_type': 'file',
             }
-            EspSecureCert.add_entry(entry_dev)
+            esp_secure_cert.add_entry(entry_dev)
 
         # Create entry for private key
         priv_key_type = 'plaintext'
@@ -223,25 +227,28 @@ def main():
         if args.privkey is not None:
             entry_priv = {
                 'tlv_type': tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV,
-                'tlv_subtype': 1,
+                'tlv_subtype': 0,
                 'data_value': os.path.abspath(args.privkey),
                 'data_type': 'file',
                 'priv_key_type': priv_key_type,
                 'algorithm': args.priv_key_algo[0].upper() if args.priv_key_algo else '',
                 'key_size': int(args.priv_key_algo[1]) if args.priv_key_algo and len(args.priv_key_algo) > 1 else 0,
                 'efuse_id': args.efuse_key_id if hasattr(args, 'efuse_key_id') else 0,
-                'efuse_key': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None,
+                'efuse_key_file': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None,
             }
-            EspSecureCert.add_entry(entry_priv)
+            esp_secure_cert.add_entry(entry_priv)
 
         if args.esp_secure_cert_csv is not None:
-            EspSecureCert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
+            esp_secure_cert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
 
-        bin_filename = EspSecureCert.generate_esp_secure_cert(args.target_chip, args.port)
+        bin_filename = esp_secure_cert.generate_esp_secure_cert(args.target_chip, args.port)
         if not args.skip_flash:
-            EspSecureCert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
+            esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
         else:
             print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {bin_filename}')
+
+        esp_secure_cert.esp_secure_cert_cleanup()
+
         return
 
     elif args.sec_cert_type == 'cust_flash':
@@ -270,10 +277,10 @@ def main():
         nvs_format.generate_partition(csv_filename, bin_filename)
 
     if args.skip_flash is False:
-        EspSecureCert.flash_esp_secure_cert_partition(idf_target,
-                                                       args.port,
-                                                       args.sec_cert_part_offset,
-                                                       bin_filename)
+        flash_esp_secure_cert_partition(idf_target,
+                                        args.port,
+                                        args.sec_cert_part_offset,
+                                        bin_filename)
 
     cleanup(args)
 
