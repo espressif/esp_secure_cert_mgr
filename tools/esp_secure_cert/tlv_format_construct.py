@@ -14,10 +14,24 @@ import struct
 import base64
 import shutil
 import subprocess
+import argparse
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional, Union
 from construct import (Struct, Int32ul, Int8ul, Int16ul, Int32sl, Bytes, this)
 from pathlib import Path
+import tempfile
+import hashlib
+try:
+    from espsecure import (
+        generate_signing_key,
+        generate_signature_block_using_private_key,
+        _sha256_digest,
+        _sha384_digest
+    )
+except ImportError:
+    raise ImportError("espsecure module not available")
+   
+   
 
 from esp_secure_cert.esp_secure_cert_helper import (
     load_private_key,
@@ -57,7 +71,6 @@ ecdsa_key_file = os.path.join(esp_secure_cert_data_dir, 'ecdsa_key.bin')
 # csv and bin filenames are default filenames
 # for nvs partition files created with this script
 csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
-bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 
 # Construct structures with proper endianness
 TlvHeader = Struct(
@@ -225,34 +238,33 @@ class TlvPartitionBuilder:
 
     def build_partition(self, output_file: str) -> None:
         """Write partition to file with proper TLV termination"""
-        # Add TLV termination marker at the end
-        # This prevents the parser from reading uninitialized flash (0xFFFFFFFF)
-        end_marker = struct.pack('<I', 0xFFFF)  # 16-bit end marker as used in the parser
-
-        # Ensure we don't exceed partition size
-        if self.current_offset + len(end_marker) > PARTITION_SIZE:
-            raise ValueError(f"Cannot add end marker: partition size would exceed {PARTITION_SIZE} bytes")
-
-        # Add the end marker
-        self.partition_data[self.current_offset:self.current_offset + len(end_marker)] = end_marker
-        self.current_offset += len(end_marker)
 
         with open(output_file, 'wb') as f:
-            f.write(self.partition_data)
+            f.write(self.partition_data[:self.current_offset])
 
         print(f"Total TLV entries: {len(self.entries)}")
         print(f"Total partition size used: {self.current_offset} / {PARTITION_SIZE} bytes")
-        print(f"Added TLV termination marker at offset: 0x{self.current_offset - len(end_marker):04X}")
-
 
 class EspSecureCert:
 
-    def __init__(self):
+    def __init__(self, version: str = "2", hash_type: str = "sha256"):
         # Initialize the list to store TLV entries
         self.secure_cert_entries = []
+        self.version = "2"
+        self.hash_type = hash_type
+        self.keyfile_path = None
+        self.signature_block_no = 0
+        self.secure_boot_scheme = "rsa3072"  # Default secure boot scheme
         # Create the directory esp_secure_cert_data if it does not exist
+
+        self.builder = TlvPartitionBuilder()
+
         if not os.path.exists(esp_secure_cert_data_dir):
             os.makedirs(esp_secure_cert_data_dir)
+    
+        self.bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert_partition.bin")
+        self.signed_bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert_signed_partition.bin")
+
 
     def __del__(self):
         """Destructor - cleanup when object is destroyed"""
@@ -503,17 +515,15 @@ class EspSecureCert:
                         print(f"  - ECDSA DS configuration completed successfully")
 
                     ds_tlv_entries.append(ds_tlv_entry)
-
-            # Build TLV partition
-            builder = TlvPartitionBuilder()
+        
 
             # Auto-add DS-related TLVs for each DS configuration
             for ds_tlv_entry in ds_tlv_entries:
                 if ds_tlv_entry['algorithm'] == 'RSA':
-                    builder.add_ds_data(ds_tlv_entry['c'], ds_tlv_entry['iv'], ds_tlv_entry['rsa_key_len'], ds_tlv_entry['subtype'])
-                    builder.add_ds_context(ds_tlv_entry['efuse_id'], ds_tlv_entry['rsa_key_len'], ds_tlv_entry['subtype'])
+                    self.builder.add_ds_data(ds_tlv_entry['c'], ds_tlv_entry['iv'], ds_tlv_entry['rsa_key_len'], ds_tlv_entry['subtype'])
+                    self.builder.add_ds_context(ds_tlv_entry['efuse_id'], ds_tlv_entry['rsa_key_len'], ds_tlv_entry['subtype'])
                 elif ds_tlv_entry['algorithm'] == 'ECDSA':
-                    builder.add_security_config(ds_tlv_entry['efuse_id'], ds_tlv_entry['subtype'])
+                    self.builder.add_security_config(ds_tlv_entry['efuse_id'], ds_tlv_entry['subtype'])
 
             if not ds_tlv_entries:
                 print("No DS configuration found")
@@ -544,7 +554,7 @@ class EspSecureCert:
                     elif self._is_private_key_entry(tlv_type):  # PRIV_KEY
                         if priv_key_type == 'plaintext':
                             print(f"  Adding private key as plaintext for subtype {tlv_subtype}")
-                            builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, tlv_subtype)
+                            self.builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, tlv_subtype)
                             processed_count += 1
                         elif priv_key_type == 'rsa_ds' and configure_ds_enabled:
                             print(f"  Skipping private key TLV for subtype {tlv_subtype} (using hardware RSA DS)")
@@ -552,7 +562,7 @@ class EspSecureCert:
                             pass  # RSA DS private key is handled by DS data and context
                         elif priv_key_type == 'ecdsa_peripheral' and configure_ds_enabled:
                             print(f"  Adding private key for hardware ECDSA DS for subtype {tlv_subtype}")
-                            builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY, tlv_subtype)
+                            self.builder.add_private_key(processed_data, None, tlv_format.tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY, tlv_subtype)
                             processed_count += 1
                     else:  # Direct data processing
                         if data_type == 'file':
@@ -578,6 +588,8 @@ class EspSecureCert:
             print(f"\nSuccessfully processed {processed_count} out of {len(self.secure_cert_entries)} entries")
 
             # Build partition
+            self.builder.build_partition(self.bin_filename)
+            print(f'\nPartition generated: {self.bin_filename}')
             builder.build_partition(bin_filename)
             print(f'\nPartition generated: {bin_filename}')
 
@@ -602,7 +614,7 @@ class EspSecureCert:
 
             print("=" * 50)
 
-            return bin_filename
+            return self.bin_filename
 
         except Exception as e:
             print(f'ERROR: Failed to process ESP Secure Cert CSV: {e}')
@@ -636,7 +648,7 @@ class EspSecureCert:
         if not os.path.exists(flash_filename):
             print(f"ERROR: The provided flash_filename {flash_filename} does not exist")
             sys.exit(-1)
-
+        flash_filename = self.signed_bin_filename
         # Check if the port is provided
         if not port:
             print("WARNING: Port is not provided, skipping flash operation")

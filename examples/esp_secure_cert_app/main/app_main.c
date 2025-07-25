@@ -18,6 +18,7 @@
 #include "soc/soc_caps.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
+#include "esp_secure_cert_signature_verify.h"
 
 #include "mbedtls/ssl.h"
 #include "mbedtls/pk.h"
@@ -230,6 +231,15 @@ void app_main()
     uint32_t len = 0;
     char *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;
+
+    // Perform signature verification at startup
+    ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
+    esp_err_t sig_ret = esp_secure_cert_verify_partition_signature();
+    if (sig_ret == ESP_OK) {
+        ESP_LOGI(TAG, "✅ esp_secure_cert partition signature verification PASSED");
+    } else {
+        ESP_LOGE(TAG, "❌ esp_secure_cert partition signature verification FAILED");
+    }
 
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
