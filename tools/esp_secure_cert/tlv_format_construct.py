@@ -1032,3 +1032,63 @@ class EspSecureCert:
                 print(f"Warning: Error parsing TLV at offset 0x{offset:04X}: {e}")
                 break
         return tlv_entries
+
+
+    # =============== Secure Boot related functions ===============
+
+    def generate_entries_hash(self, tlv_entries_data) -> bytes:
+        """Generate hash of TLV entries"""
+        print(f"====entries data length: {len(tlv_entries_data)}")
+        if self.hash_type == "sha256":
+            return _sha256_digest(tlv_entries_data)
+        elif self.hash_type == "sha384":
+            return _sha384_digest(tlv_entries_data)
+        else:
+            raise ValueError(f"Unsupported hash type: {self.hash_type}")
+
+
+    def add_signature_block_using_existing_key(self, hash_bin_filename = None, signing_key_file = None):
+        """Add signature block to the partition using existing key"""
+        
+        if signing_key_file is None:
+            raise ValueError("Signing key file is not set")
+
+        if hash_bin_filename is None or not os.path.exists(hash_bin_filename):
+            raise ValueError("Hash bin filename is not set or does not exist")
+        
+        # Read the current partition data
+        with open(hash_bin_filename, 'rb') as f:
+            bin_data = f.read()
+
+        for key_path in signing_key_file:
+            if not os.path.exists(key_path):
+                raise FileNotFoundError(f"Signing key file not found: {key_path}")
+
+        # Reset the builder's partition data and offset before adding new signature blocks
+        self.builder.partition_data = bytearray(b'\xff' * PARTITION_SIZE)
+        self.builder.current_offset = 0
+        try:
+            # Generate signature block in espsecure format using all provided key files
+            for keyfile in signing_key_file:
+                with open(keyfile, "rb") as keyfile_obj:
+                    espsecure_signature_block = generate_signature_block_using_private_key(
+                        keyfiles=[keyfile_obj],  # List of key file objects
+                        contents=bin_data  # Hash data as bytes
+                    )
+                signature_block_filename = os.path.join(esp_secure_cert_data_dir, f"signature_block_{self.signature_block_no}.bin")
+                print(f"Signature block filename: {signature_block_filename}")
+                with open(signature_block_filename, 'wb') as f:
+                    f.write(espsecure_signature_block)
+                self.builder.add_tlv_entry(TlvType.SIGNATURE_BLOCK, self.signature_block_no, espsecure_signature_block, 0)
+                self.signature_block_no += 1
+        except Exception as e:
+            print(f"Error generating signature block: {e}")
+            sys.exit(-1)
+
+        self.builder.build_partition(self.signed_bin_filename)
+    
+        with open(self.signed_bin_filename, 'wb') as f:
+            f.write(bin_data)
+            f.write(self.builder.partition_data[:self.builder.current_offset])
+     
+        return self.signed_bin_filename
