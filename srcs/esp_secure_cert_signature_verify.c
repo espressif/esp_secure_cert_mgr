@@ -27,7 +27,7 @@
 static const char *TAG = "esp_secure_cert_sig_verify";
 
 #define MIN_ALIGNMENT_REQUIRED 16
-
+#define SECURE_BOOT_MAX_APPENDED_SIGN_BLOCKS_TO_IMAGE 3
 // Alternative signature block structure for espsecure format
 typedef struct {
     uint8_t signature[384];  // RSA-3072 signature
@@ -59,7 +59,7 @@ static uint16_t get_tlv_total_length(const esp_secure_cert_tlv_header_t *header)
 static bool verify_tlv_integrity(const esp_secure_cert_tlv_header_t *header)
 {
     if (header->magic != ESP_SECURE_CERT_TLV_MAGIC) {
-        ESP_LOGE(TAG, "Invalid TLV magic: 0x%08x", header->magic);
+        ESP_LOGE(TAG, "Invalid TLV magic: 0x%08" PRIx32, header->magic);
         return false;
     }
     
@@ -76,7 +76,7 @@ static bool verify_tlv_integrity(const esp_secure_cert_tlv_header_t *header)
                                                                                         data_and_padding_len);
     
     if (calculated_crc != footer->crc) {
-        ESP_LOGE(TAG, "TLV CRC mismatch: calculated=0x%08x, stored=0x%08x", calculated_crc, footer->crc);
+        ESP_LOGE(TAG, "TLV CRC mismatch: calculated=0x%08" PRIx32 ", stored=0x%08" PRIx32, calculated_crc, footer->crc);
         return false;
     }
     
@@ -87,19 +87,18 @@ static bool verify_tlv_integrity(const esp_secure_cert_tlv_header_t *header)
  * @brief Find the last signature block TLV in the partition
  */
 static esp_err_t find_signature_block(const void *partition_addr, size_t partition_size, 
-                                     const esp_secure_cert_tlv_header_t **sig_header, 
-                                     const uint8_t **sig_data, size_t *sig_data_len)
+                                     ets_secure_boot_signature_t *sig_blocks)
 {
     const uint8_t *current_addr = (const uint8_t *)partition_addr;
-    const esp_secure_cert_tlv_header_t *last_sig_header = NULL;
-    const uint8_t *last_sig_data = NULL;
-    size_t last_sig_data_len = 0;
+    ets_secure_boot_sig_block_t *blocks[SECURE_BOOT_MAX_APPENDED_SIGN_BLOCKS_TO_IMAGE] = {NULL, NULL, NULL};
+    uint8_t *sig_block_data = NULL;
     
     while (current_addr < (const uint8_t *)partition_addr + partition_size) {
         const esp_secure_cert_tlv_header_t *header = (const esp_secure_cert_tlv_header_t *)current_addr;
         
         // Check if we've reached the end (all 0xFF)
         if (header->magic == 0xFFFFFFFF) {
+            ESP_LOGI(TAG, "Reached end of TLV partition (all 0xFF) - time to head to the dugout!");
             break;
         }
         
@@ -110,27 +109,21 @@ static esp_err_t find_signature_block(const void *partition_addr, size_t partiti
         }
         ESP_LOGI(TAG, "Current TLV header type: %d", header->type);
         // Check if this is a signature block
-        if (header->type == ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV) {
-            last_sig_header = header;
-            last_sig_data = (const uint8_t *)header + sizeof(esp_secure_cert_tlv_header_t);
-            last_sig_data_len = header->length;
-            ESP_LOGI(TAG, "Found signature block TLV, length: %d", header->length);
+        if ((header->type == ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV)) {
+            ESP_LOGI(TAG, "Found signature block TLV, length: %d and type: %d and subtype: %d", header->length, header->type, header->subtype);
+            sig_block_data = (uint8_t *)header + sizeof(esp_secure_cert_tlv_header_t);
+            blocks[header->subtype] = (ets_secure_boot_sig_block_t *)sig_block_data;
         }
-        
         // Move to next TLV
         uint16_t total_length = get_tlv_total_length(header);
         current_addr += total_length;
     }
-    
-    if (last_sig_header == NULL) {
-        ESP_LOGE(TAG, "No signature block found in partition");
-        return ESP_FAIL;
+
+    for (int i = 0; i < SECURE_BOOT_MAX_APPENDED_SIGN_BLOCKS_TO_IMAGE; i++) {
+        if (blocks[i] != NULL) {
+            memcpy(&sig_blocks->block[i], blocks[i], sizeof(ets_secure_boot_sig_block_t));
+        }
     }
-    
-    *sig_header = last_sig_header;
-    *sig_data = last_sig_data;
-    *sig_data_len = last_sig_data_len;
-    
     return ESP_OK;
 }
 
@@ -138,7 +131,6 @@ static esp_err_t find_signature_block(const void *partition_addr, size_t partiti
  * @brief Calculate hash of all TLV entries except signature blocks
  */
 static esp_err_t calculate_partition_hash(const void *partition_addr, size_t partition_size,
-                                        const esp_secure_cert_tlv_header_t *exclude_header,
                                         uint8_t *hash)
 {
     mbedtls_sha256_context ctx;
@@ -159,12 +151,14 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
 
         // Check if we've reached the end (all 0xFF)
         if (header->magic == 0xFFFFFFFF) {
+            ESP_LOGI(TAG, "Reached end of TLV partition (all 0xFF) - time to head to the dugout!");
             break;
         }
         
         // Skip signature blocks
-        if (header == exclude_header || header->type == ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV) {
+        if (header->type == ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV) {
             ESP_LOGI(TAG, "Skipping signature block TLV for hash calculation");
+            break;
         } else {
             // Include this TLV in hash calculation
             uint16_t total_length = get_tlv_total_length(header);
@@ -174,7 +168,7 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
                 mbedtls_sha256_free(&ctx);
                 return ESP_FAIL;
             }
-            ESP_LOGI(TAG, "Included TLV type %d in hash calculation, length: %d", header->type, total_length);
+            ESP_LOGI(TAG, "Included TLV type %d  and subtype %d in hash calculation, length: %d", header->type, header->subtype, total_length);
             total_hashed_len += total_length;
         }
 
@@ -202,13 +196,11 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
  * This function uses esp_secure_boot_verify_sbv2_signature_block from ESP-IDF
  * to verify the signature block against the calculated hash.
  */
-static esp_err_t verify_rsa_signature(const uint8_t *signature_block, size_t sig_block_len,
+static esp_err_t verify_rsa_signature(const ets_secure_boot_signature_t *signature_block,
                                      const uint8_t *hash, size_t hash_len)
 {
 
-    const ets_secure_boot_signature_t *esp_signature = (const ets_secure_boot_signature_t *)signature_block;
-
-    esp_err_t ret = esp_secure_boot_verify_sbv2_signature_block(esp_signature, hash, NULL);
+    esp_err_t ret = esp_secure_boot_verify_sbv2_signature_block(signature_block, hash, NULL);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Signature verification failed");
         return ESP_FAIL;
@@ -225,7 +217,7 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
         return ESP_FAIL;
     }
     
-        esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
+    esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
                                                     ESP_PARTITION_SUBTYPE_ANY,
                                                     ESP_SECURE_CERT_TLV_PARTITION_NAME);
     if (it == NULL) {
@@ -243,45 +235,39 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
     ESP_LOGI(TAG, "Starting signature verification for partition size: %d", partition->size);
     
     // Find the signature block
-    const esp_secure_cert_tlv_header_t *sig_header;
-    const uint8_t *sig_data;
-    size_t sig_data_len;
-    
-    esp_err_t ret = find_signature_block(partition_addr, partition->size, &sig_header, &sig_data, &sig_data_len);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to find signature block");
+    ets_secure_boot_signature_t *signature_blocks = malloc(sizeof(ets_secure_boot_signature_t));
+    if (signature_blocks == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for signature blocks");
         esp_partition_iterator_release(it);
         return ESP_FAIL;
     }
-    
-    ESP_LOGI(TAG, "Found signature block, length: %d bytes", sig_data_len);
-    
-    // Check if this is an espsecure format signature block
-    if (sig_data_len >= sizeof(esp_secure_cert_sig_block_t)) {
-        ESP_LOGI(TAG, "espsecure signature block format detected");
-        ESP_LOGI(TAG, "Signature block size: %d bytes", sig_data_len);
-    } else {
-        ESP_LOGW(TAG, "Signature block too small for espsecure format: %d bytes", sig_data_len);
-    }
-    
+
     // Calculate hash of all TLV entries except signature blocks
     uint8_t calculated_hash[32];
-    ret = calculate_partition_hash(partition_addr, partition->size, sig_header, calculated_hash);
+    esp_err_t ret = calculate_partition_hash(partition_addr, partition->size, calculated_hash);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to calculate partition hash");
         esp_partition_iterator_release(it);
         return ESP_FAIL;
     }
 
-    // Verify the signature
-    ret = verify_rsa_signature(sig_data, sig_data_len, calculated_hash, sizeof(calculated_hash));
+    ret = find_signature_block(partition_addr, partition->size, signature_blocks);
     if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to find signature block");
+        esp_partition_iterator_release(it);
+        return ESP_FAIL;
+    }
+    // Verify the signature
+    ret = verify_rsa_signature(signature_blocks, calculated_hash, sizeof(calculated_hash));
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "esp_secure_cert partition signature verification successful");
+        esp_partition_iterator_release(it);
+        return ESP_OK;
+    } else {
         ESP_LOGE(TAG, "Signature verification failed");
         esp_partition_iterator_release(it);
         return ESP_FAIL;
     }
-    
-    ESP_LOGI(TAG, "esp_secure_cert partition signature verification successful");
-    esp_partition_iterator_release(it);
-    return ESP_OK;
+
+    return ESP_FAIL;
 }

@@ -179,7 +179,8 @@ def main():
         '--signing_key_file',
         dest='signing_key_file',
         default="secure_boot_key.bin",
-        help='Signing key file to use')
+        nargs='+',
+        help='Signing key file(s) to use. You can provide multiple files separated by space.')
 
     parser.add_argument(
         '--bin_filename',
@@ -277,7 +278,7 @@ def main():
             else:
                 raise ValueError("Signing scheme is not set")
 
-            signed_bin_filename = esp_secure_cert.add_signature_block_using_existing_key(os.path.abspath(args.bin_filename), os.path.abspath(args.signing_key_file))
+            signed_bin_filename = esp_secure_cert.add_signature_block_using_existing_key(os.path.abspath(args.bin_filename), args.signing_key_file)
 
             if not args.skip_flash:
                 esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, signed_bin_filename)
@@ -294,7 +295,7 @@ def main():
         if args.secure_sign:
             # Set the secure boot scheme
             esp_secure_cert.signing_scheme = args.signing_scheme
-            bin_filename = esp_secure_cert.add_signature_block_using_existing_key(bin_filename, os.path.abspath(args.signing_key_file))
+            bin_filename = esp_secure_cert.add_signature_block_using_existing_key(bin_filename, args.signing_key_file)
 
         if not args.skip_flash:
             esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
