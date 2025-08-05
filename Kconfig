@@ -19,12 +19,12 @@ menu "ESP Secure Cert Manager"
             cust_flash
             nvs
 
-    config ESP_SECURE_CERT_SECURE_BOOT
+    config ESP_SECURE_CERT_SECURE_VERIFICATION
         bool "Enable secure boot support"
         default n
         depends on SECURE_BOOT
         help
-            Enable secure boot support for esp_secure_cert partition.
+            Enable secure verification for esp_secure_cert partition which relies on secure boot.
             This requires SECURE_BOOT to be enabled in the project.
 
 endmenu # ESP Secure Cert Manager
