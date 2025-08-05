@@ -249,7 +249,7 @@ void app_main()
     char *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;
 
-#if CONFIG_ESP_SECURE_CERT_SECURE_BOOT
+#if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
     // Perform signature verification at startup
     ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
     esp_err_t sig_ret = esp_secure_cert_verify_partition_signature();

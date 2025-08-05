@@ -1,4 +1,4 @@
-set(srcs "srcs/esp_secure_cert_tlv_read.c" "srcs/esp_secure_cert_crypto.c" "srcs/esp_secure_cert_signature_verify.c")
+set(srcs "srcs/esp_secure_cert_tlv_read.c" "srcs/esp_secure_cert_crypto.c")
 
 if(CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS)
     list(APPEND srcs "srcs/esp_secure_cert_read.c")
@@ -8,6 +8,10 @@ set(priv_reqs "")
 idf_build_get_property(build_components BUILD_COMPONENTS)
 if(esp_partition IN_LIST build_components)
     list(APPEND priv_reqs esp_partition)
+endif()
+
+if(CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION)
+    list(APPEND srcs "srcs/esp_secure_cert_signature_verify.c")
 endif()
 
 idf_component_register(SRCS ${srcs}

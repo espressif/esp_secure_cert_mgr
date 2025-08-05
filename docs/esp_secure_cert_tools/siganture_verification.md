@@ -1,6 +1,6 @@
 # ESP Secure Certificate Signature Verification
 
-This document explains the signature verification functionality in the ESP Secure Certificate component, including secure boot integration, signature block format, and how to configure and test signature verification.
+This document explains the signature verification functionality in the ESP Secure Certificate component, including secure verification integration, signature block format, and how to configure and test signature verification.
 
 ## 1. Adding signature block in esp_secure_cert partition
 
@@ -68,14 +68,14 @@ The ESP Secure Certificate component provides built-in signature verification fu
 
 ### API Usage
 
-The signature verification is automatically called in the application's `app_main()` function when the `CONFIG_ESP_SECURE_CERT_SECURE_BOOT` configuration is enabled:
+The signature verification is automatically called in the application's `app_main()` function when the `CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION` configuration is enabled:
 
 ```c
 #include "esp_secure_cert_signature_verify.h"
 
 void app_main()
 {
-#if CONFIG_ESP_SECURE_CERT_SECURE_BOOT
+#if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
     // Perform signature verification at startup
     ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
     esp_err_t sig_ret = esp_secure_cert_verify_partition_signature();
@@ -159,7 +159,7 @@ Navigate to: `Component config` → `ESP Secure Certificate` → `Enable secure 
 
 Or add to your `sdkconfig.defaults`:
 ```
-CONFIG_ESP_SECURE_CERT_SECURE_BOOT=y
+CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION=y
 ```
 
 ### Partition Configuration
@@ -196,7 +196,7 @@ Navigate to: `Component config` → `ESP Secure Certificate` → `Enable secure 
 
 Or add to your `sdkconfig.defaults`:
 ```
-CONFIG_ESP_SECURE_CERT_SECURE_BOOT=y
+CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION=y
 ```
 
 Then run qemu, the firmware will be built automatically.
