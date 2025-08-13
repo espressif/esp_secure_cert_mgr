@@ -40,10 +40,26 @@ static void esp_print_cert_or_key(const char *label, const char *data, uint32_t 
         const char *pem_header = "-----BEGIN";
         if (strncmp(data, pem_header, strlen(pem_header)) == 0) {
             ESP_LOGI(TAG, "%s (PEM): \nLength: %"PRIu32"\n%s", label, len, data);
+            len -= 1; // Remove the last '\0' from the PEM data for sha256 calculation
         } else {
             ESP_LOGI(TAG, "%s (DER): \nLength: %"PRIu32"\n", label, len);
             ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, len, ESP_LOG_INFO);
         }
+    
+        unsigned char sha256[32] = {0};
+        mbedtls_sha256_context sha_ctx;
+        mbedtls_sha256_init(&sha_ctx);
+        mbedtls_sha256_starts(&sha_ctx, 0);
+        mbedtls_sha256_update(&sha_ctx, (const unsigned char *)data, len);
+        mbedtls_sha256_finish(&sha_ctx, sha256);
+        mbedtls_sha256_free(&sha_ctx);
+
+        char sha256_str[65] = {0};
+        for (int i = 0; i < 32; ++i) {
+            sprintf(sha256_str + i * 2, "%02x", sha256[i]);
+        }
+
+        ESP_LOGI(TAG, "SHA256 of %s: %s", label, sha256_str);
     } else {
         ESP_LOGW(TAG, "%s: No data found", label);
     }

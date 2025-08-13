@@ -324,7 +324,7 @@ class EspSecureCert:
         if entry.get('key_size') is None:
             raise ValueError("ERROR: Missing required 'key_size' in CSV")
         return True
-    
+
     def _parse_data_from_any_format(self, data_value, data_type, output_file=False):
         """
         Process data content based on type:
@@ -337,7 +337,7 @@ class EspSecureCert:
         """
         # Check if this is a certificate or private key that needs file-based processing
         output_data = None
-    
+
         if data_type == 'file':
             if not os.path.exists(data_value):
                 raise FileNotFoundError(f"File not found: {data_value}")

@@ -1,6 +1,6 @@
 stages:
-  - qemu_test
   - build
+  - qemu_test
 
 variables:
   BATCH_BUILD: "1"
@@ -30,7 +30,7 @@ variables:
 .build_idf_template:
   stage: build
   before_script: *setup_env
-  image: espressif/idf:release-v5.0
+  image: espressif/idf:release-v5.5
   tags:
     - build
   parallel: 3
@@ -41,27 +41,62 @@ variables:
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
-    - cd ci
-    - ./build_test.sh $IDF_TARGET $CI_NODE_INDEX || exit 1
+    - cd examples/esp_secure_cert_app
+    - pip install -r qemu_test/requirements.txt
+    - idf-build-apps build --config "sdkconfig.ci.*" --target $IDF_TARGET --build-dir "build_@t_@w"
+  artifacts:
+    paths:
+      - examples/esp_secure_cert_app/build_*/
+    expire_in: 1 hour
 
-.build_idf_template_release_v4.4:
+.build_idf_template_release_v5.1:
   extends: .build_idf_template
-  image: espressif/idf:release-v4.4
+  image: espressif/idf:release-v5.1
 
-.build_idf_template_release_v4.3:
+.build_idf_template_release_v5.2:
   extends: .build_idf_template
-  image: espressif/idf:release-v4.3
+  image: espressif/idf:release-v5.2
 
-build_demo_esp32:
+.build_idf_template_release_v5.3:
+  extends: .build_idf_template
+  image: espressif/idf:release-v5.3
+
+.build_idf_template_release_v5.4:
+  extends: .build_idf_template
+  image: espressif/idf:release-v5.4
+
+build_demo_esp32c3:
   extends: .build_idf_template
   variables:
-    IDF_TARGET: esp32
+    IDF_TARGET: esp32c3
 
-qemu_test_tlv_esp32:
+build_demo_esp32c3_v5.4:
+  extends: .build_idf_template_release_v5.4
+  variables:
+    IDF_TARGET: esp32c3
+
+build_demo_esp32c3_v5.3:
+  extends: .build_idf_template_release_v5.3
+  variables:
+    IDF_TARGET: esp32c3
+
+build_demo_esp32c3_v5.2:
+  extends: .build_idf_template_release_v5.2
+  variables:
+    IDF_TARGET: esp32c3
+
+build_demo_esp32c3_v5.1:
+  extends: .build_idf_template_release_v5.1
+  variables:
+    IDF_TARGET: esp32c3
+
+qemu_test_tlv_esp32c3:
   stage: qemu_test
   image: $QEMU_IMAGE
   tags:
     - qemu_test
+  dependencies:
+    - build_demo_esp32c3
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
@@ -70,51 +105,7 @@ qemu_test_tlv_esp32:
     - cd /opt/esp-idf
     - bash install.sh
     - . ./export.sh
-    - cd $ROOT_PATH/examples/esp_secure_cert_app/qemu_test
-    - ./build_qemu_images.sh tlv
-    - cd ../
-    - pytest --target esp32
-    - cd qemu_test
-    - ./build_qemu_images.sh legacy_format
-    - cd ../
-    - pytest --target esp32
-
-build_demo_esp32s2:
-  extends: .build_idf_template
-  variables:
-    IDF_TARGET: esp32s2
-
-build_demo_esp32s3:
-  extends: .build_idf_template
-  variables:
-    IDF_TARGET: esp32s3
-
-build_demo_esp32c3:
-  extends: .build_idf_template
-  variables:
-    IDF_TARGET: esp32c3
-
-build_demo_esp32_v4.4:
-  extends: .build_idf_template_release_v4.4
-  variables:
-    IDF_TARGET: esp32
-
-build_demo_esp32s3_v4.4:
-  extends: .build_idf_template_release_v4.4
-  variables:
-    IDF_TARGET: esp32s3
-
-build_demo_esp32c3_v4.4:
-  extends: .build_idf_template_release_v4.4
-  variables:
-    IDF_TARGET: esp32c3
-
-build_demo_esp32_v4.3:
-  extends: .build_idf_template_release_v4.3
-  variables:
-    IDF_TARGET: esp32
-
-build_demo_esp32c3_v4.3:
-  extends: .build_idf_template_release_v4.3
-  variables:
-    IDF_TARGET: esp32c3
+    - cd $ROOT_PATH/examples/esp_secure_cert_app
+    - pip install -r qemu_test/requirements.txt
+    - pytest --target esp32c3 test_esp_secure_cert.py
+    - pytest --target esp32c3 test_apps/
