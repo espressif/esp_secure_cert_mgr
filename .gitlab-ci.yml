@@ -282,13 +282,14 @@ build_demo_esp32c3_v5.5:
       - IDF_TARGET: esp32c3
         CONFIG: legacy
 
-.qemu_test_tlv_esp32c3_template:
+# Base QEMU test template with proper build directory handling
+.qemu_test_base:
   stage: qemu_test
   tags:
     - qemu_test
-  image: espressif/idf:release-v5.5
   variables:
     TARGET: esp32c3
+    BUILD_CONFIG: tlv
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
@@ -296,37 +297,52 @@ build_demo_esp32c3_v5.5:
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/examples/esp_secure_cert_app
     - pip install -r qemu_test/requirements.txt
-    - pytest --target $TARGET test_esp_secure_cert.py
-    - pytest --target $TARGET test_apps/
+    - export BUILD_DIR="build_${TARGET}_${BUILD_CONFIG}"
+    - pytest --target $TARGET test_esp_secure_cert.py --build-dir $BUILD_DIR
+    - pytest --target $TARGET test_apps/ --build-dir $BUILD_DIR --app-path .
 
+# QEMU test jobs for each ESP-IDF version with proper dependencies
 qemu_test_tlv_esp32c3_v5.1:
-  extends: .qemu_test_tlv_esp32c3_template
+  extends: .qemu_test_base
   image: espressif/idf:release-v5.1
   variables:
     TARGET: esp32c3
+    BUILD_CONFIG: tlv
   dependencies:
     - build_demo_esp32c3_v5.1
 
 qemu_test_tlv_esp32c3_v5.2:
-  extends: .qemu_test_tlv_esp32c3_template
+  extends: .qemu_test_base
   image: espressif/idf:release-v5.2
   variables:
     TARGET: esp32c3
+    BUILD_CONFIG: tlv
   dependencies:
     - build_demo_esp32c3_v5.2
 
 qemu_test_tlv_esp32c3_v5.3:
-  extends: .qemu_test_tlv_esp32c3_template
+  extends: .qemu_test_base
   image: espressif/idf:release-v5.3
   variables:
     TARGET: esp32c3
+    BUILD_CONFIG: tlv
   dependencies:
     - build_demo_esp32c3_v5.3
 
 qemu_test_tlv_esp32c3_v5.4:
-  extends: .qemu_test_tlv_esp32c3_template
+  extends: .qemu_test_base
   image: espressif/idf:release-v5.4
   variables:
     TARGET: esp32c3
+    BUILD_CONFIG: tlv
   dependencies:
     - build_demo_esp32c3_v5.4
+
+qemu_test_tlv_esp32c3_v5.5:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.5
+  variables:
+    TARGET: esp32c3
+    BUILD_CONFIG: tlv
+  dependencies:
+    - build_demo_esp32c3_v5.5
