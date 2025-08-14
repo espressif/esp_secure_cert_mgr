@@ -33,7 +33,18 @@ variables:
   image: espressif/idf:release-v5.5
   tags:
     - build
-  parallel: 3
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
+      - IDF_TARGET: esp32c3
+        CONFIG: ecdsa_periperhal
+      - IDF_TARGET: esp32c3
+        CONFIG: rsa_ds
   variables:
     PEDANTIC_FLAGS: "-Werror -Werror=unused-variable -Werror=unused-but-set-variable -Werror=unused-function"
     EXTRA_CFLAGS: "${PEDANTIC_FLAGS}"
@@ -43,10 +54,10 @@ variables:
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - cd examples/esp_secure_cert_app
     - pip install -r qemu_test/requirements.txt
-    - idf-build-apps build --config "sdkconfig.ci.*" --target $IDF_TARGET --build-dir "build_@t_@w"
+    - idf-build-apps build --config "sdkconfig.ci.${CONFIG}" --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}"
   artifacts:
     paths:
-      - examples/esp_secure_cert_app/build_*/
+      - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}/
     expire_in: 1 hour
 
 .build_idf_template_release_v5.1:
@@ -65,47 +76,257 @@ variables:
   extends: .build_idf_template
   image: espressif/idf:release-v5.4
 
+.build_idf_template_release_v5.5:
+  extends: .build_idf_template
+  image: espressif/idf:release-v5.5
+
+build_demo_esp32:
+  extends: .build_idf_template
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32
+        CONFIG: default
+      - IDF_TARGET: esp32
+        CONFIG: tlv
+      - IDF_TARGET: esp32
+        CONFIG: legacy
+
+build_demo_esp32s3:
+  extends: .build_idf_template
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32s3
+        CONFIG: default
+      - IDF_TARGET: esp32s3
+        CONFIG: tlv
+      - IDF_TARGET: esp32s3
+        CONFIG: legacy
+
 build_demo_esp32c3:
   extends: .build_idf_template
-  variables:
-    IDF_TARGET: esp32c3
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
+      - IDF_TARGET: esp32c3
+        CONFIG: ecdsa_periperhal
+      - IDF_TARGET: esp32c3
+        CONFIG: rsa_ds
 
-build_demo_esp32c3_v5.4:
-  extends: .build_idf_template_release_v5.4
-  variables:
-    IDF_TARGET: esp32c3
+build_demo_esp32_v5.1:
+  extends: .build_idf_template_release_v5.1
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32
+        CONFIG: default
+      - IDF_TARGET: esp32
+        CONFIG: tlv
+      - IDF_TARGET: esp32
+        CONFIG: legacy
 
-build_demo_esp32c3_v5.3:
-  extends: .build_idf_template_release_v5.3
-  variables:
-    IDF_TARGET: esp32c3
-
-build_demo_esp32c3_v5.2:
-  extends: .build_idf_template_release_v5.2
-  variables:
-    IDF_TARGET: esp32c3
+build_demo_esp32s3_v5.1:
+  extends: .build_idf_template_release_v5.1
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32s3
+        CONFIG: default
+      - IDF_TARGET: esp32s3
+        CONFIG: tlv
+      - IDF_TARGET: esp32s3
+        CONFIG: legacy
 
 build_demo_esp32c3_v5.1:
   extends: .build_idf_template_release_v5.1
-  variables:
-    IDF_TARGET: esp32c3
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
 
-qemu_test_tlv_esp32c3:
+build_demo_esp32_v5.2:
+  extends: .build_idf_template_release_v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32
+        CONFIG: default
+      - IDF_TARGET: esp32
+        CONFIG: tlv
+      - IDF_TARGET: esp32
+        CONFIG: legacy
+
+build_demo_esp32s3_v5.2:
+  extends: .build_idf_template_release_v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32s3
+        CONFIG: default
+      - IDF_TARGET: esp32s3
+        CONFIG: tlv
+      - IDF_TARGET: esp32s3
+        CONFIG: legacy
+
+build_demo_esp32c3_v5.2:
+  extends: .build_idf_template_release_v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
+
+build_demo_esp32_v5.3:
+  extends: .build_idf_template_release_v5.3
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32
+        CONFIG: default
+      - IDF_TARGET: esp32
+        CONFIG: tlv
+      - IDF_TARGET: esp32
+        CONFIG: legacy
+
+build_demo_esp32s3_v5.3:
+  extends: .build_idf_template_release_v5.3
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32s3
+        CONFIG: default
+      - IDF_TARGET: esp32s3
+        CONFIG: tlv
+      - IDF_TARGET: esp32s3
+        CONFIG: legacy
+
+build_demo_esp32c3_v5.3:
+  extends: .build_idf_template_release_v5.3
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
+
+build_demo_esp32_v5.4:
+  extends: .build_idf_template_release_v5.4
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32
+        CONFIG: default
+      - IDF_TARGET: esp32
+        CONFIG: tlv
+      - IDF_TARGET: esp32
+        CONFIG: legacy
+
+build_demo_esp32s3_v5.4:
+  extends: .build_idf_template_release_v5.4
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32s3
+        CONFIG: default
+      - IDF_TARGET: esp32s3
+        CONFIG: tlv
+      - IDF_TARGET: esp32s3
+        CONFIG: legacy
+
+build_demo_esp32c3_v5.4:
+  extends: .build_idf_template_release_v5.4
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
+
+build_demo_esp32_v5.5:
+  extends: .build_idf_template_release_v5.5
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32
+        CONFIG: default
+      - IDF_TARGET: esp32
+        CONFIG: tlv
+      - IDF_TARGET: esp32
+        CONFIG: legacy
+
+build_demo_esp32s3_v5.5:
+  extends: .build_idf_template_release_v5.5
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32s3
+        CONFIG: default
+      - IDF_TARGET: esp32s3
+        CONFIG: tlv
+      - IDF_TARGET: esp32s3
+        CONFIG: legacy
+
+build_demo_esp32c3_v5.5:
+  extends: .build_idf_template_release_v5.5
+  parallel:
+    matrix:
+      - IDF_TARGET: esp32c3
+        CONFIG: default
+      - IDF_TARGET: esp32c3
+        CONFIG: tlv
+      - IDF_TARGET: esp32c3
+        CONFIG: legacy
+
+.qemu_test_tlv_esp32c3_template:
   stage: qemu_test
-  image: $QEMU_IMAGE
   tags:
     - qemu_test
-  dependencies:
-    - build_demo_esp32c3
+  image: espressif/idf:release-v5.5
+  variables:
+    TARGET: esp32c3
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - export ROOT_PATH=$PWD
-    - git clone --recursive --single-branch -b v5.2-dev https://github.com/espressif/esp-idf --shallow-submodules --depth 1 /opt/esp-idf
-    - cd /opt/esp-idf
-    - bash install.sh
-    - . ./export.sh
+    - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/examples/esp_secure_cert_app
     - pip install -r qemu_test/requirements.txt
-    - pytest --target esp32c3 test_esp_secure_cert.py
-    - pytest --target esp32c3 test_apps/
+    - pytest --target $TARGET test_esp_secure_cert.py
+    - pytest --target $TARGET test_apps/
+
+qemu_test_tlv_esp32c3_v5.1:
+  extends: .qemu_test_tlv_esp32c3_template
+  image: espressif/idf:release-v5.1
+  variables:
+    TARGET: esp32c3
+  dependencies:
+    - build_demo_esp32c3_v5.1
+
+qemu_test_tlv_esp32c3_v5.2:
+  extends: .qemu_test_tlv_esp32c3_template
+  image: espressif/idf:release-v5.2
+  variables:
+    TARGET: esp32c3
+  dependencies:
+    - build_demo_esp32c3_v5.2
+
+qemu_test_tlv_esp32c3_v5.3:
+  extends: .qemu_test_tlv_esp32c3_template
+  image: espressif/idf:release-v5.3
+  variables:
+    TARGET: esp32c3
+  dependencies:
+    - build_demo_esp32c3_v5.3
+
+qemu_test_tlv_esp32c3_v5.4:
+  extends: .qemu_test_tlv_esp32c3_template
+  image: espressif/idf:release-v5.4
+  variables:
+    TARGET: esp32c3
+  dependencies:
+    - build_demo_esp32c3_v5.4
