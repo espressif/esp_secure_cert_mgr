@@ -2,3 +2,4 @@
 __pycache__/
 build*/
 tools/esp_secure_cert_data/*
+test.log

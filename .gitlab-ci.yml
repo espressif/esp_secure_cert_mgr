@@ -41,10 +41,6 @@ variables:
         CONFIG: tlv
       - IDF_TARGET: esp32c3
         CONFIG: legacy
-      - IDF_TARGET: esp32c3
-        CONFIG: ecdsa_periperhal
-      - IDF_TARGET: esp32c3
-        CONFIG: rsa_ds
   variables:
     PEDANTIC_FLAGS: "-Werror -Werror=unused-variable -Werror=unused-but-set-variable -Werror=unused-function"
     EXTRA_CFLAGS: "${PEDANTIC_FLAGS}"
@@ -52,12 +48,13 @@ variables:
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
-    - cd examples/esp_secure_cert_app
-    - pip install -r qemu_test/requirements.txt
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
     - idf-build-apps build --config "sdkconfig.ci.${CONFIG}" --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}"
   artifacts:
     paths:
-      - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}/
+      - test_apps/build_${IDF_TARGET}_${CONFIG}
     expire_in: 1 hour
 
 .build_idf_template_release_v5.1:
@@ -282,32 +279,49 @@ build_demo_esp32c3_v5.5:
       - IDF_TARGET: esp32c3
         CONFIG: legacy
 
+# Build job for examples app sanity test
+build_examples_app_v5.5:
+  extends: .build_idf_template_release_v5.5
+  variables:
+    IDF_TARGET: esp32c3
+    CONFIG: examples
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/examples/esp_secure_cert_app
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - idf-build-apps build --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}"
+  artifacts:
+    paths:
+      - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}
+    expire_in: 1 hour
+
 # Base QEMU test template with proper build directory handling
 .qemu_test_base:
   stage: qemu_test
   tags:
     - qemu_test
   variables:
-    TARGET: esp32c3
-    BUILD_CONFIG: tlv
+    IDF_TARGET: esp32c3  
+    CONFIG: tlv          
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
-    - cd $ROOT_PATH/examples/esp_secure_cert_app
-    - pip install -r qemu_test/requirements.txt
-    - export BUILD_DIR="build_${TARGET}_${BUILD_CONFIG}"
-    - pytest --target $TARGET test_esp_secure_cert.py --build-dir $BUILD_DIR
-    - pytest --target $TARGET test_apps/ --build-dir $BUILD_DIR --app-path .
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR
 
 # QEMU test jobs for each ESP-IDF version with proper dependencies
 qemu_test_tlv_esp32c3_v5.1:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.1
   variables:
-    TARGET: esp32c3
-    BUILD_CONFIG: tlv
+    IDF_TARGET: esp32c3  
+    CONFIG: tlv          
   dependencies:
     - build_demo_esp32c3_v5.1
 
@@ -315,8 +329,8 @@ qemu_test_tlv_esp32c3_v5.2:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.2
   variables:
-    TARGET: esp32c3
-    BUILD_CONFIG: tlv
+    IDF_TARGET: esp32c3  
+    CONFIG: tlv          
   dependencies:
     - build_demo_esp32c3_v5.2
 
@@ -324,8 +338,8 @@ qemu_test_tlv_esp32c3_v5.3:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.3
   variables:
-    TARGET: esp32c3
-    BUILD_CONFIG: tlv
+    IDF_TARGET: esp32c3  
+    CONFIG: tlv          
   dependencies:
     - build_demo_esp32c3_v5.3
 
@@ -333,8 +347,8 @@ qemu_test_tlv_esp32c3_v5.4:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.4
   variables:
-    TARGET: esp32c3
-    BUILD_CONFIG: tlv
+    IDF_TARGET: esp32c3  
+    CONFIG: tlv          
   dependencies:
     - build_demo_esp32c3_v5.4
 
@@ -342,7 +356,29 @@ qemu_test_tlv_esp32c3_v5.5:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.5
   variables:
-    TARGET: esp32c3
-    BUILD_CONFIG: tlv
+    IDF_TARGET: esp32c3  
+    CONFIG: tlv          
   dependencies:
     - build_demo_esp32c3_v5.5
+
+# QEMU test for examples app sanity test
+qemu_test_examples_app_v5.5:
+  stage: qemu_test
+  image: espressif/idf:release-v5.5
+  tags:
+    - qemu_test
+  variables:
+    IDF_TARGET: esp32c3
+    CONFIG: default
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - . $IDF_PATH/export.sh
+    - cd $ROOT_PATH/examples/esp_secure_cert_app
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    # Run the sanity test from examples app
+    - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR
+  dependencies:
+    - build_examples_app_v5.5
