@@ -1,2 +1,2 @@
 # Legacy Format Configuration for CI Testing
-
+CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS=y

@@ -4,6 +4,7 @@ import glob
 import hashlib
 import re
 
+
 PARTITION_TABLE_OFFSET = 0xC000
 SECURE_CERT_OFFSET = 0xD000
 
@@ -11,23 +12,23 @@ def write_bin_to_flash_image(dut, bin_path, offset):
     """Write binary data to flash image at specified offset using file operations"""
     flash_image_bin = os.path.join(dut.app.binary_path, 'flash_image.bin')
     assert os.path.exists(flash_image_bin), f"Flash image not found: {flash_image_bin}"
-    
+
     # Read the binary data to be written
     with open(bin_path, 'rb') as f:
         data_to_write = f.read()
-    
+
     # Read the current flash image
     with open(flash_image_bin, 'rb') as f:
         flash_data = bytearray(f.read())
-    
+
     # Ensure flash image is large enough
     required_size = offset + len(data_to_write)
     if len(flash_data) < required_size:
         flash_data.extend(b'\x00' * (required_size - len(flash_data)))
-    
+
     # Write the data at the specified offset
     flash_data[offset:offset + len(data_to_write)] = data_to_write
-    
+
     # Write back to the flash image file
     with open(flash_image_bin, 'wb') as f:
         f.write(flash_data)
@@ -36,7 +37,7 @@ def read_bin_from_flash_image(dut, offset, size):
     """Read binary data from flash image at specified offset using file operations"""
     flash_image_bin = os.path.join(dut.app.binary_path, 'flash_image.bin')
     assert os.path.exists(flash_image_bin), f"Flash image not found: {flash_image_bin}"
-    
+
     with open(flash_image_bin, 'rb') as f:
         f.seek(offset)
         return f.read(size)
@@ -46,7 +47,7 @@ def read_bin_from_flash_image(dut, offset, size):
 def test_esp_secure_cert_tlv(dut):
     # Take the test application binary from the build directory
     app_bin = os.path.join(dut.app.binary_path, 'test_esp_secure_cert_tlv.bin')
-    
+
     # Search for the binaries in the qemu_test directory
     secure_cert_bin = glob.glob(os.path.join('qemu_test', 'cust_flash_tlv', 'cust_flash_tlv.bin'), recursive=True)[0]
     partition_table_bin = os.path.join('qemu_test', 'cust_flash_tlv', 'partition-table.bin')
@@ -70,7 +71,7 @@ def test_esp_secure_cert_tlv(dut):
         flash_img_size = os.path.getsize(flash_image_bin)
         expected_size = 2 * 1024 * 1024  # 2MB (set in the sdkconfig)
         assert flash_img_size == expected_size, f"Flash image size {flash_img_size} is incorrect, expected {expected_size}"
-        
+
         # Read the original partition table and secure cert data from the files and check that they match the original data
         with open(partition_table_bin, 'rb') as f:
             original_partition = f.read()
@@ -87,7 +88,7 @@ def test_esp_secure_cert_tlv(dut):
         # Check that the partition table and secure cert data match the original data
         assert partition_readback == original_partition, "Partition table data mismatch"
         assert secure_cert_readback == original_secure_cert, "esp_secure_cert data mismatch"
-        
+
         # Get the input data from the input_data directory
         input_data_dir = os.path.join('qemu_test', 'cust_flash_tlv', 'input_data')
         if os.path.isdir(input_data_dir):
@@ -109,33 +110,33 @@ def test_esp_secure_cert_tlv(dut):
         with open(priv_key, 'rb') as f:
             priv_key_data = f.read()
         priv_key_sha256 = hashlib.sha256(priv_key_data).hexdigest()
-        
+
 
         # Extract Device Cert SHA256 from the firmware log
         try:
             result = dut.expect(r'SHA256 of Device Cert \(TLV\): ([0-9a-fA-F]{64})', timeout=10)
-            
+
             fw_device_cert_sha256 = result.group(1).decode('utf-8').lower()
-            
+
             assert fw_device_cert_sha256 == dev_cert_sha256, (
                 f"Device Cert SHA256 mismatch: firmware log={fw_device_cert_sha256}, file={dev_cert_sha256}"
             )
 
         except Exception as e:
             pytest.fail(f"Could not extract Device Cert SHA256 from logs: {e}")
-        
+
         # Extract CA Cert SHA256 from the firmware log
         try:
             result = dut.expect(r'SHA256 of CA Cert \(TLV\): ([0-9a-fA-F]{64})', timeout=10)
             fw_ca_cert_sha256 = result.group(1).decode('utf-8').lower()
-            
+
             assert fw_ca_cert_sha256 == ca_cert_sha256, (
                 f"CA Cert SHA256 mismatch: firmware log={fw_ca_cert_sha256}, file={ca_cert_sha256}"
             )
 
         except Exception as e:
             pytest.fail(f"Could not extract CA Cert SHA256 from logs: {e}")
-        
+
         # Extract Private Key SHA256 from the firmware log
         try:
             result = dut.expect(r'SHA256 of Private Key \(TLV\): ([0-9a-fA-F]{64})', timeout=10)
@@ -150,4 +151,4 @@ def test_esp_secure_cert_tlv(dut):
     except Exception as e:
         pytest.fail(f"Unexpected error: {e}")
 
-    dut.expect(r'Returned from app_main()', timeout=10)
+    dut.expect(r'Test application completed successfully', timeout=10)

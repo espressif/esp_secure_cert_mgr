@@ -95,7 +95,10 @@ void app_main()
     // List all TLV entries
     ESP_LOGI(TAG, "Listing all TLV entries:");
     esp_secure_cert_list_tlv_entries();
-
-    ESP_LOGI(TAG, "Test application completed successfully");
+    if (esp_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Test application completed successfully");
+    } else {
+        ESP_LOGE(TAG, "Test application failed");
+    }
     ESP_LOGI(TAG, "Returned from app_main()");   
 }
