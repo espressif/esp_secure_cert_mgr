@@ -174,9 +174,6 @@ build_examples_app_master:
   stage: qemu_test
   tags:
     - qemu_test
-  variables:
-    IDF_TARGET: esp32c3
-    CONFIG: tlv
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
@@ -191,36 +188,60 @@ build_examples_app_master:
 qemu_test_v5.1:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.1
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
   dependencies:
     - build_v5.1
 
 qemu_test_v5.2:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
   dependencies:
     - build_v5.2
 
 qemu_test_v5.3:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.3
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
   dependencies:
     - build_v5.3
 
 qemu_test_v5.4:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.4
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
   dependencies:
     - build_v5.4
 
 qemu_test_v5.5:
   extends: .qemu_test_base
   image: espressif/idf:release-v5.5
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
   dependencies:
     - build_v5.5
 
 qemu_test_master:
   extends: .qemu_test_base
   image: espressif/idf:latest
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
   dependencies:
     - build_master
 
