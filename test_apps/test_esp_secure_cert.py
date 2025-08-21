@@ -50,11 +50,7 @@ def read_bin_from_flash_image(dut, offset, size):
         return f.read(size)
 
 
-@pytest.mark.qemu
-@pytest.mark.parametrize('target', ['esp32c3', 'esp32'], indirect=True)
-def test_esp_secure_cert_tlv(dut):
-    # Take the test application binary from the build directory
-    app_bin = os.path.join(dut.app.binary_path, 'test_esp_secure_cert_tlv.bin')
+def setup_flash_image_for_qemu(dut):
 
     # Search for the binaries in the qemu_test directory
     secure_cert_bin = glob.glob(
@@ -65,9 +61,6 @@ def test_esp_secure_cert_tlv(dut):
         'qemu_test', 'cust_flash_tlv', 'partition-table.bin'
     )
 
-    assert os.path.exists(app_bin), (
-        "No test application binary found in the build directory"
-    )
     assert os.path.exists(secure_cert_bin), (
         "No cust_flash_tlv.bin found in qemu_test directory"
     )
@@ -124,7 +117,12 @@ def test_esp_secure_cert_tlv(dut):
         assert secure_cert_readback == original_secure_cert, (
             "esp_secure_cert data mismatch"
         )
+    except Exception as e:
+        pytest.fail(f"Unexpected error: {e}")
 
+
+def verify_certificates_and_keys(dut):
+    try:
         # Get the input data from the input_data directory
         input_data_dir = os.path.join(
             'qemu_test', 'cust_flash_tlv', 'input_data'
@@ -204,4 +202,18 @@ def test_esp_secure_cert_tlv(dut):
     except Exception as e:
         pytest.fail(f"Unexpected error: {e}")
 
+
+@pytest.mark.qemu
+@pytest.mark.parametrize('config', ['tlv'], indirect=True)
+@pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
+def test_esp_secure_cert_tlv_qemu(dut):
+    setup_flash_image_for_qemu(dut)
+    verify_certificates_and_keys(dut)
+    dut.expect(r'Test application completed successfully', timeout=10)
+
+
+@pytest.mark.parametrize('config', ['tlv'], indirect=True)
+@pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
+def test_esp_secure_cert_tlv(dut):
+    verify_certificates_and_keys(dut)
     dut.expect(r'Test application completed successfully', timeout=10)

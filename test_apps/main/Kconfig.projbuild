@@ -1,0 +1,11 @@
+menu "Test Apps Configuration"
+
+config TEST_APP_ESP_SECURE_CERT_TLV
+    bool "Enable ESP Secure Cert TLV Test Application"
+    default y
+    help
+        Enable this option to build and run the ESP Secure Cert TLV Test Application.
+        This test application outputs the contents of the TLV-formatted secure cert
+        partition for validation and debugging purposes.
+
+endmenu

@@ -12,6 +12,90 @@ The test applications in this directory serve to:
 - **Provide test infrastructure** for CI/CD pipelines
 - **Enable QEMU-based testing** for different flash formats
 
+## Testing Overview
+
+The test application is designed to run on **both QEMU emulator and real hardware**:
+
+- **QEMU Testing**: Used for CI/CD pipelines and development testing without physical hardware
+- **Real Hardware Testing**: Used for final validation on actual ESP32 devices
+
+## Running Tests
+
+### Prerequisites
+
+1. **Install dependencies**:
+   ```bash
+   cd test_apps
+   pip install -r qemu_test/requirements.txt
+   ```
+
+2. **Build the test application**:
+   ```bash
+   idf.py build
+   ```
+
+### QEMU Testing
+
+For running tests on QEMU emulator (recommended for development and CI):
+
+```bash
+pytest --target $IDF_TARGET \
+       --app-path $ROOT_PATH/test_apps \
+       --build-dir $BUILD_DIR \
+       --embedded-services idf,qemu \
+       -s -m qemu
+```
+
+**Example with specific values**:
+```bash
+pytest --target esp32c3 \
+       --app-path /path/to/test_apps \
+       --build-dir build_esp32c3_tlv \
+       --embedded-services idf,qemu \
+       -s -m qemu
+```
+
+**What this does**:
+- Uses QEMU emulator instead of real hardware
+- Automatically sets up flash image with test data
+- Runs tests marked with `@pytest.mark.qemu`
+
+### Real Hardware Testing
+
+For running tests on actual ESP32 hardware:
+
+```bash
+pytest --target $IDF_TARGET \
+       --app-path $ROOT_PATH/test_apps \
+       --build-dir $BUILD_DIR \
+       --embedded-services esp,idf \
+       -s \
+       -m "not qemu"
+```
+
+**Example with specific values**:
+```bash
+pytest --target esp32c3 \
+       --app-path /path/to/test_apps \
+       --build-dir build_esp32c3_tlv \
+       --embedded-services esp,idf \
+       -s \
+       -m "not qemu"
+```
+
+**What this does**:
+- Runs on real ESP32 hardware
+- Requires physical device connection
+- Uses ESP-IDF's embedded services for hardware interaction
+
+### Test Markers
+
+The test suite uses pytest markers to categorize tests:
+
+- **`@pytest.mark.qemu`**: Tests designed to run on QEMU emulator
+- **`@pytest.mark.parametrize('target', [...])`**: Tests that run on multiple ESP32 targets
+- **`@pytest.mark.parametrize('config', [...])`**: Tests that run with different configurations
+
 ## Directory Structure
 
 ```
@@ -35,25 +119,4 @@ test_apps/
 ├── CMakeLists.txt                 # Project build configuration
 └── README.md                      # This file
 ```
-
-## Test Applications
-
-### 1. **TLV Format Test Application**
-- **Purpose**: Test the modern TLV (Type-Length-Value) format support
-- **Configuration**: `sdkconfig.ci.tlv`
-- **Test Script**: `test_esp_secure_cert.py`
-- **Features**: 
-  - TLV format reading and parsing
-  - Certificate and key extraction
-  - TLV entry listing and validation
-
-### 2. **Legacy Format Test Applications**
-- **Purpose**: Test backward compatibility with legacy formats
-- **Configurations**: `sdkconfig.ci.legacy`
-- **Test Scripts**: `test_esp_secure_cert.py`
-- **Features**:
-  - Legacy cust_flash format support
-  - Legacy NVS format support
-  - Format detection and compatibility
-
-**Note**: This directory is part of the component's testing infrastructure and should not be used as a reference for production applications. For production examples, see the `/examples/` directory.
+\

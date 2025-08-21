@@ -1,0 +1,12 @@
+menu "Example Configuration"
+
+config EXAMPLE_ESP_SECURE_CERT_ENABLE_CI
+    bool
+    default n
+    help
+        Enable this option to apply configuration settings required for running
+        the esp_secure_cert example in Continuous Integration (CI) environments.
+        This may include settings for automated testing, mock data, or other
+        CI-specific behaviors. It is not intended for production use.
+
+endmenu

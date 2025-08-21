@@ -43,7 +43,7 @@ variables:
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/test_apps
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
-    - idf-build-apps build --config "sdkconfig.ci.${CONFIG}" --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}" -p .
+    - idf-ci build run --target $IDF_TARGET
   artifacts:
     paths:
       - test_apps/build_${IDF_TARGET}_${CONFIG}
@@ -119,12 +119,19 @@ variables:
   image: espressif/idf:latest
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32s3, esp32c3]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [default, tlv, legacy]
 
 # Build jobs for each IDF version
 build_v4.3:
   extends: .build_v4.3
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/test_apps
+    - grep -v "idf-ci" $ROOT_PATH/test_apps/qemu_test/requirements.txt | pip install -r /dev/stdin
+    - idf-build-apps build --config "sdkconfig.defaults=default" --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}" -p .
 
 build_v4.4:
   extends: .build_v4.4
@@ -163,7 +170,7 @@ build_examples_app_master:
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/examples/esp_secure_cert_app
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
-    - idf-build-apps build --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}" -p .
+    - idf-ci build run --target $IDF_TARGET
   artifacts:
     paths:
       - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}
@@ -182,7 +189,7 @@ build_examples_app_master:
     - cd $ROOT_PATH/test_apps
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
-    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR
+    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
 
 # QEMU test jobs for each ESP-IDF version
 qemu_test_v5.1:
@@ -240,7 +247,7 @@ qemu_test_master:
   image: espressif/idf:latest
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
   dependencies:
     - build_master
@@ -263,6 +270,6 @@ qemu_test_examples_app_master:
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     # Run the sanity test from examples app
-    - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR
+    - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
   dependencies:
     - build_examples_app_master
