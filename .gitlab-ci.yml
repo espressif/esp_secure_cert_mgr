@@ -43,7 +43,7 @@ variables:
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/test_apps
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
-    - idf-ci build run --target $IDF_TARGET
+    - idf-ci build run --target $IDF_TARGET -m "qemu"
   artifacts:
     paths:
       - test_apps/build_${IDF_TARGET}_${CONFIG}
@@ -111,7 +111,7 @@ variables:
   image: espressif/idf:release-v5.5
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32s3, esp32c3]
+      - IDF_TARGET: [esp32, esp32c3]
         CONFIG: [default, tlv, legacy]
 
 .build_master:
@@ -189,7 +189,28 @@ build_examples_app_master:
     - cd $ROOT_PATH/test_apps
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
-    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
+    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG
+
+# QEMU test jobs for legacy flash format
+qemu_test_legacy:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [legacy]
+        TEST_NAME: [cust_flash, nvs, nvs_legacy, cust_flash_legacy]
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - . $IDF_PATH/export.sh
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG -k "test_esp_secure_cert_${TEST_NAME}_qemu"
+  dependencies:
+    - build_v5.2
 
 # QEMU test jobs for each ESP-IDF version
 qemu_test_v5.1:

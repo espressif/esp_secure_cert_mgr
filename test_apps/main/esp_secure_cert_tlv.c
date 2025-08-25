@@ -67,7 +67,7 @@ void esp_secure_cert_tlv_test()
     // Read Device Certificate using standard API
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
-        esp_print_cert_or_key("Device Cert (TLV)", (const char *)addr, len);
+        esp_print_cert_or_key("Device Cert", (const char *)addr, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
     }
@@ -75,7 +75,7 @@ void esp_secure_cert_tlv_test()
     // Read CA Certificate using standard API
     esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
-        esp_print_cert_or_key("CA Cert (TLV)", (const char *)addr, len);
+        esp_print_cert_or_key("CA Cert", (const char *)addr, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of ca_cert");
     }
@@ -86,15 +86,17 @@ void esp_secure_cert_tlv_test()
     char *priv_key_addr = NULL;
     esp_ret = esp_secure_cert_get_priv_key(&priv_key_addr, &priv_key_len);
     if (esp_ret == ESP_OK) {
-        esp_print_cert_or_key("Private Key (TLV)", (const char *)priv_key_addr, priv_key_len);
+        esp_print_cert_or_key("Private Key", (const char *)priv_key_addr, priv_key_len);
     } else {
         ESP_LOGE(TAG, "Failed to read Private Key using standard format: %s", esp_err_to_name(esp_ret));
     }
 #endif
-
+#ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
     // List all TLV entries
     ESP_LOGI(TAG, "Listing all TLV entries:");
     esp_secure_cert_list_tlv_entries();
+#endif
+
     if (esp_ret == ESP_OK) {
         ESP_LOGI(TAG, "Test application completed successfully");
     } else {
