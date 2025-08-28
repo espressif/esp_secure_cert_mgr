@@ -56,15 +56,15 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+        CONFIG: [default, tlv]
 
 .build_v4.4:
   extends: .build_base
   image: espressif/idf:release-v4.4
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
 
 .build_v5.0:
   extends: .build_base
@@ -79,15 +79,15 @@ variables:
   image: espressif/idf:release-v5.1
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
 
 .build_v5.2:
   extends: .build_base
   image: espressif/idf:release-v5.2
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32c3]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [default, tlv, legacy]
 
 .build_v5.3:
@@ -95,16 +95,16 @@ variables:
   image: espressif/idf:release-v5.3
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
 
 .build_v5.4:
   extends: .build_base
   image: espressif/idf:release-v5.4
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
 
 .build_v5.5:
   extends: .build_base
@@ -112,15 +112,15 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+        CONFIG: [default, tlv]
 
 .build_master:
   extends: .build_base
   image: espressif/idf:latest
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, legacy]
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [default, tlv]
 
 # Build jobs for each IDF version
 build_v4.3:
@@ -218,7 +218,7 @@ qemu_test_v5.1:
   image: espressif/idf:release-v5.1
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
   dependencies:
     - build_v5.1
@@ -228,7 +228,7 @@ qemu_test_v5.2:
   image: espressif/idf:release-v5.2
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
   dependencies:
     - build_v5.2
@@ -238,7 +238,7 @@ qemu_test_v5.3:
   image: espressif/idf:release-v5.3
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
   dependencies:
     - build_v5.3
@@ -248,7 +248,7 @@ qemu_test_v5.4:
   image: espressif/idf:release-v5.4
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
   dependencies:
     - build_v5.4
