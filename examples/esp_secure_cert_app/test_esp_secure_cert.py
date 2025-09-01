@@ -100,7 +100,7 @@ def setup_flash_image_for_qemu(dut):
 
 
 @pytest.mark.qemu
-@pytest.mark.parametrize('target', ['esp32c3'], indirect=True)
+@pytest.mark.parametrize('target', ['esp32c3', 'esp32'], indirect=True)
 @pytest.mark.parametrize('config', ['default'], indirect=True)
 def test_esp_secure_cert_sanity_qemu(dut):
     """Simple sanity check to verify the application is working"""
@@ -112,7 +112,7 @@ def test_esp_secure_cert_sanity_qemu(dut):
     )
 
 
-@pytest.mark.parametrize('target', ['esp32c3'], indirect=True)
+@pytest.mark.parametrize('target', ['esp32c3', 'esp32'], indirect=True)
 @pytest.mark.parametrize('config', ['default'], indirect=True)
 def test_esp_secure_cert_sanity(dut):
     """Simple sanity check to verify the application is working"""

@@ -119,8 +119,8 @@ variables:
   image: espressif/idf:latest
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
-        CONFIG: [default, tlv]
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
 
 # Build jobs for each IDF version
 build_v4.3:
@@ -164,6 +164,10 @@ build_examples_app_master:
   variables:
     IDF_TARGET: esp32c3
     CONFIG: default
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [default]
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
