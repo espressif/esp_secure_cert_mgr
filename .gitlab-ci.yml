@@ -75,31 +75,38 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv]
+        CONFIG: [tlv]
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - idf-build-apps build -p . --recursive --target esp32c3 --config "sdkconfig.ci.${CONFIG}=${CONFIG}"  --build-dir build_@t_@w
 
 .build_v5.0:
-  extends: .build_base
+  extends: .build_v4.4
   image: espressif/idf:release-v5.0
   parallel:
     matrix:
       - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, legacy]
+        CONFIG: [tlv, legacy]
 
 .build_v5.1:
-  extends: .build_base
+  extends: .build_v4.4
   image: espressif/idf:release-v5.1
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv]
+        CONFIG: [tlv]
 
 .build_v5.2:
-  extends: .build_base
+  extends: .build_v4.4
   image: espressif/idf:release-v5.2
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, legacy]
+        CONFIG: [tlv, legacy]
 
 .build_v5.3:
   extends: .build_base
@@ -107,7 +114,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, crypto, basics]
+        CONFIG: [default, tlv, crypto, basics, secure_verification]
 
 .build_v5.4:
   extends: .build_base
@@ -115,7 +122,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, crypto, basics]
+        CONFIG: [default, tlv, crypto, basics, secure_verification]
 
 .build_v5.5:
   extends: .build_base
@@ -123,7 +130,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, crypto, basics]
+        CONFIG: [default, tlv, crypto, basics, secure_verification]
 
 .build_v6.0:
   extends: .build_base
@@ -131,7 +138,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, crypto, basics]
+        CONFIG: [default, tlv, crypto, basics, secure_verification]
 
 .build_master:
   extends: .build_base
@@ -139,7 +146,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv, crypto, basics]
+        CONFIG: [tlv, crypto, basics, secure_verification]
 
 # Build jobs for each IDF version
 build_v4.3:
@@ -321,7 +328,7 @@ qemu_test_v5.3:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv, crypto, basics]
+        CONFIG: [tlv, crypto, basics, secure_verification]
   dependencies:
     - build_v5.3
 
@@ -331,7 +338,7 @@ qemu_test_v5.4:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv, crypto, basics]
+        CONFIG: [tlv, crypto, basics, secure_verification]
   dependencies:
     - build_v5.4
 
@@ -341,7 +348,7 @@ qemu_test_v5.5:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3, esp32]
-        CONFIG: [tlv, crypto, basics]
+        CONFIG: [tlv, crypto, basics, secure_verification]
   dependencies:
     - build_v5.5
 
@@ -351,7 +358,7 @@ qemu_test_v6.0:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv, crypto, basics]
+        CONFIG: [tlv, crypto, basics, secure_verification]
   dependencies:
     - build_v6.0
 
@@ -361,7 +368,7 @@ qemu_test_master:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv, crypto, basics]
+        CONFIG: [tlv, crypto, basics, secure_verification]
   dependencies:
     - build_master
 
