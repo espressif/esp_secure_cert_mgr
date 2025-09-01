@@ -1,6 +1,6 @@
 stages:
-  - qemu_test
   - build
+  - qemu_test
 
 variables:
   BATCH_BUILD: "1"
@@ -27,13 +27,12 @@ variables:
     - git --version
     - git submodule update --init --recursive
 
-.build_idf_template:
+# Base build template with common configuration
+.build_base:
   stage: build
   before_script: *setup_env
-  image: espressif/idf:release-v5.0
   tags:
     - build
-  parallel: 3
   variables:
     PEDANTIC_FLAGS: "-Werror -Werror=unused-variable -Werror=unused-but-set-variable -Werror=unused-function"
     EXTRA_CFLAGS: "${PEDANTIC_FLAGS}"
@@ -41,80 +40,261 @@ variables:
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
-    - cd ci
-    - ./build_test.sh $IDF_TARGET $CI_NODE_INDEX || exit 1
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - idf-ci build run --target $IDF_TARGET -m "qemu"
+  artifacts:
+    paths:
+      - test_apps/build_${IDF_TARGET}_${CONFIG}
+    expire_in: 1 hour
 
-.build_idf_template_release_v4.4:
-  extends: .build_idf_template
-  image: espressif/idf:release-v4.4
-
-.build_idf_template_release_v4.3:
-  extends: .build_idf_template
+# Build templates for different IDF versions
+.build_v4.3:
+  extends: .build_base
   image: espressif/idf:release-v4.3
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32, esp32c3]
+        CONFIG: [default, tlv]
 
-build_demo_esp32:
-  extends: .build_idf_template
+.build_v4.4:
+  extends: .build_base
+  image: espressif/idf:release-v4.4
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
+
+.build_v5.0:
+  extends: .build_base
+  image: espressif/idf:release-v5.0
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32, esp32c3]
+        CONFIG: [default, tlv, legacy]
+
+.build_v5.1:
+  extends: .build_base
+  image: espressif/idf:release-v5.1
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
+
+.build_v5.2:
+  extends: .build_base
+  image: espressif/idf:release-v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv, legacy]
+
+.build_v5.3:
+  extends: .build_base
+  image: espressif/idf:release-v5.3
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
+
+.build_v5.4:
+  extends: .build_base
+  image: espressif/idf:release-v5.4
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv]
+
+.build_v5.5:
+  extends: .build_base
+  image: espressif/idf:release-v5.5
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32, esp32c3]
+        CONFIG: [default, tlv]
+
+.build_master:
+  extends: .build_base
+  image: espressif/idf:latest
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
+
+# Build jobs for each IDF version
+build_v4.3:
+  extends: .build_v4.3
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/test_apps
+    - grep -v "idf-ci" $ROOT_PATH/test_apps/qemu_test/requirements.txt | pip install -r /dev/stdin
+    - idf-build-apps build --config "sdkconfig.defaults=default" --target $IDF_TARGET --build-dir "build_${IDF_TARGET}_${CONFIG}" -p .
+
+build_v4.4:
+  extends: .build_v4.4
+
+build_v5.0:
+  extends: .build_v5.0
+
+build_v5.1:
+  extends: .build_v5.1
+
+build_v5.2:
+  extends: .build_v5.2
+
+build_v5.3:
+  extends: .build_v5.3
+
+build_v5.4:
+  extends: .build_v5.4
+
+build_v5.5:
+  extends: .build_v5.5
+
+build_master:
+  extends: .build_master
+
+# Build job for examples app sanity test
+build_examples_app_master:
+  extends: .build_master
+  image: espressif/idf:latest
   variables:
-    IDF_TARGET: esp32
+    IDF_TARGET: esp32c3
+    CONFIG: default
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [default]
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/examples/esp_secure_cert_app
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - idf-ci build run --target $IDF_TARGET
+  artifacts:
+    paths:
+      - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}
+    expire_in: 1 hour
 
-qemu_test_tlv_esp32:
+# Base QEMU test template
+.qemu_test_base:
   stage: qemu_test
-  image: $QEMU_IMAGE
   tags:
     - qemu_test
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - export ROOT_PATH=$PWD
-    - git clone --recursive --single-branch -b v5.2-dev https://github.com/espressif/esp-idf --shallow-submodules --depth 1 /opt/esp-idf
-    - cd /opt/esp-idf
-    - bash install.sh
-    - . ./export.sh
-    - cd $ROOT_PATH/examples/esp_secure_cert_app/qemu_test
-    - ./build_qemu_images.sh tlv
-    - cd ../
-    - pytest --target esp32
-    - cd qemu_test
-    - ./build_qemu_images.sh legacy_format
-    - cd ../
-    - pytest --target esp32
+    - . $IDF_PATH/export.sh
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG
 
-build_demo_esp32s2:
-  extends: .build_idf_template
-  variables:
-    IDF_TARGET: esp32s2
+# QEMU test jobs for legacy flash format
+qemu_test_legacy:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [legacy]
+        TEST_NAME: [cust_flash, nvs, nvs_legacy, cust_flash_legacy]
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - . $IDF_PATH/export.sh
+    - cd $ROOT_PATH/test_apps
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG -k "test_esp_secure_cert_${TEST_NAME}_qemu"
+  dependencies:
+    - build_v5.2
 
-build_demo_esp32s3:
-  extends: .build_idf_template
-  variables:
-    IDF_TARGET: esp32s3
+# QEMU test jobs for each ESP-IDF version
+qemu_test_v5.1:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.1
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
+  dependencies:
+    - build_v5.1
 
-build_demo_esp32c3:
-  extends: .build_idf_template
+qemu_test_v5.2:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.2
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
+  dependencies:
+    - build_v5.2
+
+qemu_test_v5.3:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.3
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
+  dependencies:
+    - build_v5.3
+
+qemu_test_v5.4:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.4
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
+  dependencies:
+    - build_v5.4
+
+qemu_test_v5.5:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v5.5
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3, esp32]
+        CONFIG: [tlv]
+  dependencies:
+    - build_v5.5
+
+qemu_test_master:
+  extends: .qemu_test_base
+  image: espressif/idf:latest
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv]
+  dependencies:
+    - build_master
+
+# QEMU test for examples app sanity test
+qemu_test_examples_app_master:
+  stage: qemu_test
+  image: espressif/idf:latest
+  tags:
+    - qemu_test
   variables:
     IDF_TARGET: esp32c3
-
-build_demo_esp32_v4.4:
-  extends: .build_idf_template_release_v4.4
-  variables:
-    IDF_TARGET: esp32
-
-build_demo_esp32s3_v4.4:
-  extends: .build_idf_template_release_v4.4
-  variables:
-    IDF_TARGET: esp32s3
-
-build_demo_esp32c3_v4.4:
-  extends: .build_idf_template_release_v4.4
-  variables:
-    IDF_TARGET: esp32c3
-
-build_demo_esp32_v4.3:
-  extends: .build_idf_template_release_v4.3
-  variables:
-    IDF_TARGET: esp32
-
-build_demo_esp32c3_v4.3:
-  extends: .build_idf_template_release_v4.3
-  variables:
-    IDF_TARGET: esp32c3
+    CONFIG: default
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - . $IDF_PATH/export.sh
+    - cd $ROOT_PATH/examples/esp_secure_cert_app
+    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    # Run the sanity test from examples app
+    - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
+  dependencies:
+    - build_examples_app_master
