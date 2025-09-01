@@ -247,6 +247,8 @@ def verify_certificates_and_keys(
         with open(priv_key, 'rb') as f:
             priv_key_data = f.read()
         priv_key_sha256 = hashlib.sha256(priv_key_data).hexdigest()
+        print(f"length of priv_key_data: {len(priv_key_data)}")
+        print(f"priv_key_sha256: {priv_key_sha256}")
 
         # Extract Device Cert SHA256 from the firmware log
         try:
