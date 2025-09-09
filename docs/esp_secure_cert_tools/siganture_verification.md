@@ -1,6 +1,6 @@
-# ESP Secure Certificate Signature Verification
+# ESP Secure Cert Secure Verification
 
-This document explains the signature verification functionality in the ESP Secure Certificate component, including secure verification integration, signature block format, and how to configure and test signature verification.
+This document explains the signature verification functionality in the ESP Secure Cert component, including secure verification integration, signature block format, and how to configure and test signature verification.
 
 ## 1. Adding signature block in esp_secure_cert partition
 
@@ -28,13 +28,18 @@ typedef struct {
 
 ### Signature Block Data
 The signature block data follows the ESP-IDF secure boot v2 format:
-
 ```c
-typedef struct {
-    uint8_t signature[384];  // RSA-3072 signature (384 bytes)
-    uint8_t key[544];        // RSA-3072 public key (544 bytes)
-    // Additional metadata may be present
-} esp_secure_cert_sig_block_t;
+struct ets_secure_boot_sig_block {
+    uint8_t magic_byte;
+    uint8_t version;
+    uint8_t _reserved1;
+    uint8_t _reserved2;
+    uint8_t image_digest[32];
+    ets_rsa_pubkey_t key;
+    uint8_t signature[384];
+    uint32_t block_crc;
+    uint8_t _padding[16];
+};
 ```
 
 ### TLV Footer
@@ -125,6 +130,13 @@ python tools/configure_esp_secure_cert.py \
     --signing-key-file path/to/signing_private_key.pem \
     --signing_scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384]
     --target_chip esp32c3
+```
+
+**NOTE - The number of signature blocks are created depends upon number of keys passed to key.**
+
+For example, in following case two signature block will be generated.
+```
+--signing-key-file priv_key1.pem priv_key2.pem
 ```
 
 ### Command Line Options
