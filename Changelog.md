@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.6.1
+* Update Kconfig to reflect the Digital Signature peripheral support
+
 ##v2.6.0
 * Added TLV type for TEE Secure storage key
 
