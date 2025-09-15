@@ -67,6 +67,8 @@
 
 static const char *TAG = "esp_secure_cert_tlv";
 
+static spi_flash_mmap_handle_t handle = 0;
+
 #define MIN_ALIGNMENT_REQUIRED 16
 
 
@@ -75,6 +77,21 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
 static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, uint8_t *output_buf, size_t buf_len);
 
 #endif
+
+/*
+ * Unmap the esp_secure_cert partition
+ */
+esp_err_t esp_secure_cert_unmap_partition(void)
+{
+    if (handle == 0) {
+        ESP_LOGW(TAG, "Handle is not initialized");
+        return ESP_OK;
+    }
+    esp_secure_cert_mapped_addr = NULL;
+    esp_partition_munmap(handle);
+    handle = 0;
+    return ESP_OK;
+}
 
 /* This is the mininum required flash address alignment in bytes to write to an encrypted flash partition */
 
@@ -108,7 +125,6 @@ const void *esp_secure_cert_get_mapped_addr(void)
     }
 
     /* Encrypted partitions need to be read via a cache mapping */
-    spi_flash_mmap_handle_t handle;
     esp_err_t err;
 
     /* Map the entire partition */

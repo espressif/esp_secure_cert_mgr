@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.7.1
+* Added a new API `esp_secure_cert_unmap_partition` to unmap the `esp_secure_cert` partition
+
 ## v2.7.0
 * Added support for PSA APIs
 

@@ -119,6 +119,14 @@ esp_err_t esp_secure_cert_get_tlv_info_from_iterator(esp_secure_cert_tlv_iterato
  */
 void esp_secure_cert_list_tlv_entries(void);
 
+
+/*
+ * Unmap the esp_secure_cert partition
+ * @return
+ *      - ESP_OK    On success
+ */
+esp_err_t esp_secure_cert_unmap_partition(void);
+
 #ifdef __cplusplus
 }
 #endif
