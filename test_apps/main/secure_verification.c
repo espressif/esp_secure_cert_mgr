@@ -48,6 +48,7 @@ static esp_err_t perform_secure_verification(const char* test_case_name)
 }
 
 
+#ifndef CONFIG_TEST_APP_SECURE_VERIFICATION_CORRUPT_PARTITION
 // Test Case 1: Burn secure boot key and verify (should pass)
 static esp_err_t test_case_1_secure_boot_key_burn_and_verify()
 {
@@ -144,6 +145,22 @@ static esp_err_t test_case_4_revoke_fake_key_and_burn_secure_boot_key_and_verify
 
     return ret;
 }
+#else
+static esp_err_t test_case_5_corrupt_secure_cert_partition_and_verify()
+{
+    ESP_LOGI(TAG, "TEST CASE 5: Corrupt secure cert partition and verify");
+    ESP_LOGI(TAG, "Expected: Secure verification should FAIL");
+
+    // Perform secure verification - should FAIL
+    esp_err_t ret = perform_secure_verification("TEST CASE 5");
+    if (ret == ESP_OK) {
+        ESP_LOGE(TAG, "TEST CASE 5: FAILED - Secure verification succeeded unexpectedly");
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "TEST CASE 5: Secure verification completed successfully====");
+    return ESP_OK;
+}
+#endif
 
 void secure_verification()
 {
@@ -151,6 +168,7 @@ void secure_verification()
     ESP_LOGI(TAG, "This test suite will run 5 test cases to verify secure boot key management");
     ESP_LOGI(TAG, "================================================================");
 
+#ifndef CONFIG_TEST_APP_SECURE_VERIFICATION_CORRUPT_PARTITION
     // Run all test cases in sequence
     esp_err_t sig_ret = test_case_1_secure_boot_key_burn_and_verify();
     if (sig_ret != ESP_OK) {
@@ -172,6 +190,13 @@ void secure_verification()
         ESP_LOGE(TAG, "Test application secure verification failed");
         return;
     }
+#else
+    esp_err_t sig_ret = test_case_5_corrupt_secure_cert_partition_and_verify();
+    if (sig_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Test application secure verification failed");
+        return;
+    }
+#endif
 
     if (sig_ret == ESP_OK) {
         ESP_LOGI(TAG, "Test application secure verification completed successfully");
