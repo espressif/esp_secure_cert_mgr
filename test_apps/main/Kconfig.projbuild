@@ -30,4 +30,10 @@ menu "Test Apps Configuration"
         help
             Enable this option to test the secure verification operations
 
+config TEST_APP_SECURE_VERIFICATION_CORRUPT_PARTITION
+    bool "Enable Secure Verification Test Application with Corrupt Secure Cert Partition"
+    default n
+    help
+        Enable this option to build and run the Secure Verification Test Application with Corrupt Secure Cert Partition.
+
 endmenu
