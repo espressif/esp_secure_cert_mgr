@@ -163,27 +163,27 @@ def main():
         help='Parse an esp_secure_cert.bin file and generate CSV with extracted certificates/keys')
 
     parser.add_argument(
-        '--secure_sign',
+        '--secure-sign',
         dest='secure_sign',
         action='store_true',
         help='Enable secure boot')
 
     parser.add_argument(
-        '--signing_scheme',
+        '--signing-scheme',
         dest='signing_scheme',
         choices=['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384'],
         default='rsa3072',
         help='Secure boot scheme to use')
 
     parser.add_argument(
-        '--signing_key_file',
+        '--signing-key-file',
         dest='signing_key_file',
         default="secure_boot_key.bin",
         nargs='+',
         help='Signing key file(s) to use. You can provide multiple files separated by space.')
 
     parser.add_argument(
-        '--bin_filename',
+        '--bin-filename',
         dest='bin_filename',
         default=None,
         help='Bin filename to use')

@@ -29,6 +29,12 @@ static const char *TAG = "esp_secure_cert_sig_verify";
 #define ESP_SECURE_CERT_SHA256_DIGEST_SIZE            32
 #define ESP_SECURE_CERT_SHA256_ALGORITHM              0
 
+struct EspSecCertSig {
+    uint32_t offset;      // Starting offset of esp_secure_cert partition for hash calculation (always 0)
+    uint32_t length;      // Length of data used for hash calculation (excluding signature block)
+    uint8_t sign_blk[];   // Signature block data (total length - offset - length fields)
+};
+
 /**
  * @brief This API finds all the signature block TLV in the partition and stores
  *        them in the sig_blocks structure
@@ -62,7 +68,8 @@ static esp_err_t find_signature_block(const void *partition_addr, size_t partiti
             }
 
             // Store the signature block data
-            blocks[subtype] = (ets_secure_boot_sig_block_t *)sig_block_data;
+            struct EspSecCertSig *esp_sig = (struct EspSecCertSig *)sig_block_data;
+            blocks[subtype] = (ets_secure_boot_sig_block_t *)esp_sig->sign_blk;
             found_blocks++;
         } else {
             ESP_LOGD(TAG, "No signature block found for subtype %d", subtype);
