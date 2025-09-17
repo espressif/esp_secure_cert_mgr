@@ -14,10 +14,9 @@ import struct
 import base64
 import shutil
 import subprocess
-import argparse
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional, Union
-from construct import (Struct, Int32ul, Int8ul, Int16ul, Int32sl, Bytes, this)
+from construct import (Struct, Int32ul, Int8ul, Int16ul, Int32sl, Bytes, this, GreedyBytes)
 from pathlib import Path
 import tempfile
 import hashlib
@@ -30,8 +29,8 @@ try:
     )
 except ImportError:
     raise ImportError("espsecure module not available")
-   
-   
+
+
 
 from esp_secure_cert.esp_secure_cert_helper import (
     load_private_key,
@@ -84,6 +83,12 @@ TlvHeader = Struct(
 
 TlvFooter = Struct(
     "crc" / Int32ul,    # Little-endian 32-bit CRC
+)
+
+EspSecCertSig = Struct(
+            "offset" / Int32ul,
+            "length" / Int32ul,
+            "signature_data" / GreedyBytes,
 )
 
 TlvEntry = Struct(
@@ -183,7 +188,23 @@ class TlvPartitionBuilder:
 
         self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_SEC_CFG_TLV, subtype, sec_cfg, 0)
 
-    def add_tlv_entry(self, tlv_type: Union[int, tlv_type_t], subtype: int,
+    def add_signature_block(self, signature_data: bytes, subtype: int = 0) -> None:
+        """Add signature block with ESP Secure Cert signature structure"""
+        # Calculate offset (always 0 for partition start) and length (current partition data)
+        offset = 0
+        length = self.current_offset  # Length of data excluding the signature block itself
+
+        sig_block_data = EspSecCertSig.build({
+            "offset": offset,
+            "length": length,
+            "signature_data": signature_data,
+        })
+        # Add as TLV entry with signature block type
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV, subtype, sig_block_data, 0)
+
+        print(f"Added signature block: offset={offset}, length={length}, signature_size={len(signature_data)}")
+
+    def add_tlv_entry(self, tlv_type: int | tlv_type_t, subtype: int,
                       data: bytes, flags: int) -> None:
         """Internal method to add TLV entry to partition"""
         if isinstance(tlv_type, tlv_type_t):
@@ -261,7 +282,7 @@ class EspSecureCert:
 
         if not os.path.exists(esp_secure_cert_data_dir):
             os.makedirs(esp_secure_cert_data_dir)
-    
+
         self.bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert_partition.bin")
         self.signed_bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert_signed_partition.bin")
 
@@ -515,7 +536,7 @@ class EspSecureCert:
                         print(f"  - ECDSA DS configuration completed successfully")
 
                     ds_tlv_entries.append(ds_tlv_entry)
-        
+
 
             # Auto-add DS-related TLVs for each DS configuration
             for ds_tlv_entry in ds_tlv_entries:
@@ -548,7 +569,7 @@ class EspSecureCert:
                     if self._is_certificate_entry(tlv_type):  # CA_CERT or DEV_CERT
                         cert_type_name = "CA Certificate" if tlv_type == tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV else "Device Certificate"
                         print(f"  Adding {cert_type_name} (subtype {tlv_subtype})")
-                        builder.add_certificate(tlv_type_t(tlv_type), processed_data, tlv_subtype)
+                        self.builder.add_certificate(tlv_type_t(tlv_type), processed_data, tlv_subtype)
                         processed_count += 1
                     # Handle private key
                     elif self._is_private_key_entry(tlv_type):  # PRIV_KEY
@@ -574,10 +595,10 @@ class EspSecureCert:
                             if isinstance(processed_data, str) and processed_data.lower().endswith('.bin') and os.path.isfile(processed_data):
                                 with open(processed_data, 'rb') as bin_f:
                                     bin_data = bin_f.read()
-                                builder.add_tlv_entry(tlv_type, tlv_subtype, bin_data, 0)
+                                self.builder.add_tlv_entry(tlv_type, tlv_subtype, bin_data, 0)
                                 print(f"  Added binary data from {processed_data} (subtype {tlv_subtype})")
                             else:
-                                builder.add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
+                                self.builder.add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
                                 print(f"  Skipping unknown TLV type {tlv_type} (subtype {tlv_subtype})")
                             processed_count += 1
 
@@ -590,14 +611,14 @@ class EspSecureCert:
             # Build partition
             self.builder.build_partition(self.bin_filename)
             print(f'\nPartition generated: {self.bin_filename}')
-            builder.build_partition(bin_filename)
-            print(f'\nPartition generated: {bin_filename}')
+            self.builder.build_partition(self.bin_filename)
+            print(f'\nPartition generated: {self.bin_filename}')
 
             # Display summary
             print(f"\n=== ESP Secure Cert Generation Summary ===")
             print(f"Target chip: {target_chip}")
             print(f"Operation mode: {'Device Connected' if port else 'Local Only'}")
-            print(f"Partition file: {bin_filename}")
+            print(f"Partition file: {self.bin_filename}")
             print(f"Total TLV entries: {len(self.secure_cert_entries)}")
 
             if ds_enabled_entries:
@@ -1045,13 +1066,13 @@ class EspSecureCert:
 
     def add_signature_block_using_existing_key(self, hash_bin_filename = None, signing_key_file = None):
         """Add signature block to the partition using existing key"""
-        
+
         if signing_key_file is None:
             raise ValueError("Signing key file is not set")
 
         if hash_bin_filename is None or not os.path.exists(hash_bin_filename):
             raise ValueError("Hash bin filename is not set or does not exist")
-        
+
         # Read the current partition data
         with open(hash_bin_filename, 'rb') as f:
             bin_data = f.read()
@@ -1075,16 +1096,18 @@ class EspSecureCert:
                 print(f"Signature block filename: {signature_block_filename}")
                 with open(signature_block_filename, 'wb') as f:
                     f.write(espsecure_signature_block)
-                self.builder.add_tlv_entry(TlvType.SIGNATURE_BLOCK, self.signature_block_no, espsecure_signature_block, 0)
+
+                # Use the new signature block structure instead of direct TLV entry
+                self.builder.add_signature_block(espsecure_signature_block, self.signature_block_no)
                 self.signature_block_no += 1
         except Exception as e:
             print(f"Error generating signature block: {e}")
             sys.exit(-1)
 
         self.builder.build_partition(self.signed_bin_filename)
-    
+
         with open(self.signed_bin_filename, 'wb') as f:
             f.write(bin_data)
             f.write(self.builder.partition_data[:self.builder.current_offset])
-     
+
         return self.signed_bin_filename
