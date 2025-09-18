@@ -277,7 +277,7 @@ class EspSecureCert:
         # Create the directory esp_secure_cert_data if it does not exist
         if not os.path.exists(esp_secure_cert_data_dir):
             os.makedirs(esp_secure_cert_data_dir)
-    
+
     def __del__(self):
         """Destructor - cleanup when object is destroyed"""
         self.esp_secure_cert_cleanup()
@@ -304,7 +304,7 @@ class EspSecureCert:
 
         if not self._check_for_duplicate_tlv_entries(entry):
             raise ValueError("ERROR: Validation failed for duplicate entries")
-        
+
         if self._is_private_key_entry(entry.get('tlv_type')):
             self._private_key_validation(entry)
 
@@ -378,7 +378,7 @@ class EspSecureCert:
 
     def _strip_csv_row(self, row: dict) -> dict:
         """Optimized version using dictionary comprehension"""
-        return {key: value.strip() if isinstance(value, str) else value 
+        return {key: value.strip() if isinstance(value, str) else value
                 for key, value in row.items()}
 
 
@@ -394,7 +394,7 @@ class EspSecureCert:
             for line_num, row in enumerate(reader, 1):
                 # Strip all values once at the beginning (optimized)
                 row = self._strip_csv_row(row)
-                
+
                 # Skip empty lines and comments
                 if not row or (row.get('tlv_type', '').startswith('#')):
                     continue
@@ -425,7 +425,7 @@ class EspSecureCert:
                     print(f"Error parsing line {line_num}: {row}, error: {e}")
                     continue
         return
-    
+
     def add_entry(self, entry):
         """
         Add an entry to entries after checking for duplicate (type, subtype).
@@ -439,13 +439,20 @@ class EspSecureCert:
             entry['key_size'] = entry.get('key_size', 0)
             entry['algorithm'] = entry.get('algorithm', '')
             entry['private_key_pass'] = None
-        
+
         # Add the processed entry to the list
         self._validate_entry(entry)
         self.secure_cert_entries.append(entry)
 
-    def generate_esp_secure_cert(self, target_chip, port):
-        """Process ESP Secure Cert CSV and generate partition"""
+    def generate_esp_secure_cert(self, target_chip, port=None):
+        """
+        Process ESP Secure Cert CSV and generate partition.
+
+        Args:
+            target_chip (str): Target ESP chip (e.g., esp32c3, esp32s3)
+            port (str, optional): Serial port for device communication.
+                                If None, DS configuration will be done locally without device interaction.
+        """
 
         try:
             # Group entries by type for better logging
@@ -468,9 +475,14 @@ class EspSecureCert:
             # Handle DS configuration if enabled (only for private key entries)
             ds_enabled_entries = [entry for entry in self.secure_cert_entries if entry.get('ds_enabled', False)]
             if ds_enabled_entries:
-                # Raise error if port is not provided. For other operations, port is not required.
-                if not port:
-                    raise ValueError("Port is required")
+                # Display operation mode information
+                if port:
+                    print(f"\n=== DS Configuration Mode: Device Connected (Port: {port}) ===")
+                    print("INFO: DS keys will be burned to device eFuse blocks")
+                else:
+                    print("\n=== DS Configuration Mode: Local Only (No Port) ===")
+                    print("WARNING: DS keys will be generated locally but NOT burned to device")
+                    print("WARNING: You will need to manually burn the keys to device eFuse later")
 
                 for entry in ds_enabled_entries:
                     ds_tlv_entry = {
@@ -485,6 +497,14 @@ class EspSecureCert:
 
                     if entry['algorithm'] == 'RSA':
                         efuse_key_file = get_efuse_key_file(entry['efuse_key_file'])
+                        print(f"\nProcessing RSA DS configuration (subtype {entry['tlv_subtype']}):")
+                        print(f"  - Key size: {entry['key_size']} bits")
+                        print(f"  - eFuse key ID: {entry['efuse_id']}")
+                        if efuse_key_file:
+                            print(f"  - Using provided eFuse key file: {efuse_key_file}")
+                        else:
+                            print(f"  - Will generate new HMAC key file: {hmac_key_file}")
+
                         hmac_key = configure_ds.configure_efuse_for_rsa(
                             target_chip, port, hmac_key_file, efuse_key_file,
                             str(entry['key_size']), entry['data_value'],
@@ -496,14 +516,24 @@ class EspSecureCert:
                         ds_tlv_entry['c'] = c
                         ds_tlv_entry['iv'] = iv
                         ds_tlv_entry['rsa_key_len'] = rsa_key_len
+                        print(f"  - RSA DS parameters calculated successfully")
 
                     elif entry['algorithm'] == 'ECDSA':
                         efuse_key_file = get_efuse_key_file(entry['efuse_key_file'])
+                        print(f"\nProcessing ECDSA DS configuration (subtype {entry['tlv_subtype']}):")
+                        print(f"  - Key size: {entry['key_size']} bits")
+                        print(f"  - eFuse key ID: {entry['efuse_id']}")
+                        if efuse_key_file:
+                            print(f"  - Using provided eFuse key file: {efuse_key_file}")
+                        else:
+                            print(f"  - Will use ECDSA key from private key: {entry['data_value']}")
+
                         configure_ds.configure_efuse_for_ecdsa(
                             target_chip, port, ecdsa_key_file, efuse_key_file,
                             esp_secure_cert_data_dir, str(entry['key_size']),
                             entry['data_value'], None, entry['efuse_id']
                         )
+                        print(f"  - ECDSA DS configuration completed successfully")
 
                     ds_tlv_entries.append(ds_tlv_entry)
 
@@ -576,6 +606,27 @@ class EspSecureCert:
             builder.build_partition(bin_filename)
             print(f'\nPartition generated: {bin_filename}')
 
+            # Display summary
+            print(f"\n=== ESP Secure Cert Generation Summary ===")
+            print(f"Target chip: {target_chip}")
+            print(f"Operation mode: {'Device Connected' if port else 'Local Only'}")
+            print(f"Partition file: {bin_filename}")
+            print(f"Total TLV entries: {len(self.secure_cert_entries)}")
+
+            if ds_enabled_entries:
+                print(f"DS peripheral entries: {len(ds_enabled_entries)}")
+                if not port:
+                    print("IMPORTANT: DS keys were generated locally. You must burn them to device eFuse manually:")
+                    for entry in ds_enabled_entries:
+                        efuse_key_file = get_efuse_key_file(entry['efuse_key_file'])
+                        key_file = efuse_key_file if efuse_key_file else (ecdsa_key_file if entry['algorithm'] == 'ECDSA' else hmac_key_file)
+                        if entry['algorithm'] == 'RSA':
+                            print(f"  espefuse.py --chip {target_chip} -p <PORT> burn_key BLOCK_KEY{entry['efuse_id']} {key_file} HMAC_DOWN_DIGITAL_SIGNATURE")
+                        elif entry['algorithm'] == 'ECDSA':
+                            print(f"  espefuse.py --chip {target_chip} -p <PORT> burn_key BLOCK_KEY{entry['efuse_id']} <ecdsa_key.pem> ECDSA_KEY")
+
+            print("=" * 50)
+
             return bin_filename
 
         except Exception as e:
@@ -592,7 +643,18 @@ class EspSecureCert:
     # The port is required for flashing the esp_secure_cert partition.
     # The flash_filename is the filename of the esp_secure_cert partition.
     def flash_esp_secure_cert_partition(self, idf_target, port, sec_cert_part_offset, flash_filename):
-        print(f'Flashing the esp_secure_cert partition at {sec_cert_part_offset} offset')
+        """
+        Flash the esp_secure_cert partition to the device.
+
+        Args:
+            idf_target (str): Target ESP chip
+            port (str): Serial port for device communication
+            sec_cert_part_offset (str): Flash offset for the partition
+            flash_filename (str): Path to the partition binary file
+        """
+        print(f'\n=== Flashing ESP Secure Cert Partition ===')
+        print(f'Partition file: {flash_filename}')
+        print(f'Flash offset: {sec_cert_part_offset}')
         print('Note: You can skip this step by providing --skip_flash argument')
 
         # Check if the flash_filename exists
@@ -602,8 +664,10 @@ class EspSecureCert:
 
         # Check if the port is provided
         if not port:
-            print("ERROR: Port is required for flashing the esp_secure_cert partition")
-            sys.exit(-1)
+            print("WARNING: Port is not provided, skipping flash operation")
+            print("INFO: Partition has been generated successfully but not flashed to device")
+            print(f"To flash manually: esptool.py --chip {idf_target} -p <PORT> write_flash {sec_cert_part_offset} {flash_filename}")
+            return
 
         flash_command = f"esptool.py --chip {idf_target} " + \
             f"-p {port} write_flash " + \

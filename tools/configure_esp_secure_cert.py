@@ -194,7 +194,7 @@ def main():
     if args.sec_cert_type == 'cust_flash_tlv':
         # Create instance of EspSecureCert
         esp_secure_cert = EspSecureCert()
-        
+
         # Create entry for CA certificate (if provided)
 
         if args.ca_cert is not None:
@@ -245,7 +245,10 @@ def main():
         if not args.skip_flash:
             esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
         else:
-            print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {bin_filename}')
+            if args.port:
+                print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {bin_filename}')
+            else:
+                print(f'To flash manually: esptool.py --chip {args.target_chip} -p <PORT> write_flash {args.sec_cert_part_offset} {bin_filename}')
 
         esp_secure_cert.esp_secure_cert_cleanup()
 
