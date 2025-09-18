@@ -519,17 +519,8 @@ class EspSecureCert:
                         print(f"  - RSA DS parameters calculated successfully")
 
                     elif entry['algorithm'] == 'ECDSA':
-                        efuse_key_file = get_efuse_key_file(entry['efuse_key_file'])
-                        print(f"\nProcessing ECDSA DS configuration (subtype {entry['tlv_subtype']}):")
-                        print(f"  - Key size: {entry['key_size']} bits")
-                        print(f"  - eFuse key ID: {entry['efuse_id']}")
-                        if efuse_key_file:
-                            print(f"  - Using provided eFuse key file: {efuse_key_file}")
-                        else:
-                            print(f"  - Will use ECDSA key from private key: {entry['data_value']}")
-
                         configure_ds.configure_efuse_for_ecdsa(
-                            target_chip, port, ecdsa_key_file, efuse_key_file,
+                            target_chip, port, ecdsa_key_file,
                             esp_secure_cert_data_dir, str(entry['key_size']),
                             entry['data_value'], None, entry['efuse_id']
                         )

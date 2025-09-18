@@ -167,6 +167,18 @@ def configure_efuse_key_block(idf_target: str, port: str,
                     efuse_purpose):
                 efuse_key_read = efuse_summary_json[key_blk]['value']
                 efuse_key_read = bytes.fromhex(efuse_key_read)
+
+                # Check if the key file exists and validate against efuse content
+                if os.path.exists(efuse_key_file):
+                    with open(efuse_key_file, 'rb') as existing_hmac_file:
+                        existing_hmac_key = existing_hmac_file.read()
+
+                    if existing_hmac_key != efuse_key_read:
+                        raise ValueError('The HMAC key given does not '
+                                           'match with the one burned in the '
+                                           'efuse, Please burn the key in a '
+                                           'different key block')
+                
                 if (efuse_purpose == 'ECDSA_KEY'):
 
                     # Convert hex value to bytes object
@@ -188,7 +200,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
 
                 if (efuse_purpose == 'HMAC_DOWN_DIGITAL_SIGNATURE'
                         or efuse_purpose == 'HMAC_UP'):
-
+                    # If key file doesn't exist, create it with efuse content
                     with open(efuse_key_file, 'wb') as hmac_key_file:
                         hmac_key_file.write(efuse_key_read)
 

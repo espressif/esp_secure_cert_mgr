@@ -218,7 +218,7 @@ def configure_efuse_for_rsa(idf_target, port, hmac_key_file, efuse_key_file, rsa
 
     return hmac_key
 
-def configure_efuse_for_ecdsa(idf_target, port, ecdsa_key_file, efuse_key_file, esp_secure_cert_data_dir, ecdsa_key_size, priv_key, priv_key_pass, efuse_key_id):
+def configure_efuse_for_ecdsa(idf_target, port, ecdsa_key_file, esp_secure_cert_data_dir, ecdsa_key_size, priv_key, priv_key_pass, efuse_key_id):
     """
     Configure ECDSA DS with dual flow support:
     1. If port is provided: Use existing flow with device eFuse burning
