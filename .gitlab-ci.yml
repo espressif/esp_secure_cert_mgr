@@ -42,7 +42,17 @@ variables:
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/test_apps
-    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
     - idf-ci build run --target $IDF_TARGET -m "qemu"
   artifacts:
     paths:
@@ -173,7 +183,17 @@ build_examples_app_master:
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/examples/esp_secure_cert_app
-    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
     - idf-ci build run --target $IDF_TARGET
   artifacts:
     paths:
@@ -191,7 +211,17 @@ build_examples_app_master:
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/test_apps
-    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG
 
@@ -210,7 +240,17 @@ qemu_test_legacy:
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/test_apps
-    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG -k "test_esp_secure_cert_${TEST_NAME}_qemu"
   dependencies:
@@ -292,7 +332,17 @@ qemu_test_examples_app_master:
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/examples/esp_secure_cert_app
-    - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     # Run the sanity test from examples app
     - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu

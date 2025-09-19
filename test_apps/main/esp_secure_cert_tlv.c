@@ -3,27 +3,47 @@
 #include "esp_log.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
+#if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
+#else
+#include "psa/crypto.h"
+#endif
 
 
 #define TAG "test_esp_secure_cert_tlv"
 
+#if (MBEDTLS_MAJOR_VERSION < 4)
+static esp_err_t get_sha256(const char *data, uint32_t len, unsigned char *sha256)
+{
+    mbedtls_sha256_context sha_ctx;
+    mbedtls_sha256_init(&sha_ctx);
+    mbedtls_sha256_starts(&sha_ctx, 0);
+    mbedtls_sha256_update(&sha_ctx, (const unsigned char *)data, len);
+    mbedtls_sha256_finish(&sha_ctx, sha256);
+    mbedtls_sha256_free(&sha_ctx);
+    return ESP_OK;
+}
+#else
+static esp_err_t get_sha256(const char *data, uint32_t len, uint8_t *sha256)
+{
+    size_t hash_len = 0;
+    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256, (const uint8_t *)data, len, sha256, 32, &hash_len);
+    if (status != PSA_SUCCESS) {
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+#endif
+
 static void print_sha256_of_data(const char *label, const char *data, uint32_t len)
 {
     if (len > 0 && data != NULL) {
-        unsigned char sha256[32] = {0};
-        mbedtls_sha256_context sha_ctx;
-        mbedtls_sha256_init(&sha_ctx);
-        mbedtls_sha256_starts(&sha_ctx, 0);
-        mbedtls_sha256_update(&sha_ctx, (const unsigned char *)data, len);
-        mbedtls_sha256_finish(&sha_ctx, sha256);
-        mbedtls_sha256_free(&sha_ctx);
-
         char sha256_str[65] = {0};
-        for (int i = 0; i < 32; ++i) {
-            sprintf(sha256_str + i * 2, "%02x", sha256[i]);
+        uint8_t sha256[32] = {0};
+        get_sha256(data, len, sha256);
+        for (int i = 0; i < 32; i++) {
+            snprintf(&sha256_str[i * 2], 3, "%02X", sha256[i]);
         }
-
         ESP_LOGI(TAG, "SHA256 of %s: %s", label, sha256_str);
     } else {
         ESP_LOGW(TAG, "%s: No data found for sha256 calculation", label);

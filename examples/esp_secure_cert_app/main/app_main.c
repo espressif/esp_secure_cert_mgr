@@ -170,10 +170,10 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
         ESP_LOGI(TAG, "Successfully set ECDSA key context");
 #endif
     } else {
-#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
-        ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0);
-#else
+#if (MBEDTLS_VERSION_NUMBER > 0x03000000) && (MBEDTLS_VERSION_NUMBER < 0x04000000)
         ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
+#else
+        ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0);
 #endif
         if (ret != 0) {
             ESP_LOGE(TAG, "Failed to parse the key");
@@ -195,8 +195,10 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
     size_t sig_len = 0;
 #if (MBEDTLS_VERSION_NUMBER < 0x03000000)
     ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, &sig_len, mbedtls_ctr_drbg_random, &ctr_drbg);
-#else
+#elif (MBEDTLS_VERSION_NUMBER < 0x04000000)
     ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, SIG_SIZE, &sig_len, mbedtls_ctr_drbg_random, &ctr_drbg);
+#else
+    ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, SIG_SIZE, &sig_len);
 #endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to sign the data");

@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.7.0
+* Added support for PSA APIs
+
 ## v2.6.1
 * Update Kconfig to reflect the Digital Signature peripheral support
 
