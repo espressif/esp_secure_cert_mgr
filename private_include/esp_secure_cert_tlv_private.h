@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #pragma once
+#include <stdbool.h>
 #include "esp_secure_cert_config.h"
 #include "esp_secure_cert_tlv_config.h"
+#include "esp_err.h"
 
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 #include "rsa_sign_alt.h"
@@ -20,7 +22,7 @@
 #define ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE   (32)                       /* The key size in bytes of the derived ecdsa key */
 #define ESP_SECURE_CERT_KEY_DERIVATION_ITERATION_COUNT  (2048)              /* The iteration count for ecdsa key derivation */
 
-
+#define ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE  121
 
 /**
  * Flags    8 bits
@@ -199,4 +201,19 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_iv(uint8_t *iv);
  *          buffer of size HMAC_ENCRYPTION_AES_GCM_KEY_LEN
  */
 esp_err_t esp_secure_cert_calculate_hmac_encryption_key(uint8_t *aes_key);
+
 #endif
+
+esp_err_t esp_secure_cert_crypto_gcm_decrypt(char *in_buf, uint32_t len, char *output_buf, unsigned char *key,
+    size_t key_len, unsigned char *iv, unsigned char *aad, unsigned char *tag, size_t tag_len);
+
+/*
+ * The API converts the 256 bit ECDSA key to DER format.
+ * @input
+ * key_buf      The readable buffer containing the plaintext key
+ * key_buf_len  The length of the key buf in bytes
+ * output_buf   The writable buffer to write the DER key
+ * output_buf_len Length of the output buffer
+ *
+ */
+esp_err_t esp_secure_cert_convert_key_to_der(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len);

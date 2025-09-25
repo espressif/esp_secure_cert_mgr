@@ -73,7 +73,7 @@ static const char *TAG = "esp_secure_cert_tlv";
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
 static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, char *output_buf, size_t buf_len);
-#define ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE  121
+
 #endif
 
 /* This is the mininum required flash address alignment in bytes to write to an encrypted flash partition */
@@ -543,7 +543,6 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_key(uint8_t *aes_key)
     return ESP_OK;
 }
 
-#define HMAC_ENCRYPTION_RANDOM_DELAY_LIMIT 100
 /*
  * @info
  * Decrypt the data encrypted using hmac based encryption
@@ -556,7 +555,6 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_key(uint8_t *aes_key)
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf)
 {
     esp_err_t esp_ret = ESP_FAIL;
-    int ret = -1;
     uint8_t aes_gcm_key[HMAC_ENCRYPTION_AES_GCM_KEY_LEN];
     uint8_t iv[HMAC_ENCRYPTION_IV_LEN];
 
@@ -571,98 +569,15 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
         return esp_ret;
     }
 
-    mbedtls_gcm_context gcm_ctx;
-    mbedtls_gcm_init(&gcm_ctx);
-    ret = mbedtls_gcm_setkey(&gcm_ctx, MBEDTLS_CIPHER_ID_AES, (unsigned char *)aes_gcm_key, HMAC_ENCRYPTION_AES_GCM_KEY_LEN * 8);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failure at mbedtls_gcm_setkey with error code : -0x%04X", -ret);
-        mbedtls_gcm_free(&gcm_ctx);
-        return ESP_FAIL;
+    esp_ret = esp_secure_cert_crypto_gcm_decrypt(in_buf, len, output_buf, aes_gcm_key, HMAC_ENCRYPTION_AES_GCM_KEY_LEN, iv, NULL, (unsigned char *)(in_buf + len), HMAC_ENCRYPTION_TAG_LEN);
+    if (esp_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to decrypt the data");
+        return esp_ret;
     }
-
-    uint32_t rand_delay;
-    rand_delay = esp_random() % HMAC_ENCRYPTION_RANDOM_DELAY_LIMIT;
-    esp_rom_delay_us(rand_delay);
-
-    len = len - HMAC_ENCRYPTION_TAG_LEN;
-    ret = mbedtls_gcm_auth_decrypt(&gcm_ctx, len, iv,
-                                   HMAC_ENCRYPTION_IV_LEN, NULL, 0,
-                                   (unsigned char *) (in_buf + len),
-                                   HMAC_ENCRYPTION_TAG_LEN,
-                                   (const unsigned char *)(in_buf),
-                                   (unsigned char *)output_buf);
-
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to decrypt the data, mbedtls_gcm_crypt_and_tag returned %02X", ret);
-        mbedtls_gcm_free(&gcm_ctx);
-        return ESP_FAIL;
-    }
-
-    ESP_FAULT_ASSERT(ret == ESP_OK);
 
     return ESP_OK;
 }
 
-static int myrand(void *rng_state, unsigned char *output, size_t len)
-{
-    size_t olen;
-    (void) olen;
-    return mbedtls_hardware_poll(rng_state, output, len, &olen);
-}
-
-/*
- * The API converts the 256 bit ECDSA key to DER format.
- * @input
- * key_buf      The readable buffer containing the plaintext key
- * key_buf_len  The length of the key buf in bytes
- * output_buf   The writable buffer to write the DER key
- * output_buf_len Length of the output buffer
- *
- */
-static esp_err_t esp_secure_cert_convert_key_to_der(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len)
-{
-    esp_err_t ret = ESP_FAIL;
-    // Convert the private key to der
-    mbedtls_pk_context key;
-    mbedtls_pk_init(&key);
-    ret = mbedtls_pk_setup(&key, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to setup pk key, returned %04X", ret);
-        goto exit;
-    }
-
-    mbedtls_ecdsa_context *key_ctx = mbedtls_pk_ec(key);
-    ret = mbedtls_ecp_group_load(&key_ctx->MBEDTLS_PRIVATE(grp), MBEDTLS_ECP_DP_SECP256R1);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to load the ecp group, returned %04X", ret);
-        goto exit;
-    }
-
-    ret = mbedtls_mpi_read_binary(&key_ctx->MBEDTLS_PRIVATE(d), (const unsigned char *) key_buf, key_buf_len);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to read binary, returned %04X", ret);
-        goto exit;
-    }
-
-    // Calculate the public key
-    ret = mbedtls_ecp_mul(&key_ctx->MBEDTLS_PRIVATE(grp), &key_ctx->MBEDTLS_PRIVATE(Q), &key_ctx->MBEDTLS_PRIVATE(d), &key_ctx->MBEDTLS_PRIVATE(grp).G, myrand, NULL);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to generate public key, returned %04X", ret);
-        goto exit;
-    }
-
-    // Write the private key in DER format
-    ret = mbedtls_pk_write_key_der(&key, (unsigned char *) output_buf, output_buf_len);
-    if (ret != ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE) {
-        ESP_LOGE(TAG, "Failed to write the pem key, returned %04X", ret);
-        goto exit;
-    }
-    ret = ESP_OK;
-
-exit:
-    mbedtls_pk_free(&key);
-    return ret;
-}
 /*
  * @info
  * Generate the ECDSA private key (DER format) with help of the PBKDF2 hmac implementation.

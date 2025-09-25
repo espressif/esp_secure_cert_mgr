@@ -10,6 +10,9 @@ config_rules = [
 recursive = true
 check_warnings = true
 keep_going = true
+ignore_warning_files = [
+    "$ROOT_PATH/.ignore_build_warnings.txt",
+]
 
 build_dir = "build_@t_@w"
 build_log_filename = "build.log"

@@ -14,9 +14,14 @@
 
 void esp_secure_cert_tlv_test();
 
+extern void esp_secure_cert_crypto_test();
+extern void esp_secure_cert_crypto_convert_key_to_der_test();
+
 void app_main()
 {
 #ifdef CONFIG_TEST_APP_ESP_SECURE_CERT_TLV
     esp_secure_cert_tlv_test();
 #endif
+    esp_secure_cert_crypto_test();
+    esp_secure_cert_crypto_convert_key_to_der_test();
 }
