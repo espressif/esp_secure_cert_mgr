@@ -72,7 +72,7 @@ static const char *TAG = "esp_secure_cert_tlv";
 
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
-static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, char *output_buf, size_t buf_len);
+static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, uint8_t *output_buf, size_t buf_len);
 
 #endif
 
@@ -346,7 +346,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
             ESP_LOGE(TAG, "Failed to allocate memory");
             return ESP_ERR_NO_MEM;
         }
-        err = esp_secure_cert_gen_ecdsa_key(subtype, output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
+        err = esp_secure_cert_gen_ecdsa_key(subtype, (uint8_t *)output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
         if (err != ESP_OK) {
             free(output_buf);
             ESP_LOGE(TAG, "Failed to generate ECDSA key, returned %04X", err);
@@ -569,7 +569,8 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
         return esp_ret;
     }
 
-    esp_ret = esp_secure_cert_crypto_gcm_decrypt(in_buf, len, output_buf, aes_gcm_key, HMAC_ENCRYPTION_AES_GCM_KEY_LEN, iv, NULL, (unsigned char *)(in_buf + len), HMAC_ENCRYPTION_TAG_LEN);
+    esp_ret = esp_secure_cert_crypto_gcm_decrypt((const uint8_t *)in_buf, len, (uint8_t *)output_buf, aes_gcm_key, HMAC_ENCRYPTION_AES_GCM_KEY_LEN, iv, 
+                                                NULL, (const uint8_t *)(in_buf + len), HMAC_ENCRYPTION_TAG_LEN);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to decrypt the data");
         return esp_ret;
@@ -590,7 +591,7 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
  * buf_len     The length of the buffer in bytes. This must be exactly ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE bytes.
  *
  */
-static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, char *output_buf, size_t buf_len)
+static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t subtype, uint8_t *output_buf, size_t buf_len)
 {
     esp_err_t err = ESP_FAIL;
     int ret = 0;

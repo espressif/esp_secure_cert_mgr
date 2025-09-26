@@ -131,8 +131,8 @@ cleanup:
 
 #if (MBEDTLS_MAJOR_VERSION < 4)
 #define HMAC_ENCRYPTION_RANDOM_DELAY_LIMIT 100
-static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(char *in_buf, uint32_t len, char *output_buf, unsigned char *key, size_t key_len,
-                                unsigned char *iv, unsigned char *aad, unsigned char *tag, size_t tag_len)
+static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(const uint8_t *in_buf, uint32_t len, uint8_t *output_buf, const uint8_t *key, size_t key_len,
+                                const uint8_t *iv, const uint8_t *aad, const uint8_t *tag, size_t tag_len)
 {
     mbedtls_gcm_context gcm_ctx;
     mbedtls_gcm_init(&gcm_ctx);
@@ -140,7 +140,7 @@ static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(char *in_buf, uint3
     if (ret != 0) {
         ESP_LOGE(TAG, "Failure at mbedtls_gcm_setkey with error code : -0x%04X", -ret);
         mbedtls_gcm_free(&gcm_ctx);
-        return ret;
+        return ESP_FAIL;
     }
 
     uint32_t rand_delay;
@@ -152,19 +152,20 @@ static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(char *in_buf, uint3
                                    HMAC_ENCRYPTION_IV_LEN, NULL, 0,
                                    tag,
                                    tag_len,
-                                   (const unsigned char *)(in_buf),
-                                   (unsigned char *)output_buf);
+                                   in_buf,
+                                   output_buf);
 
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to decrypt the data, mbedtls_gcm_crypt_and_tag returned %02X", ret);
         mbedtls_gcm_free(&gcm_ctx);
-        return ret;
+        return ESP_FAIL;
     }
 
     return ESP_OK;
 }
 #else
-static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(char *in_buf, uint32_t len, char *output_buf, unsigned char *key, size_t key_len, unsigned char *iv, unsigned char *aad, unsigned char *tag, size_t tag_len)
+static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(const uint8_t *in_buf, uint32_t len, uint8_t *output_buf, const uint8_t *key, size_t key_len, 
+                                const uint8_t *iv, const uint8_t *aad, const uint8_t *tag, size_t tag_len)
 {
     int ret = ESP_FAIL;
     psa_status_t status;
@@ -199,12 +200,12 @@ static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(char *in_buf, uint3
     }
     size_t olen = 0;
     size_t olen_tag = 0;
-    status = psa_aead_update(&operation, (unsigned char *)in_buf, len, (unsigned char *)output_buf, len, &olen);
+    status = psa_aead_update(&operation, in_buf, len, output_buf, len, &olen);
     if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to update the data, returned %04X", status);
         goto exit;
     }
-    status = psa_aead_verify(&operation, (unsigned char *) output_buf + olen, len - olen, &olen_tag, tag, tag_len);
+    status = psa_aead_verify(&operation, output_buf + olen, len - olen, &olen_tag, tag, tag_len);
     if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to finish the operation, returned %d", status);
         goto exit;
@@ -218,8 +219,8 @@ exit:
 }
 #endif
 
-esp_err_t esp_secure_cert_crypto_gcm_decrypt(char *in_buf, uint32_t len, char *output_buf, unsigned char *key,
-                                size_t key_len, unsigned char *iv, unsigned char *aad, unsigned char *tag, size_t tag_len)
+esp_err_t esp_secure_cert_crypto_gcm_decrypt(const uint8_t *in_buf, uint32_t len, uint8_t *output_buf, const uint8_t *key,
+                                size_t key_len, const uint8_t *iv, const uint8_t *aad, const uint8_t *tag, size_t tag_len)
 {
     return esp_secure_cert_crypto_gcm_decrypt_internal(in_buf, len, output_buf, key, key_len, iv, aad, tag, tag_len);
 }
@@ -233,7 +234,7 @@ static int myrand(void *rng_state, unsigned char *output, size_t len)
     return mbedtls_hardware_poll(rng_state, output, len, &olen);
 }
 
-static esp_err_t esp_secure_cert_convert_key_to_der_internal(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len)
+static esp_err_t esp_secure_cert_convert_key_to_der_internal(const char *key_buf, size_t key_buf_len, uint8_t* output_buf, size_t output_buf_len)
 {
     esp_err_t ret = ESP_FAIL;
     // Convert the private key to der
@@ -266,7 +267,7 @@ static esp_err_t esp_secure_cert_convert_key_to_der_internal(char *key_buf, size
     }
 
     // Write the private key in DER format
-    int mbedtls_ret = mbedtls_pk_write_key_der(&key, (unsigned char *) output_buf, output_buf_len);
+    int mbedtls_ret = mbedtls_pk_write_key_der(&key, output_buf, output_buf_len);
     if (mbedtls_ret != output_buf_len) {
         ESP_LOGE(TAG, "Failed to write the pem key, returned -%d", mbedtls_ret);
         goto exit;
@@ -278,7 +279,7 @@ exit:
     return ret;
 }
 #else
-static esp_err_t esp_secure_cert_convert_key_to_der_internal(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len)
+static esp_err_t esp_secure_cert_convert_key_to_der_internal(const char *key_buf, size_t key_buf_len, uint8_t* output_buf, size_t output_buf_len)
 {
     psa_status_t status;
     psa_key_id_t key_id = 0;
@@ -300,7 +301,7 @@ static esp_err_t esp_secure_cert_convert_key_to_der_internal(char *key_buf, size
         ESP_LOGE(TAG, "Failed to copy the key, returned %04X", ret);
         goto exit;
     }
-    ret = mbedtls_pk_write_key_der(&key, (unsigned char *) output_buf, output_buf_len);
+    ret = mbedtls_pk_write_key_der(&key, output_buf, output_buf_len);
     if (ret != ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE) {
         ESP_LOGE(TAG, "Failed to write the pem key, returned %04X", ret);
         goto exit;
@@ -314,7 +315,7 @@ exit:
 }
 #endif
 
-esp_err_t esp_secure_cert_convert_key_to_der(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len)
+esp_err_t esp_secure_cert_convert_key_to_der(const char *key_buf, size_t key_buf_len, uint8_t* output_buf, size_t output_buf_len)
 {
     return esp_secure_cert_convert_key_to_der_internal(key_buf, key_buf_len, output_buf, output_buf_len);
 }
