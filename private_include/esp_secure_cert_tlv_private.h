@@ -204,16 +204,39 @@ esp_err_t esp_secure_cert_calculate_hmac_encryption_key(uint8_t *aes_key);
 
 #endif
 
-esp_err_t esp_secure_cert_crypto_gcm_decrypt(char *in_buf, uint32_t len, char *output_buf, unsigned char *key,
-    size_t key_len, unsigned char *iv, unsigned char *aad, unsigned char *tag, size_t tag_len);
+/* @info
+ * Decrypt the data encrypted using hmac based encryption
+ * @input
+ * in_buf       This is a pointer to the buffer that holds the encrypted data
+ * len          Length of the encrypted data
+ * output_buf   The pointer to the buffer to write the decrypted data
+ * key          The pointer to the buffer that holds the key
+ * key_len      Length of the key
+ * iv           The pointer to the buffer that holds the IV
+ * aad          The pointer to the buffer that holds the AAD
+ * tag          The pointer to the buffer that holds the tag
+ * tag_len      Length of the tag
+ *
+ * @return
+ *      - ESP_OK    On success
+ *      - ESP_FAIL/other relevant esp error code
+ *                  On failure
+ */
+esp_err_t esp_secure_cert_crypto_gcm_decrypt(const uint8_t *in_buf, uint32_t len, uint8_t *output_buf, const uint8_t *key,
+    size_t key_len, const uint8_t *iv, const uint8_t *aad, const uint8_t *tag, size_t tag_len);
 
 /*
- * The API converts the 256 bit ECDSA key to DER format.
+ * The API converts the 256 bit ECDSA raw formatted key to DER formatted key.
  * @input
- * key_buf      The readable buffer containing the plaintext key
+ * key_buf      The readable buffer containing the raw formatted ECDSA key
  * key_buf_len  The length of the key buf in bytes
  * output_buf   The writable buffer to write the DER key
- * output_buf_len Length of the output buffer
+ * output_buf_len Length of the output buffer in bytes
+ * 
+ * @return
+ *      - ESP_OK    On success
+ *      - ESP_FAIL/other relevant esp error code
+ *                  On failure
  *
  */
-esp_err_t esp_secure_cert_convert_key_to_der(char *key_buf, size_t key_buf_len, char* output_buf, size_t output_buf_len);
+esp_err_t esp_secure_cert_convert_key_to_der(const char *key_buf, size_t key_buf_len, uint8_t* output_buf, size_t output_buf_len);
