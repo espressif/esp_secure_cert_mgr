@@ -176,8 +176,8 @@ def get_ecdsa_key_bytes(privkey, priv_key_pass, key_length_bytes):
 def configure_efuse_for_rsa(idf_target, port, hmac_key_file, efuse_key_file, rsa_key_size, priv_key, priv_key_pass, efuse_key_id):
     """
     Configure RSA DS with dual flow support:
-    1. If port is provided: Use existing flow with device eFuse burning
-    2. If port is None: Use local configuration without device interaction
+    1. If port is provided: Establish a serial connection with the device and configure the eFuses by checking the contents accordingly.
+    2. If port is None: Do not configure eFuses, assume contents based on configuration or generate new.
     """
     sign_algo = 'RSA'
     sign_algo_key_size = rsa_key_size
