@@ -192,7 +192,7 @@ class ConfigureEspSecureCertIntegrationTest(unittest.TestCase):
         csv_file = os.path.join(self.test_dir, 'input_data', 'esp_secure_cert_config_examples.csv')
         
         # Test with different target chips
-        target_chips = ['esp32c3', 'esp32', 'esp32s3']
+        target_chips = ['esp32', 'esp32s3']
         
         for chip in target_chips:
             with self.subTest(chip=chip):

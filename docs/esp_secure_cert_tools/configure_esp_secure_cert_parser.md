@@ -1,6 +1,6 @@
 # ESP Secure Cert Partition Parsing
 
-To parse an existing ESP Secure Cert partition binary, use the `configure_esp_secure_cert.py` script with the `--parse_bin` option. This will extract all certificates, keys, and metadata from the binary partition.
+To parse an existing ESP Secure Cert partition binary, use the `configure_esp_secure_cert.py` script with the `--parse_bin` option. This will extract all available information from the esp_secure_cert partition.
 
 ### Example Command
 

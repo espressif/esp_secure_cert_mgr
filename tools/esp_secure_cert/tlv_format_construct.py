@@ -592,10 +592,10 @@ class EspSecureCert:
                             if isinstance(processed_data, str) and processed_data.lower().endswith('.bin') and os.path.isfile(processed_data):
                                 with open(processed_data, 'rb') as bin_f:
                                     bin_data = bin_f.read()
-                                builder._add_tlv_entry(tlv_type, tlv_subtype, bin_data, 0)
+                                builder.add_tlv_entry(tlv_type, tlv_subtype, bin_data, 0)
                                 print(f"  Added binary data from {processed_data} (subtype {tlv_subtype})")
                             else:
-                                builder._add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
+                                builder.add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
                                 print(f"  Skipping unknown TLV type {tlv_type} (subtype {tlv_subtype})")
                             processed_count += 1
 
