@@ -1,5 +1,6 @@
 stages:
   - build
+  - test
   - qemu_test
 
 variables:
@@ -166,6 +167,26 @@ build_v5.5:
 
 build_master:
   extends: .build_master
+
+# Test job for tools tests
+test_tools:
+  stage: test
+  image: espressif/idf:latest
+  before_script: *setup_env
+  tags:
+    - build
+  script:
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/tools
+    # Install requirements for the tools
+    - pip install -r requirements.txt
+    # Run the tests
+    - python -m unittest discover -s tests -p "test_*.py" -v
+  artifacts:
+    reports:
+      junit: tools/test-results.xml
+    when: always
+    expire_in: 1 hour
 
 # Build job for examples app sanity test
 build_examples_app_master:
