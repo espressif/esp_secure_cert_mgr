@@ -284,7 +284,7 @@ def main():
                 esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, signed_bin_filename)
             else:
                 print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {signed_bin_filename}')
-            
+
             return
 
         if args.esp_secure_cert_csv is not None:
