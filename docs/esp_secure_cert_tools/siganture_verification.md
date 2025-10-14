@@ -6,11 +6,17 @@ This document explains the signature verification functionality in the ESP Secur
 
 ### Signature block
 
-Signature block is calculated using the sha of all the TLV entries except `ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV` and signing_key. For the creation of signature block `generate_signature_block_using_private_key` from `esptool.py`. And appended in the end of esp_secure_cert partition as TLV entry.
+The signature block is calculated using the SHA digest of all the TLV entries in the partition, excluding `ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV` and the signing key itself. To generate the signature block, use the `generate_signature_block_using_private_key` function from `esptool.py`. This function is called with the computed SHA of the TLV data and the private signing key as inputs, for example:
+
+```
+generate_signature_block_using_private_key(contents=<SHA_of_TLV_data>, keyfiles=[<path/to/private_key>])
+```
+
+The resulting signature block is then added to the end of the esp_secure_cert partition as a TLV entry.
 
 #### Signing key
 
-User need to generate the signing_keys on host, and ensure that same keys are used for the secure boot or keys digest is stored in the efuse for verification. User can generate three signature blocks for corresponding three signing keys with same signing scheme.
+You must generate the signing keys on the host system, and **it is critical that the same keys used for secure boot are also used here** for signature verification, or that their key digests are stored in efuse for proper verification.**. User may generate up to three signature blocks—one for each of the three possible signing keys—using the same signing scheme.
 
 #### Signature Block format
 
@@ -57,7 +63,7 @@ The system supports up to 3 signature blocks for redundancy:
 
 The verification process tries each signature block in order until one succeeds.
 
-**NOTE - Signature Block order will be not decided on the subtype basis, but with signing key order passed as parameter in configure_esp_secure_cert.py tool**
+**NOTE:** The order of the signature blocks is determined by the order of the signing keys provided as parameters to the `configure_esp_secure_cert.py` tool, **not** by the subtype field in the signature block.
 
 #### Block Diagram
 
@@ -67,7 +73,7 @@ The verification process tries each signature block in order until one succeeds.
 - Signature Block TLV is created with generated signature block using SHA and signing key.
 - Signature Block TLV will be appended at the end of all entries.
 
-## 2. Secure Boot Verification
+## 2. Secure Verification
 
 The ESP Secure Certificate component provides built-in signature verification functionality that integrates with ESP-IDF's secure boot system. The signature verification is performed at application startup to ensure the integrity and authenticity of the esp_secure_cert partition.
 
@@ -98,23 +104,23 @@ void app_main()
 The verification process:
 1. Calculates a SHA256 hash of all TLV entries except signature blocks
 2. Verifies the signature using the embedded public key in the signature block
-3. Supports multiple signature blocks for redundancy
+3. Multiple signature blocks are supported. This is for if one signing key is revoked, the partition can still be verified using another valid key(s).
 4. Returns `ESP_OK` if any signature block verification succeeds
 
 ## 3. Using configure_esp_secure_cert.py
 
-The `configure_esp_secure_cert.py` script provides functionality to add signature blocks to existing binary files or create new signed binary files.
+The `configure_esp_secure_cert.py` script provides functionality to add signature blocks to existing unsigned esp_secure_cert partition or create new signed esp_secure_cert partitions.
 
 ### Adding Signature Block to Existing Binary
 
-To add a signature block to an existing esp_secure_cert binary file:
+To add a signature block to an existing esp_secure_cert partition:
 
 ```bash
 python tools/configure_esp_secure_cert.py \
     --bin-filename path/to/existing/esp_secure_cert.bin \
-    --secure_sign \
+    --secure-sign \
     --signing-key-file path/to/signing_private_key.pem \
-    --signing_scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384'] \
+    --signing-scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384'] \
 ```
 
 ### Creating New Signed Binary
@@ -126,9 +132,9 @@ python tools/configure_esp_secure_cert.py \
     --private-key path/to/client_private_key.pem \
     --device-cert path/to/device_cert.pem \
     --ca-cert path/to/ca_cert.pem \
-    --secure_sign
+    --secure-sign
     --signing-key-file path/to/signing_private_key.pem \
-    --signing_scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384]
+    --signing-scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384]
     --target_chip esp32c3
 ```
 
@@ -145,7 +151,7 @@ For example, in following case two signature block will be generated.
 |--------|-------------|----------|
 | `--bin-filename` | Path to existing binary file | For existing binaries |
 | `--signing-key-file` | Path to signing private key (PEM format) | Yes |
-| `--secure_sign` | To enable the signature block feature | Yes |
+| `--secure-sign` | To enable the signature block feature | Yes |
 
 
 ### Output Files
@@ -158,12 +164,12 @@ The script generates the following files in the `esp_secure_cert_data/` director
 
 ## 4. Configuration Requirements
 
-### Enable Secure Boot Verification
+### Enable Secure Verification
 
 To use signature verification, enable the following configuration in your project:
 
 ```bash
-# Enable secure boot verification
+# Enable secure verification
 idf.py menuconfig
 ```
 
@@ -176,7 +182,7 @@ CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION=y
 
 ### Partition Configuration
 
-The esp_secure_cert partition will be automatically flashed when you build and flash your application:
+The esp_secure_cert partition will be automatically flashed when you build and flash your application this is only true for **examples/esp_secure_cert_app**, and for other application user need to flash the esp_secure_cert partition manually:
 
 ```bash
 idf.py build flash

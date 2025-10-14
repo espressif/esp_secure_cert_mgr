@@ -216,7 +216,7 @@ build_examples_app_master:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3, esp32]
-        CONFIG: [default]
+        CONFIG: [default, ds]
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS

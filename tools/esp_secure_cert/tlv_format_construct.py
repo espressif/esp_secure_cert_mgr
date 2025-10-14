@@ -86,6 +86,7 @@ TlvFooter = Struct(
 )
 
 EspSecCertSig = Struct(
+            "signature_block_version" / Int8ul,
             "offset" / Int32ul,
             "length" / Int32ul,
             "signature_data" / GreedyBytes,
@@ -195,6 +196,7 @@ class TlvPartitionBuilder:
         length = self.current_offset  # Length of data excluding the signature block itself
 
         sig_block_data = EspSecCertSig.build({
+            "signature_block_version": 1,
             "offset": offset,
             "length": length,
             "signature_data": signature_data,
@@ -613,8 +615,6 @@ class EspSecureCert:
             print(f"\nSuccessfully processed {processed_count} out of {len(self.secure_cert_entries)} entries")
 
             # Build partition
-            self.builder.build_partition(self.bin_filename)
-            print(f'\nPartition generated: {self.bin_filename}')
             self.builder.build_partition(self.bin_filename)
             print(f'\nPartition generated: {self.bin_filename}')
 

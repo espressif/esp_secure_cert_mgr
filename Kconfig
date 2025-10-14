@@ -23,6 +23,6 @@ menu "ESP Secure Cert Manager"
         bool "Enable secure verification support"
         default n
         help
-            Enable secure verification for esp_secure_cert partition which relies on secure boot.
+            Enable support for secure verification for esp_secure_cert partition which relies on secure boot v2. Once enabled, the esp_secure_cert partition can be securely verified by calling esp_secure_cert_verify_partition() just after startup.
 
 endmenu # ESP Secure Cert Manager

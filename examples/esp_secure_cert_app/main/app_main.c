@@ -98,7 +98,7 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %02X", ret);
         goto exit;
-    }g
+    }
     esp_ds_release_ds_lock();
 
     ret = mbedtls_pk_verify(&crt.pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, sig_len);
