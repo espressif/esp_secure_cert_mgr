@@ -237,9 +237,9 @@ void app_main()
     ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
     esp_err_t sig_ret = esp_secure_cert_verify_partition_signature();
     if (sig_ret == ESP_OK) {
-        ESP_LOGI(TAG, "✅ esp_secure_cert partition signature verification PASSED");
+        ESP_LOGI(TAG, "esp_secure_cert partition signature verification PASSED");
     } else {
-        ESP_LOGE(TAG, "❌ esp_secure_cert partition signature verification FAILED");
+        ESP_LOGE(TAG, "esp_secure_cert partition signature verification FAILED");
     }
 #endif
 

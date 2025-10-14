@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -18,7 +18,11 @@
 #include "esp_secure_cert_signature_verify.h"
 #include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_boot.h"
+#if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
+#else
+#include "psa/crypto.h"
+#endif
 #include "mbedtls/pk.h"
 #include "mbedtls/rsa.h"
 #include "mbedtls/x509.h"
@@ -26,7 +30,7 @@
 
 static const char *TAG = "esp_secure_cert_sig_verify";
 
-#define ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS          3
+#define ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS          SECURE_BOOT_NUM_BLOCKS
 #define ESP_SECURE_CERT_SHA256_DIGEST_SIZE            32
 #define ESP_SECURE_CERT_SHA256_ALGORITHM              0
 
@@ -135,6 +139,7 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
              sig_block_data, sig_block_header);
     ESP_LOGI(TAG, "Hash size: %zu bytes (from start to signature block header)", hash_size);
 
+#if (MBEDTLS_MAJOR_VERSION < 4)
     // Initialize SHA256 context
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
@@ -163,6 +168,28 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
 
     mbedtls_sha256_free(&ctx);
     ESP_LOGI(TAG, "Successfully calculated hash of %zu bytes using direct offset calculation", hash_size);
+#else
+    // Use PSA APIs for SHA256 calculation
+    size_t hash_length = 0;
+    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256, 
+                                          (const uint8_t *)partition_addr, 
+                                          hash_size, 
+                                          hash, 
+                                          ESP_SECURE_CERT_SHA256_DIGEST_SIZE, 
+                                          &hash_length);
+    if (status != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "Failed to calculate SHA256 hash using PSA, status: %d", status);
+        return ESP_FAIL;
+    }
+
+    if (hash_length != ESP_SECURE_CERT_SHA256_DIGEST_SIZE) {
+        ESP_LOGE(TAG, "Unexpected hash length: %zu, expected: %d", hash_length, ESP_SECURE_CERT_SHA256_DIGEST_SIZE);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Successfully calculated hash of %zu bytes using PSA APIs", hash_size);
+#endif
+
     return ESP_OK;
 }
 
@@ -175,7 +202,11 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
 static esp_err_t verify_signature(const ets_secure_boot_signature_t *signature_block,
                                      const uint8_t *hash, size_t hash_len)
 {
-    void *buf = malloc(ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS * ESP_SECURE_CERT_SHA256_DIGEST_SIZE);
+    void *buf = calloc(ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS * ESP_SECURE_CERT_SHA256_DIGEST_SIZE, sizeof(uint8_t));
+    if (buf == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate memory for signature verification");
+        return ESP_FAIL;
+    }
     memset(buf, 0, ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS * ESP_SECURE_CERT_SHA256_DIGEST_SIZE);
     esp_err_t ret = esp_secure_boot_verify_sbv2_signature_block(signature_block, hash, buf);
     if (ret != ESP_OK) {
@@ -209,43 +240,44 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
         esp_partition_iterator_release(it);
         return ESP_FAIL;
     }
+    uint32_t partition_size = partition->size;
+    ESP_LOGI(TAG, "Starting signature verification for partition size: %" PRIu32, partition_size);
 
-    ESP_LOGI(TAG, "Starting signature verification for partition size: %" PRIu32, partition->size);
-
+    esp_partition_iterator_release(it);
+    
     // Find the signature block
-    ets_secure_boot_signature_t *signature_blocks = malloc(sizeof(ets_secure_boot_signature_t));
+    ets_secure_boot_signature_t *signature_blocks = calloc(1, sizeof(ets_secure_boot_signature_t));
     if (signature_blocks == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for signature blocks");
-        esp_partition_iterator_release(it);
         return ESP_FAIL;
     }
 
     // Calculate hash of all TLV entries except signature blocks
     uint8_t calculated_hash[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    esp_err_t ret = calculate_partition_hash(partition_addr, partition->size, calculated_hash);
+    esp_err_t ret = calculate_partition_hash(partition_addr, partition_size, calculated_hash);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to calculate partition hash");
-        esp_partition_iterator_release(it);
+        free(signature_blocks);
         return ESP_FAIL;
     }
 
-    ret = find_signature_block(partition_addr, partition->size, signature_blocks);
+    ret = find_signature_block(partition_addr, partition_size, signature_blocks);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to find signature block");
-        esp_partition_iterator_release(it);
+        free(signature_blocks);
         return ESP_FAIL;
     }
     // Verify the signature
     ret = verify_signature(signature_blocks, calculated_hash, sizeof(calculated_hash));
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "esp_secure_cert partition signature verification successful");
-        esp_partition_iterator_release(it);
+        free(signature_blocks);
         return ESP_OK;
     } else {
         ESP_LOGE(TAG, "Signature verification failed");
-        esp_partition_iterator_release(it);
+        free(signature_blocks);
         return ESP_FAIL;
     }
-
+    free(signature_blocks);
     return ESP_FAIL;
 }
