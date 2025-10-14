@@ -167,6 +167,18 @@ def configure_efuse_key_block(idf_target: str, port: str,
                     efuse_purpose):
                 efuse_key_read = efuse_summary_json[key_blk]['value']
                 efuse_key_read = bytes.fromhex(efuse_key_read)
+
+                # Check if the key file exists and validate against efuse content
+                if os.path.exists(efuse_key_file):
+                    with open(efuse_key_file, 'rb') as existing_hmac_file:
+                        existing_hmac_key = existing_hmac_file.read()
+
+                    if existing_hmac_key != efuse_key_read:
+                        raise ValueError('The HMAC key given does not '
+                                           'match with the one burned in the '
+                                           'efuse, Please burn the key in a '
+                                           'different key block')
+                
                 if (efuse_purpose == 'ECDSA_KEY'):
 
                     # Convert hex value to bytes object
@@ -188,7 +200,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
 
                 if (efuse_purpose == 'HMAC_DOWN_DIGITAL_SIGNATURE'
                         or efuse_purpose == 'HMAC_UP'):
-
+                    # If key file doesn't exist, create it with efuse content
                     with open(efuse_key_file, 'wb') as hmac_key_file:
                         hmac_key_file.write(efuse_key_read)
 
@@ -209,3 +221,53 @@ def configure_efuse_key_block(idf_target: str, port: str,
                   f'\nplease execute the script again '
                   f'with a different value of the efuse key id.')
             raise RuntimeError('ERROR: Key block already used')
+
+
+def configure_efuse_key_block_local(efuse_key_file: str, efuse_key_id: int,
+                                   efuse_purpose: str) -> bytes:
+    """
+    Configures the efuse key_block locally without burning to device.
+    This function generates or reads the key file for local DS context creation.
+
+    Args:
+        efuse_key_file (str): Path to the key file.
+        efuse_key_id (int): The eFuse key id to use for the key.
+        efuse_purpose (str): The purpose to be set for the eFuse key block.
+
+    Returns:
+        bytes: Key data read from the file or generated locally.
+    """
+    print(f'INFO: Configuring key block {efuse_key_id} locally for {efuse_purpose}')
+    print('WARNING: This will not burn the key to the device eFuse. The key will be used locally only.')
+
+    if os.path.exists(efuse_key_file):
+        print(f'INFO: Using existing key file: {efuse_key_file}')
+        with open(efuse_key_file, "rb") as key_file:
+            key_data = key_file.read()
+        print(f'INFO: Successfully read {len(key_data)} bytes from existing key file')
+    else:
+        print(f'INFO: Key file not found. Generating new key and saving to: {efuse_key_file}')
+        if efuse_purpose in ['HMAC_DOWN_DIGITAL_SIGNATURE', 'HMAC_UP']:
+            # Generate 32-byte HMAC key
+            key_data = os.urandom(32)
+            print('INFO: Generated 32-byte HMAC key for DS peripheral')
+        elif efuse_purpose == 'ECDSA_KEY':
+            # For ECDSA, the key file should already exist from private key processing
+            raise FileNotFoundError(f'ECDSA key file not found: {efuse_key_file}. '
+                                  f'The ECDSA private key should be processed first.')
+        else:
+            # Default to 32-byte key
+            key_data = os.urandom(32)
+            print(f'INFO: Generated 32-byte key for purpose: {efuse_purpose}')
+
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(efuse_key_file), exist_ok=True)
+
+        with open(efuse_key_file, "wb") as key_file:
+            key_file.write(key_data)
+        print(f'INFO: Key saved to: {efuse_key_file}')
+
+    print('WARNING: Remember to burn this key to the device eFuse manually using:')
+    print(f'  espefuse.py --chip <TARGET> -p <PORT> burn_key BLOCK_KEY{efuse_key_id} {efuse_key_file} {efuse_purpose}')
+
+    return key_data

@@ -120,9 +120,7 @@ def main():
 
     parser.add_argument(
         '--efuse_key_file',
-        help='eFuse key file which contains the '
-             'key that shall be burned in '
-             'the eFuse (e.g. HMAC key, ECDSA key)',
+        help='eFuse key file which contains the key that shall be burned in the eFuse (for HMAC key only, not for ECDSA key).',
         metavar='[/path/to/efuse key file]')
 
     parser.add_argument(
@@ -194,7 +192,7 @@ def main():
     if args.sec_cert_type == 'cust_flash_tlv':
         # Create instance of EspSecureCert
         esp_secure_cert = EspSecureCert()
-        
+
         # Create entry for CA certificate (if provided)
 
         if args.ca_cert is not None:
@@ -234,7 +232,7 @@ def main():
                 'algorithm': args.priv_key_algo[0].upper() if args.priv_key_algo else '',
                 'key_size': int(args.priv_key_algo[1]) if args.priv_key_algo and len(args.priv_key_algo) > 1 else 0,
                 'efuse_id': args.efuse_key_id if hasattr(args, 'efuse_key_id') else 0,
-                'efuse_key_file': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None,
+                'efuse_key_file': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None, # For HMAC key only, not for ECDSA key
             }
             esp_secure_cert.add_entry(entry_priv)
 
@@ -245,7 +243,10 @@ def main():
         if not args.skip_flash:
             esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
         else:
-            print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {bin_filename}')
+            if args.port:
+                print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {bin_filename}')
+            else:
+                print(f'To flash manually: esptool.py --chip {args.target_chip} -p <PORT> write_flash {args.sec_cert_part_offset} {bin_filename}')
 
         esp_secure_cert.esp_secure_cert_cleanup()
 
