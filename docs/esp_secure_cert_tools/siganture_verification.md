@@ -117,7 +117,7 @@ To add a signature block to an existing esp_secure_cert partition:
 
 ```bash
 python tools/configure_esp_secure_cert.py \
-    --bin-filename path/to/existing/esp_secure_cert.bin \
+    --esp-secure-cert-file path/to/existing/esp_secure_cert.bin \
     --secure-sign \
     --signing-key-file path/to/signing_private_key.pem \
     --signing-scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384'] \
@@ -149,7 +149,7 @@ For example, in following case two signature block will be generated.
 
 | Option | Description | Required |
 |--------|-------------|----------|
-| `--bin-filename` | Path to existing binary file | For existing binaries |
+| `--esp-secure-cert-file` | Path to existing binary file | For existing binaries |
 | `--signing-key-file` | Path to signing private key (PEM format) | Yes |
 | `--secure-sign` | To enable the signature block feature | Yes |
 

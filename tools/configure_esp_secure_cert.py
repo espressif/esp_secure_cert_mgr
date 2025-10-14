@@ -183,7 +183,7 @@ def main():
         help='Signing key file(s) to use. You can provide multiple files separated by space.')
 
     parser.add_argument(
-        '--bin-filename',
+        '--esp-secure-cert-file',
         dest='bin_filename',
         default=None,
         help='Bin filename to use')
