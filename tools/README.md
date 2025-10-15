@@ -197,3 +197,11 @@ configure_esp_secure_cert.py --skip_flash
 
 ### Help section
 The additional options supported by the utility can be found at `configure_esp_secure_cert.py --help`.
+
+# Parsing the `esp_secure_cert.bin` file
+
+You can parse the generated `esp_secure_cert.bin` file using the `configure_esp_secure_cert.py` tool. This allows you to extract and inspect the contents of the partition, including certificates, private keys, and any custom data stored within it.
+
+- The tool can also generate a CSV file from the parsed `.bin`, which can be useful for backup, migration, or auditing purposes.
+- All data fields present in the partition (such as certificates, keys, and user data) will be included in the output CSV.
+- For more details on the CSV format and how to use it, refer to [docs/esp_secure_cert_tools/configure_esp_secure_cert_parser.md](https://github.com/espressif/esp_secure_cert_mgr/blob/main/docs/esp_secure_cert_tools/configure_esp_secure_cert_parser.md).
