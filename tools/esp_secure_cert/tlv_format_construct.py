@@ -755,7 +755,7 @@ class EspSecureCert:
                 csv_rows.append({
                     'tlv_type': 'ESP_SECURE_CERT_CA_CERT_TLV',
                     'tlv_subtype': s,
-                    'data_value': fname,
+                    'data_value': f"contents/{fname}",  # Reference file in contents subdirectory
                     'data_type': 'file',
                     'priv_key_type': '',
                     'algorithm': '',
@@ -778,7 +778,7 @@ class EspSecureCert:
                 csv_rows.append({
                     'tlv_type': 'ESP_SECURE_CERT_DEV_CERT_TLV',
                     'tlv_subtype': s,
-                    'data_value': fname,
+                    'data_value': f"contents/{fname}",  # Reference file in contents subdirectory
                     'data_type': 'file',
                     'priv_key_type': '',
                     'algorithm': '',
@@ -825,7 +825,7 @@ class EspSecureCert:
                 csv_rows.append({
                     'tlv_type': 'ESP_SECURE_CERT_PRIV_KEY_TLV',
                     'tlv_subtype': s,
-                    'data_value': fname,
+                    'data_value': f"contents/{fname}",  # Reference file in contents subdirectory
                     'data_type': 'file',
                     'priv_key_type': 'plaintext',
                     'algorithm': algo,
@@ -847,7 +847,7 @@ class EspSecureCert:
                     csv_rows.append({
                         'tlv_type': 'ESP_SECURE_CERT_DS_DATA_TLV',
                         'tlv_subtype': s,
-                        'data_value': fname,
+                        'data_value': f"contents/{fname}",  # Reference file in contents subdirectory
                         'data_type': 'file',
                         'priv_key_type': 'rsa_ds',
                         'algorithm': 'RSA',
@@ -870,7 +870,7 @@ class EspSecureCert:
                     csv_rows.append({
                         'tlv_type': 'ESP_SECURE_CERT_DS_CONTEXT_TLV',
                         'tlv_subtype': s,
-                        'data_value': fname,
+                        'data_value': f"contents/{fname}",  # Reference file in contents subdirectory
                         'data_type': 'file',
                         'priv_key_type': 'rsa_ds',
                         'algorithm': 'RSA',
@@ -891,7 +891,7 @@ class EspSecureCert:
                     csv_rows.append({
                         'tlv_type': 'ESP_SECURE_CERT_SEC_CFG_TLV',
                         'tlv_subtype': s,
-                        'data_value': fname,
+                        'data_value': f"contents/{fname}",  # Reference file in contents subdirectory
                         'data_type': 'file',
                         'priv_key_type': 'ecdsa_peripheral',
                         'algorithm': 'ECDSA',

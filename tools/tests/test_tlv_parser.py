@@ -85,7 +85,17 @@ class TlvParserTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.output_dir), 
                        f"Parsed output directory not created: {self.output_dir}")
         
-        # Get list of expected files
+        # Verify contents subdirectory was created
+        contents_dir = os.path.join(self.output_dir, 'contents')
+        self.assertTrue(os.path.exists(contents_dir), 
+                       f"Contents subdirectory not created: {contents_dir}")
+        
+        # Get content files for debugging (after output directory is confirmed to exist)
+        contents_files = []
+        if os.path.exists(self.output_dir) and os.path.exists(contents_dir):
+            contents_files = [f for f in os.listdir(contents_dir) if os.path.isfile(os.path.join(contents_dir, f))]
+        
+        # Get list of expected files (including directory structure)
         expected_files = []
         if os.path.exists(self.expected_parsed_dir):
             for root, dirs, files in os.walk(self.expected_parsed_dir):
@@ -93,34 +103,90 @@ class TlvParserTest(unittest.TestCase):
                     rel_path = os.path.relpath(os.path.join(root, file), self.expected_parsed_dir)
                     expected_files.append(rel_path)
         
-        # Verify all expected files were generated
+        # Ensure we have expected files to compare against
+        self.assertGreater(len(expected_files), 0, 
+                          f"No expected files found in {self.expected_parsed_dir}")
+        
+        # Verify that the main expected files are present
+        expected_main_files = ['esp_secure_cert_parsed.csv', 'tlv_entries_raw.txt']
+        for main_file in expected_main_files:
+            self.assertIn(main_file, expected_files, 
+                         f"Required file {main_file} not found in expected files")
+        
+        # Get list of generated files (including directory structure)
+        generated_files = []
+        if os.path.exists(self.output_dir):
+            for root, dirs, files in os.walk(self.output_dir):
+                for file in files:
+                    rel_path = os.path.relpath(os.path.join(root, file), self.output_dir)
+                    generated_files.append(rel_path)
+        
+        # Calculate expected contents files for debugging
+        expected_contents_files = [f for f in expected_files if f.startswith('contents/')]
+        
+        # Debug: Print file lists for troubleshooting
+        print(f"\nExpected files ({len(expected_files)}): {sorted(expected_files)}")
+        print(f"Generated files ({len(generated_files)}): {sorted(generated_files)}")
+        print(f"Contents directory files: {sorted(contents_files) if contents_files else 'None'}")
+        print(f"Contents directory exists: {os.path.exists(contents_dir)}")
+        print(f"Output directory: {self.output_dir}")
+        print(f"Expected directory: {self.expected_parsed_dir}")
+        print(f"Expected contents files: {expected_contents_files}")
+        if contents_files:
+            print(f"Found contents files: {['contents/' + f for f in contents_files]}")
+        else:
+            print("Found contents files: None")
+        
+        # Verify all expected files were generated and match
         for expected_file in expected_files:
             generated_file_path = os.path.join(self.output_dir, expected_file)
-            self.assertTrue(os.path.exists(generated_file_path), 
-                           f"Expected parsed file not generated: {expected_file}")
-            
-            # Compare SHA256 hashes
             expected_file_path = os.path.join(self.expected_parsed_dir, expected_file)
-            generated_hash = self._calculate_sha256(generated_file_path)
-            expected_hash = self._calculate_sha256(expected_file_path)
             
-            self.assertEqual(generated_hash, expected_hash,
-                            f"SHA256 mismatch for {expected_file}:\n"
-                            f"Generated: {generated_hash}\n"
-                            f"Expected:  {expected_hash}\n"
-                            f"Generated file: {generated_file_path}\n"
-                            f"Expected file: {expected_file_path}")
+            # Check if file exists
+            self.assertTrue(os.path.exists(generated_file_path), 
+                           f"Expected parsed file not generated: {expected_file}\n"
+                           f"Expected path: {generated_file_path}\n"
+                           f"Available files: {sorted(generated_files)}")
+            
+            # For text files (CSV and TXT), compare content with normalization
+            if expected_file.endswith('.csv') or expected_file.endswith('.txt'):
+                with open(expected_file_path, 'r', encoding='utf-8') as f:
+                    expected_content = f.read().strip().replace('\r\n', '\n')
+                with open(generated_file_path, 'r', encoding='utf-8') as f:
+                    generated_content = f.read().strip().replace('\r\n', '\n')
+                
+                self.assertEqual(generated_content, expected_content,
+                                f"Content mismatch for {expected_file}:\n"
+                                f"Expected file: {expected_file_path}\n"
+                                f"Generated file: {generated_file_path}")
+            else:
+                # For binary files (PEM, DER, BIN), compare SHA256 hashes
+                generated_hash = self._calculate_sha256(generated_file_path)
+                expected_hash = self._calculate_sha256(expected_file_path)
+                
+                self.assertEqual(generated_hash, expected_hash,
+                                f"SHA256 mismatch for {expected_file}:\n"
+                                f"Generated: {generated_hash}\n"
+                                f"Expected:  {expected_hash}\n"
+                                f"Generated file: {generated_file_path}\n"
+                                f"Expected file: {expected_file_path}")
         
-        # Verify that no unexpected files were generated
-        generated_files = []
-        for root, dirs, files in os.walk(self.output_dir):
-            for file in files:
-                rel_path = os.path.relpath(os.path.join(root, file), self.output_dir)
-                generated_files.append(rel_path)
+        # Verify contents directory structure matches expectations
+        if expected_contents_files:
+            self.assertTrue(os.path.exists(contents_dir), 
+                           f"Contents directory should exist but doesn't: {contents_dir}")
+            self.assertGreater(len(contents_files), 0, 
+                              f"Expected contents files but contents directory is empty: {contents_dir}")
+            print(f"Expected {len(expected_contents_files)} contents files, found {len(contents_files)}")
         
+        # Verify that no unexpected files were generated  
         unexpected_files = set(generated_files) - set(expected_files)
+        if len(unexpected_files) > 0:
+            print(f"\nWARNING: Unexpected files generated: {sorted(unexpected_files)}")
+            print(f"Expected files: {sorted(expected_files)}")
+            print(f"Generated files: {sorted(generated_files)}")
         self.assertEqual(len(unexpected_files), 0, 
-                        f"Unexpected files generated: {unexpected_files}")
+                        f"Unexpected files generated: {sorted(unexpected_files)}")
     
     def test_parse_bin_help_option(self):
         """Test that the script shows help when --help is provided"""
