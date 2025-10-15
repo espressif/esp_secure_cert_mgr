@@ -27,28 +27,8 @@ from esp_secure_cert.esp_secure_cert_helper import (
 )
 from cryptography.hazmat.primitives import serialization
 from esp_secure_cert import configure_ds, tlv_format
+from esp_secure_cert.tlv_format import tlv_type_t, tlv_priv_key_type_t
 
-# Sync with C enum esp_secure_cert_tlv_type_t
-class TlvType(enum.IntEnum):
-    CA_CERT = 0
-    DEV_CERT = 1
-    PRIV_KEY = 2
-    DS_DATA = 3
-    DS_CONTEXT = 4
-    ECDSA_KEY_SALT = 5
-    SEC_CFG = 6
-    TLV_END = 50
-    USER_DATA_1 = 51
-    USER_DATA_2 = 52
-    USER_DATA_3 = 53
-    USER_DATA_4 = 54
-    USER_DATA_5 = 55
-    # Matter TLVs (reserved)
-    MATTER_TLV_1 = 201
-    MATTER_TLV_2 = 202
-    # Limits
-    TLV_MAX = 254
-    TLV_INVALID = 255
 
 
 class TlvSubtype(enum.IntEnum):
@@ -62,13 +42,6 @@ class TlvSubtype(enum.IntEnum):
     SUBTYPE_INVALID = 255
 
 
-class PrivKeyType(enum.IntEnum):
-    INVALID_KEY = -1
-    DEFAULT_FORMAT_KEY = 0
-    HMAC_ENCRYPTED_KEY = 1
-    HMAC_DERIVED_ECDSA_KEY = 2
-    ECDSA_PERIPHERAL_KEY = 3
-    RSA_DS_PERIPHERAL_KEY = 4
 
 
 # Constants
@@ -113,14 +86,14 @@ def _calculate_padding(data_length: int) -> int:
     return (MIN_ALIGNMENT_REQUIRED - (data_length % MIN_ALIGNMENT_REQUIRED)) % MIN_ALIGNMENT_REQUIRED
 
 
-def _get_flag_byte(key_type: PrivKeyType) -> int:
+def _get_flag_byte(key_type: tlv_priv_key_type_t) -> int:
     """Generate flag byte based on private key type"""
     flags = 0
-    if key_type == PrivKeyType.HMAC_ENCRYPTED_KEY:
+    if key_type == tlv_priv_key_type_t.ESP_SECURE_CERT_HMAC_ENCRYPTED_KEY:
         flags |= (1 << 7)  # bit 7
-    elif key_type == PrivKeyType.HMAC_DERIVED_ECDSA_KEY:
+    elif key_type == tlv_priv_key_type_t.ESP_SECURE_CERT_HMAC_DERIVED_ECDSA_KEY:
         flags |= (1 << 6)  # bit 6
-    elif key_type == PrivKeyType.ECDSA_PERIPHERAL_KEY:
+    elif key_type == tlv_priv_key_type_t.ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY:
         flags |= (1 << 3)  # bit 3
     return flags
 
@@ -132,7 +105,7 @@ class TlvPartitionBuilder:
         self.partition_data = bytearray(b'\xff' * PARTITION_SIZE)
         self.current_offset = 0
 
-    def add_certificate(self, tlv_type: TlvType, cert_path: str | bytes, subtype: int = 0) -> None:
+    def add_certificate(self, tlv_type: tlv_type_t, cert_path: str | bytes, subtype: int = 0) -> None:
         """Add certificate to partition"""
         cert_data = load_certificate(cert_path)
 
@@ -144,7 +117,7 @@ class TlvPartitionBuilder:
         self.add_tlv_entry(tlv_type, subtype, cert_path, 0)
 
     def add_private_key(self, key_path: str, key_pass: Any = None,
-                       key_type: PrivKeyType = PrivKeyType.DEFAULT_FORMAT_KEY,
+                       key_type: tlv_priv_key_type_t = tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY,
                        subtype: int = 0) -> None:
         """Add private key to partition"""
         if key_path and os.path.exists(key_path):
@@ -158,7 +131,7 @@ class TlvPartitionBuilder:
             key_bytes = b''  # Empty for peripheral keys
 
         flags = _get_flag_byte(key_type)
-        self.add_tlv_entry(TlvType.PRIV_KEY, subtype, key_bytes, flags)
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV, subtype, key_bytes, flags)
 
     def add_ds_data(self, ciphertext: bytes, iv: bytes, rsa_key_len: int, subtype: int = 0) -> None:
         """Add DS data for RSA hardware acceleration"""
@@ -166,7 +139,7 @@ class TlvPartitionBuilder:
         key_len_param = Int32sl.build(rsa_key_len // 32 - 1)  # Signed little-endian
         ds_data = key_len_param + iv + ciphertext
 
-        self.add_tlv_entry(TlvType.DS_DATA, subtype, ds_data, 0)
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_DS_DATA_TLV, subtype, ds_data, 0)
 
     def add_ds_context(self, efuse_key_id: int, rsa_key_len: int, subtype: int = 0) -> None:
         """Add DS context for hardware acceleration"""
@@ -188,7 +161,7 @@ class TlvPartitionBuilder:
             "rsa_key_len": rsa_key_len,
         })
 
-        self.add_tlv_entry(TlvType.DS_CONTEXT, subtype, ds_context, 0)
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_DS_CONTEXT_TLV, subtype, ds_context, 0)
 
     def add_security_config(self, efuse_key_id: int, subtype: int = 0) -> None:
         """Add security configuration"""
@@ -196,12 +169,12 @@ class TlvPartitionBuilder:
         efuse_block_id = efuse_key_id + 4  # Convert to block ID
         sec_cfg = bytes([efuse_block_id]) + b'\x00' * 39
 
-        self.add_tlv_entry(TlvType.SEC_CFG, subtype, sec_cfg, 0)
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_SEC_CFG_TLV, subtype, sec_cfg, 0)
 
-    def add_tlv_entry(self, tlv_type: int | TlvType, subtype: int,
+    def add_tlv_entry(self, tlv_type: int | tlv_type_t, subtype: int,
                       data: bytes, flags: int) -> None:
         """Internal method to add TLV entry to partition"""
-        if isinstance(tlv_type, TlvType):
+        if isinstance(tlv_type, tlv_type_t):
             tlv_type = tlv_type.value
 
         # Build TLV entry using construct
@@ -286,13 +259,13 @@ class EspSecureCert:
         """Destructor - cleanup when object is destroyed"""
         self.esp_secure_cert_cleanup()
 
-    def _is_private_key_entry(self, tlv_type: int | TlvType) -> bool:
+    def _is_private_key_entry(self, tlv_type: int | tlv_type_t) -> bool:
         """Check if entry is a private key"""
-        return tlv_type == TlvType.PRIV_KEY.value
+        return tlv_type == tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV.value
 
-    def _is_certificate_entry(self, tlv_type: int | TlvType) -> bool:
+    def _is_certificate_entry(self, tlv_type: int | tlv_type_t) -> bool:
         """Check if entry is a certificate"""
-        return tlv_type in [TlvType.CA_CERT.value, TlvType.DEV_CERT.value]
+        return tlv_type in [tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV.value, tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV.value]
 
     def _validate_entry(self, entry: dict) -> bool:
         """Validate entry"""
@@ -566,7 +539,7 @@ class EspSecureCert:
                     if self._is_certificate_entry(tlv_type):  # CA_CERT or DEV_CERT
                         cert_type_name = "CA Certificate" if tlv_type == tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV else "Device Certificate"
                         print(f"  Adding {cert_type_name} (subtype {tlv_subtype})")
-                        builder.add_certificate(TlvType(tlv_type), processed_data, tlv_subtype)
+                        builder.add_certificate(tlv_type_t(tlv_type), processed_data, tlv_subtype)
                         processed_count += 1
                     # Handle private key
                     elif self._is_private_key_entry(tlv_type):  # PRIV_KEY
@@ -709,10 +682,11 @@ class EspSecureCert:
         Adds efuse_id, key_size, algorithm, priv_key_type if possible.
         """
         output_dir = 'esp_secure_cert_parsed_data'
+        content_dir = os.path.join(output_dir, "contents")
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
         os.makedirs(output_dir)
-
+        os.makedirs(content_dir)
         # Check if the file exists and is a .bin file
         if not os.path.isfile(bin_file_path):
             print(f"ERROR: The provided file '{bin_file_path}' does not exist or is not a file.")
@@ -769,13 +743,13 @@ class EspSecureCert:
             # CA cert
             if t == tlv_format.tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV:
                 fname = f"cacert_{t}_{s}.pem"
-                fpath = os.path.join(output_dir, fname)
+                fpath = os.path.join(content_dir, fname)
                 if data.startswith(b'-----BEGIN CERTIFICATE-----'):
                     with open(fpath, 'w') as f:
                         f.write(data.rstrip(b'\x00').decode('utf-8'))
                 else:
                     fname = f"cacert_{t}_{s}.der"
-                    fpath = os.path.join(output_dir, fname)
+                    fpath = os.path.join(content_dir, fname)
                     with open(fpath, 'wb') as f:
                         f.write(data)
                 csv_rows.append({
@@ -792,13 +766,13 @@ class EspSecureCert:
             # Device cert
             elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV:
                 fname = f"devcert_{t}_{s}.pem"
-                fpath = os.path.join(output_dir, fname)
+                fpath = os.path.join(content_dir, fname)
                 if data.startswith(b'-----BEGIN CERTIFICATE-----'):
                     with open(fpath, 'w') as f:
                         f.write(data.rstrip(b'\x00').decode('utf-8'))
                 else:
                     fname = f"devcert_{t}_{s}.der"
-                    fpath = os.path.join(output_dir, fname)
+                    fpath = os.path.join(content_dir, fname)
                     with open(fpath, 'wb') as f:
                         f.write(data)
                 csv_rows.append({
@@ -816,7 +790,7 @@ class EspSecureCert:
             elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV:
                 # Plaintext
                 fname = f"privkey_{t}_{s}.pem"
-                fpath = os.path.join(output_dir, fname)
+                fpath = os.path.join(content_dir, fname)
                 algo = ''
                 if data.startswith(b'-----BEGIN'):
                     key_bytes = data.rstrip(b'\x00')
@@ -845,7 +819,7 @@ class EspSecureCert:
                             f.write(key_bytes.decode('utf-8'))
                 else:
                     fname = f"privkey_{t}_{s}.der"
-                    fpath = os.path.join(output_dir, fname)
+                    fpath = os.path.join(content_dir, fname)
                     with open(fpath, 'wb') as f:
                         f.write(data)
                 csv_rows.append({
@@ -863,7 +837,7 @@ class EspSecureCert:
             elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_DS_DATA_TLV:
                 if not any(r['tlv_type'] == 'ESP_SECURE_CERT_DS_DATA_TLV' and r['tlv_subtype'] == s for r in csv_rows):
                     fname = f"ds_data_{t}_{s}.bin"
-                    fpath = os.path.join(output_dir, fname)
+                    fpath = os.path.join(content_dir, fname)
                     with open(fpath, 'wb') as f:
                         f.write(data)
                     key_size = ''
@@ -885,7 +859,7 @@ class EspSecureCert:
             elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_DS_CONTEXT_TLV:
                 if not any(r['tlv_type'] == 'ESP_SECURE_CERT_DS_CONTEXT_TLV' and r['tlv_subtype'] == s for r in csv_rows):
                     fname = f"ds_context_{t}_{s}.bin"
-                    fpath = os.path.join(output_dir, fname)
+                    fpath = os.path.join(content_dir, fname)
                     with open(fpath, 'wb') as f:
                         f.write(data)
                     efuse_id = ''
@@ -908,7 +882,7 @@ class EspSecureCert:
             elif t == tlv_format.tlv_type_t.ESP_SECURE_CERT_SEC_CFG_TLV:
                 if not any(r['tlv_type'] == 'ESP_SECURE_CERT_SEC_CFG_TLV' and r['tlv_subtype'] == s for r in csv_rows):
                     fname = f"sec_cfg_{t}_{s}.bin"
-                    fpath = os.path.join(output_dir, fname)
+                    fpath = os.path.join(content_dir, fname)
                     with open(fpath, 'wb') as f:
                         f.write(data)
                     efuse_id = ''
@@ -958,16 +932,15 @@ class EspSecureCert:
 
         # Write CSV
         csv_file_path = os.path.join(output_dir, 'esp_secure_cert_parsed.csv')
-        with open(csv_file_path, 'w', newline='') as csvfile:
-            fieldnames = ['tlv_type', 'tlv_subtype', 'data_value', 'data_type', 'priv_key_type', 'algorithm', 'key_size', 'efuse_id', 'efuse_key']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(csv_rows)
-        print(f"\nSuccessfully parsed binary file!")
-        print(f"Generated files:")
-        print(f"  - CSV file: {csv_file_path}")
-        print(f"  - {len(csv_rows)} rows in CSV")
-        print(f"  - All files in: {output_dir}")
+        try:
+            with open(csv_file_path, 'w', newline='') as csvfile:
+                fieldnames = ['tlv_type', 'tlv_subtype', 'data_value', 'data_type', 'priv_key_type', 'algorithm', 'key_size', 'efuse_id', 'efuse_key']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(csv_rows)
+        except Exception as e:
+            print(f"ERROR: Could not write CSV file '{csv_file_path}': {e}")
+            sys.exit(-1)
 
         # Write TLV partition full output to tlv_entries_raw.txt using tlv_parser.py's process_tlv_entries
         try:
@@ -992,6 +965,23 @@ class EspSecureCert:
                 f.write(summary_text)
         except Exception as e:
             print(f"WARNING: Could not write tlv_entries_raw.txt: {e}")
+
+        print(f"\nSuccessfully parsed binary file!")
+        print(f"Generated files:")
+        print(f"  - CSV file: {csv_file_path}")
+        print(f"      - {len(csv_rows)} valid entries parsed")
+        print(f"      - Entries:")
+        for row in csv_rows:
+            tlv_type = row.get('tlv_type', 'N/A')
+            tlv_subtype = row.get('tlv_subtype', 'N/A')
+            data_value = row.get('data_value', '')
+            tlv_length = len(data_value) if data_value else 0
+            if tlv_length > 0:
+                print(f"        TLV type: {tlv_type}, subtype: {tlv_subtype}, length: {tlv_length}")
+            else:
+                print(f"        TLV type: {tlv_type}, subtype: {tlv_subtype}")
+        print(f"  - tlv_entries_raw.txt: {os.path.join(output_dir, 'tlv_entries_raw.txt')}")
+        print(f"  - All files in: {output_dir}")
 
     @staticmethod
     def _parse_tlv_entries_from_bin(bin_file_path):

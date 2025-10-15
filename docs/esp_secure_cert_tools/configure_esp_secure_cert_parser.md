@@ -13,7 +13,7 @@ configure_esp_secure_cert.py --parse_bin esp_secure_cert_data/esp_secure_cert.bi
 ## What Happens During Parsing?
 
 1. **A new folder `esp_secure_cert_parsed_data/` is created** in the current directory. This folder will contain all extracted files and metadata.
-2. **For each TLV entry, the following occurs:**
+2. **For each TLV entry, the following steps are performed:**
    - **CA Certificate / Device Certificate:**
      - Extracted and saved as PEM or DER files (e.g., `cacert_0_<subtype>.pem`, `devcert_1_<subtype>.pem`).
    - **Private Key:**
