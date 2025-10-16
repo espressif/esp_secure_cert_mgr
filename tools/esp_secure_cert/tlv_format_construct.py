@@ -9,7 +9,6 @@ import csv
 import os
 import sys
 import io
-import tlv_parser
 import zlib
 import struct
 import base64
@@ -26,7 +25,7 @@ from esp_secure_cert.esp_secure_cert_helper import (
     get_efuse_key_file,
 )
 from cryptography.hazmat.primitives import serialization
-from esp_secure_cert import configure_ds, tlv_format
+from esp_secure_cert import configure_ds, tlv_format, tlv_parser
 from esp_secure_cert.tlv_format import tlv_type_t, tlv_priv_key_type_t
 
 
