@@ -55,12 +55,12 @@ def parse_tlv_header(data: bytes, offset: int) -> Tuple[Dict, int]:
     """Parse TLV header from binary data"""
     tlv_header_format = 'I6BH'  # 1x uint32 + 6x uint8 + 1x uint16
     tlv_header_size = struct.calcsize(tlv_header_format)
-    
+
     if offset + tlv_header_size > len(data):
         raise IndexError(f"Not enough data to read TLV header at offset {offset}")
 
     tlv_header_data = struct.unpack_from(tlv_header_format, data, offset)
-    
+
     tlv_header = {
         'magic': tlv_header_data[0],
         'flags': tlv_header_data[1],
@@ -69,23 +69,23 @@ def parse_tlv_header(data: bytes, offset: int) -> Tuple[Dict, int]:
         'subtype': tlv_header_data[6],
         'length': tlv_header_data[7]
     }
-    
+
     return tlv_header, tlv_header_size
 
 def parse_tlv_footer(data: bytes, offset: int) -> Tuple[Dict, int]:
     """Parse TLV footer from binary data"""
     tlv_footer_format = 'I'  # 1x uint32
     tlv_footer_size = struct.calcsize(tlv_footer_format)
-    
+
     if offset + tlv_footer_size > len(data):
         raise IndexError(f"Not enough data to read TLV footer at offset {offset}")
 
     tlv_footer_data = struct.unpack_from(tlv_footer_format, data, offset)
-    
+
     tlv_footer = {
         'crc': tlv_footer_data[0]
     }
-    
+
     return tlv_footer, tlv_footer_size
 
 def format_certificate_data(cert_data: bytes) -> str:
@@ -103,7 +103,7 @@ def format_certificate_data(cert_data: bytes) -> str:
 def format_private_key_data(key_data: bytes, flags: int) -> str:
     """Format private key data for display"""
     key_type = PRIV_KEY_TYPES.get(flags, f"Unknown type ({flags})")
-    
+
     if flags == 0:  # Plaintext key
         try:
             key_text = key_data.decode('utf-8', errors='ignore')
@@ -168,26 +168,26 @@ def print_partition_summary(tlv_entries: list):
     print("\n" + "="*80)
     print("PARTITION SUMMARY")
     print("="*80)
-    
+
     found_types = {}
     total_size = 0
-    
+
     for entry in tlv_entries:
         tlv_type = entry['header']['type']
         try:
             type_name = tlv_type_t(tlv_type).name
         except ValueError:
             type_name = f"UNKNOWN_{tlv_type}"
-        
+
         if type_name not in found_types:
             found_types[type_name] = []
         found_types[type_name].append(entry)
         total_size += get_tlv_total_length(entry['header'])
-    
+
     print(f"Total TLV entries: {len(tlv_entries)}")
     print(f"Total partition size: {total_size} bytes")
     print("\nFound TLV types:")
-    
+
     for type_name, entries in found_types.items():
         if len(entries) == 1:
             entry = entries[0]
@@ -195,14 +195,14 @@ def print_partition_summary(tlv_entries: list):
         else:
             total_bytes = sum(e['header']['length'] for e in entries)
             print(f"  - {type_name}: {len(entries)} entries, {total_bytes} bytes total")
-    
+
     # Determine key configuration
     print("\nKey Configuration:")
     has_ds_data = any(e['header']['type'] == tlv_type_t.ESP_SECURE_CERT_DS_DATA_TLV for e in tlv_entries)
     has_ds_context = any(e['header']['type'] == tlv_type_t.ESP_SECURE_CERT_DS_CONTEXT_TLV for e in tlv_entries)
     has_sec_cfg = any(e['header']['type'] == tlv_type_t.ESP_SECURE_CERT_SEC_CFG_TLV for e in tlv_entries)
     has_priv_key = any(e['header']['type'] == tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV for e in tlv_entries)
-    
+
     if has_ds_data and has_ds_context:
         print("  - RSA with DS Peripheral (Hardware)")
     elif has_sec_cfg:
@@ -217,19 +217,19 @@ def process_tlv_entries(file_path: str):
     if not os.path.exists(file_path):
         print(f"ERROR: File not found: {file_path}")
         sys.exit(1)
-    
+
     with open(file_path, 'rb') as f:
         data = f.read()
-    
+
     if len(data) == 0:
         print("ERROR: File is empty")
         sys.exit(1)
-    
+
     print(f"ESP Secure Certificate TLV Parser")
     print(f"File: {file_path}")
     print(f"File size: {len(data)} bytes")
     print("="*80)
-    
+
     offset = 0
     tlv_count = 0
     tlv_entries = []
@@ -238,7 +238,7 @@ def process_tlv_entries(file_path: str):
         try:
             # Parse TLV header
             tlv_header, header_size = parse_tlv_header(data, offset)
-            
+
             # Check if we have reached the end of the TLV entries
             if tlv_header['magic'] == MAGIC_END:
                 print(f"\n✓ End of TLV entries (magic 0x{MAGIC_END:04X}) at offset 0x{offset:04X}")
@@ -250,16 +250,16 @@ def process_tlv_entries(file_path: str):
                 print(f"\n✗ Invalid magic number 0x{tlv_header['magic']:08X}")
                 print(f"   Expected: 0x{ESP_SECURE_CERT_TLV_MAGIC:08X}")
                 break
-            
+
             # Calculate offsets and sizes
             tlv_data_offset = offset + header_size
             padding_length = get_padding_length(tlv_header['length'])
             tlv_data_size = tlv_header['length'] + padding_length
             tlv_footer_offset = tlv_data_offset + tlv_data_size
-            
+
             # Extract data
             tlv_data = data[tlv_data_offset:tlv_data_offset + tlv_header['length']]
-            
+
             # Parse TLV footer
             tlv_footer, footer_size = parse_tlv_footer(data, tlv_footer_offset)
 
@@ -283,7 +283,7 @@ def process_tlv_entries(file_path: str):
                 type_name = tlv_type_t(tlv_type).name
             except ValueError:
                 type_name = f"UNKNOWN_{tlv_type}"
-            
+
             print(f"\nTLV Entry #{tlv_count + 1}: {type_name}")
             print("-" * 60)
             print(f"Offset:     0x{offset:04X}")
@@ -294,10 +294,10 @@ def process_tlv_entries(file_path: str):
             print(f"Padding:    {padding_length} bytes")
             print(f"Total size: {get_tlv_total_length(tlv_header)} bytes")
             print(f"CRC32:      0x{tlv_footer['crc']:08X} ({'✓ VALID' if is_valid else '✗ INVALID'})")
-            
+
             if not is_valid:
                 print(f"Calculated: 0x{calculated_crc:08X}")
-            
+
             # Format and display data
             if tlv_header['length'] > 0:
                 print("Data:")
@@ -309,7 +309,7 @@ def process_tlv_entries(file_path: str):
             total_tlv_size = get_tlv_total_length(tlv_header)
             offset += total_tlv_size
             tlv_count += 1
-            
+
         except Exception as e:
             print(f"\n✗ Error parsing TLV at offset 0x{offset:04X}: {e}")
             break
@@ -318,4 +318,3 @@ def process_tlv_entries(file_path: str):
         print_partition_summary(tlv_entries)
     else:
         print("\n✗ No valid TLV entries found in the file")
-
