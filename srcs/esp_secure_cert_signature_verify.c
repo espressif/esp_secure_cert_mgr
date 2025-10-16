@@ -124,7 +124,11 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
                                                 ESP_SECURE_CERT_SUBTYPE_0,
                                                 &sig_block_data, &sig_block_data_len);
 
+    if (sig_block_data == NULL) {
+        ESP_LOGE(TAG, "Failed to get signature block data 2");
+    }                                            
     if (ret != ESP_OK || sig_block_data == NULL) {
+        ESP_LOGE(TAG, "Failed to get signature block data");
         return ESP_FAIL;
     }
 
@@ -207,7 +211,6 @@ static esp_err_t verify_signature(const ets_secure_boot_signature_t *signature_b
         ESP_LOGE(TAG, "Failed to allocate memory for signature verification");
         return ESP_FAIL;
     }
-    memset(buf, 0, ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS * ESP_SECURE_CERT_SHA256_DIGEST_SIZE);
     esp_err_t ret = esp_secure_boot_verify_sbv2_signature_block(signature_block, hash, buf);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Signature verification failed");
@@ -273,11 +276,8 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
         ESP_LOGI(TAG, "esp_secure_cert partition signature verification successful");
         free(signature_blocks);
         return ESP_OK;
-    } else {
-        ESP_LOGE(TAG, "Signature verification failed");
-        free(signature_blocks);
-        return ESP_FAIL;
     }
+    ESP_LOGE(TAG, "Signature verification failed");
     free(signature_blocks);
     return ESP_FAIL;
 }

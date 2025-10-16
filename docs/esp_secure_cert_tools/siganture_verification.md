@@ -16,7 +16,8 @@ The resulting signature block is then added to the end of the esp_secure_cert pa
 
 #### Signing key
 
-You must generate the signing keys on the host system, and **it is critical that the same keys used for secure boot are also used here** for signature verification, or that their key digests are stored in efuse for proper verification.**. User may generate up to three signature blocks—one for each of the three possible signing keys—using the same signing scheme.
+You must generate the signing keys on the host system, and **it is critical that the same keys used for secure boot are also used here** for signature verification, or that their key digests are stored in efuse for proper verification. User may generate up to same number of blocks that are supported in
+by Secure Boot in the hardware with corresponding signing keys.
 
 #### Signature Block format
 
@@ -26,7 +27,7 @@ The signature blocks are stored in TLV (Type-Length-Value) format within the esp
 ```c
 typedef struct {
     uint32_t magic;        // Magic number: 0xBA5EBA11
-    uint8_t type;          // TLV type: ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV (7)
+    uint8_t type;          // TLV type: ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV (8)
     uint8_t subtype;       // Subtype identifier (0, 1, 2, etc.)
     uint16_t length;       // Length of signature block data
 } esp_secure_cert_tlv_header_t;
@@ -103,7 +104,7 @@ void app_main()
 
 The verification process:
 1. Calculates a SHA256 hash of all TLV entries except signature blocks
-2. Verifies the signature using the embedded public key in the signature block
+2. Verifies the public key in the signature block, by comparing it's  digest with efuse and verifies the signature using the embedded public key in the signature block
 3. Multiple signature blocks are supported. This is for if one signing key is revoked, the partition can still be verified using another valid key(s).
 4. Returns `ESP_OK` if any signature block verification succeeds
 
@@ -138,7 +139,7 @@ python tools/configure_esp_secure_cert.py \
     --target_chip esp32c3
 ```
 
-**NOTE - The number of signature blocks are created depends upon number of keys passed to key.**
+**NOTE - The number of signature blocks are created depends upon number of keys passed to signing-key-file.**
 
 For example, in following case two signature block will be generated.
 ```
