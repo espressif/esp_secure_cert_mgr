@@ -16,28 +16,28 @@ try:
 except ImportError:
     print(
         "Package setuptools is missing from your Python installation. "
-        "Please see the installation section in the esp-secure-cert-tool "
+        "Please see the installation section in the esp_secure_cert_tool "
         "documentation for instructions on how to install it."
     )
     exit(1)
 
-VERSION = "2.3.4"
+VERSION = "2.3.5"
 
 long_description = """
 ====================
-esp-secure-cert-tool
+esp_secure_cert_tool
 ====================
 The python utility helps to configure and provision the device with
 PKI credentials to generate the esp_secure_cert partition.
 The utility also configures the DS peripheral on the SoC if available.
 
-The `esp-secure-cert-tool` utility is `hosted on
+The `esp_secure_cert_tool` utility is `hosted on
 github <https://github.com/espressif/esp_secure_cert_mgr/
 blob/main/tools/configure_esp_secure_cert.py>`_.
 
 Documentation
 -------------
-Visit online `esp-secure-cert-tool
+Visit online `esp_secure_cert_tool
 documentation <https://github.com/espressif/
 esp_secure_cert_mgr/blob/main/tools/README.md/>`_ \
 or run ``configure_esp_secure_cert.py -h``.
@@ -50,7 +50,7 @@ blob/main/tools/LICENSE>`_
 """
 
 setup(
-    name="esp-secure-cert-tool",
+    name="esp_secure_cert_tool",
     version=VERSION,
     description="A python utility which helps to configure and provision"
                 "the ESP platform with PKI credentials "
