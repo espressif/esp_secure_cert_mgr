@@ -103,15 +103,6 @@ typedef struct esp_secure_cert_tlv_sec_cfg {
 
 _Static_assert(sizeof(esp_secure_cert_tlv_sec_cfg_t) == 40, "TLV sec cfg size should be 40 bytes");
 
-/*
- * Map the entire esp_secure_cert partition
- * and return the virtual address.
- *
- * @note
- * The mapping is done only once and function shall
- * simply return same address in case of successive calls.
- **/
-const void *esp_secure_cert_get_mapped_addr(void);
 
 /*
  * Find the offset of tlv structure of given type in the esp_secure_cert partition
@@ -232,7 +223,7 @@ esp_err_t esp_secure_cert_crypto_gcm_decrypt(const uint8_t *in_buf, uint32_t len
  * key_buf_len  The length of the key buf in bytes
  * output_buf   The writable buffer to write the DER key
  * output_buf_len Length of the output buffer in bytes
- * 
+ *
  * @return
  *      - ESP_OK    On success
  *      - ESP_FAIL/other relevant esp error code

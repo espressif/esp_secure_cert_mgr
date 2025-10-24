@@ -5,6 +5,13 @@
  */
 #pragma once
 #include "esp_err.h"
+#include "esp_partition.h"
+#if __has_include("esp_idf_version.h")
+    #include "esp_idf_version.h"
+#endif /* __has_include("esp_idf_version.h") */
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "spi_flash_mmap.h"
+#endif
 
 #include "esp_secure_cert_tlv_config.h"
 
@@ -12,6 +19,21 @@
 extern "C"
 {
 #endif
+
+/*
+ * Context structure to hold the partition information
+ * and memory mapped address for esp_secure_cert partition
+ */
+typedef struct esp_secure_cert_partition_ctx {
+    const esp_partition_t *partition;           /* Pointer to the esp_secure_cert partition */
+    const void *esp_secure_cert_mapped_addr;    /* Memory mapped address of the partition */
+    spi_flash_mmap_handle_t handle;             /* Memory map handle */
+} esp_secure_cert_partition_ctx_t;
+
+/*
+ * Global context structure for esp_secure_cert partition
+ */
+extern esp_secure_cert_partition_ctx_t esp_secure_cert_partition_ctx;
 
 /*
  * TLV config struct
@@ -119,13 +141,48 @@ esp_err_t esp_secure_cert_get_tlv_info_from_iterator(esp_secure_cert_tlv_iterato
  */
 void esp_secure_cert_list_tlv_entries(void);
 
-
 /*
- * Unmap the esp_secure_cert partition
+ * Initialize the esp_secure_cert partition context.
+ * This function maps the entire esp_secure_cert partition and
+ * populates the context structure with partition information.
+ *
+ * @param ctx Pointer to esp_secure_cert_partition_ctx_t structure.
+ *            If the context is already initialized (ctx->esp_secure_cert_mapped_addr != NULL),
+ *            the function returns immediately with ESP_OK.
+ *            Otherwise, it initializes the context and maps the partition.
+ *
  * @return
  *      - ESP_OK    On success
+ *      - ESP_FAIL  On failure
+ *
+ * @note
+ * The mapping is idempotent - subsequent calls with an already initialized
+ * context will simply return ESP_OK without remapping.
+ * This allows safely calling the function multiple times.
+ **/
+esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t *ctx);
+
+/*
+ * Unmap the esp_secure_cert partition to free memory.
+ *
+ * This API is useful for memory-constrained systems where you want to
+ * temporarily free the memory used by the mapped partition when secure
+ * cert operations are not actively needed.
+ *
+ * @param ctx Pointer to the esp_secure_cert_partition_ctx_t structure
+ *            that holds the partition context. The context will be reset
+ *            after unmapping and can be reinitialized later by calling
+ *            esp_secure_cert_map_partition() again.
+ *
+ * @return
+ *      - ESP_OK    On success
+ *      - ESP_ERR_INVALID_ARG  If ctx is NULL
+ *
+ * @note
+ * After calling this function, any subsequent calls to esp_secure_cert APIs
+ * will automatically remap the partition as needed.
  */
-esp_err_t esp_secure_cert_unmap_partition(void);
+esp_err_t esp_secure_cert_unmap_partition(esp_secure_cert_partition_ctx_t *ctx);
 
 #ifdef __cplusplus
 }
