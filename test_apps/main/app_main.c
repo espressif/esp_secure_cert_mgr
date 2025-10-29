@@ -1,27 +1,54 @@
 /*
- * SPDX-FileCopyrightText: 2022 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* ESP Secure Cert TLV Test Application
+/* ESP Secure Cert Test Application
+ *
+ * This test application validates the esp_secure_cert_mgr component
+ * using the Unity test framework. It supports testing both TLV and
+ * legacy formats across different ESP32 targets.
+ *
+ * Test Groups:
+ * - tlv_legacy: Tests for TLV and legacy format operations
+ * - crypto: Tests for cryptographic operations
+ */
 
-   This test application is designed to test the TLV format support
-   of esp_secure_cert_mgr component. It only outputs TLV contents
-   without complex validation logic.
-*/
+#include <stdio.h>
+#include "unity.h"
+#include "unity_test_runner.h"
 #include "sdkconfig.h"
+#include "esp_log.h"
+#include "unity_fixture.h"
+#include "unity_fixture_extras.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-void esp_secure_cert_tlv_test();
+#define TAG "app_main"
 
-extern void esp_secure_cert_crypto_test();
-extern void esp_secure_cert_crypto_convert_key_to_der_test();
+#define UNITY_FREERTOS_PRIORITY 5
+#define UNITY_FREERTOS_CPU 0
+#define UNITY_FREERTOS_STACK_SIZE CONFIG_UNITY_FREERTOS_STACK_SIZE
 
-void app_main()
+static void run_all_tests(void)
 {
-#ifdef CONFIG_TEST_APP_ESP_SECURE_CERT_TLV
-    esp_secure_cert_tlv_test();
+#if CONFIG_TEST_ESP_SECURE_CERT_TLV_LEGACY
+    RUN_TEST_GROUP(tlv_legacy);
 #endif
-    esp_secure_cert_crypto_test();
-    esp_secure_cert_crypto_convert_key_to_der_test();
+#if CONFIG_TEST_ESP_SECURE_CERT_CRYPTO
+    RUN_TEST_GROUP(crypto);
+#endif
+}
+
+static void test_task(void *pvParameters)
+{
+    vTaskDelay(2); /* Delay a bit to let the main task be deleted */
+    UNITY_MAIN_FUNC(run_all_tests);
+    vTaskDelete(NULL);
+}
+
+void app_main(void)
+{
+    xTaskCreatePinnedToCore(test_task, "testTask", UNITY_FREERTOS_STACK_SIZE, NULL, UNITY_FREERTOS_PRIORITY, NULL, UNITY_FREERTOS_CPU);
 }

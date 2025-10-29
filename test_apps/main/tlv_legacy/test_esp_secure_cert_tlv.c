@@ -1,16 +1,36 @@
+/*
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #include <string.h>
 #include <inttypes.h>
+#include "unity.h"
 #include "esp_log.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
+#include "unity_fixture.h"
 #if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
 #else
 #include "psa/crypto.h"
 #endif
 
-
 #define TAG "test_esp_secure_cert_tlv"
+
+/* Test group for TLV and Legacy format tests */
+TEST_GROUP(tlv_legacy);
+
+TEST_SETUP(tlv_legacy)
+{
+    /* Setup code runs before each test in this group */
+}
+
+TEST_TEAR_DOWN(tlv_legacy)
+{
+    /* Teardown code runs after each test in this group */
+}
 
 #if (MBEDTLS_MAJOR_VERSION < 4)
 static esp_err_t get_sha256(const char *data, uint32_t len, unsigned char *sha256)
@@ -73,14 +93,14 @@ static void esp_print_cert_or_key(const char *label, const char *data, uint32_t 
     }
 }
 
-void esp_secure_cert_tlv_test()
+TEST(tlv_legacy, esp_secure_cert_read_certificates_and_keys)
 {
     esp_err_t esp_ret = ESP_FAIL;
 
     ESP_LOGI(TAG, "Starting ESP Secure Cert TLV Test Application");
 
     // Read Device Certificate using TLV format
-    // Use the standard API to get device and CA certs, as in esp_secure_cert_get_device_cert and esp_secure_cert_get_ca_cert
+    // Use the standard API to get device and CA certs
     uint32_t len = 0;
     char *addr = NULL;
 
@@ -88,6 +108,8 @@ void esp_secure_cert_tlv_test()
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
         esp_print_cert_or_key("Device Cert", (const char *)addr, len);
+        TEST_ASSERT_NOT_NULL(addr);
+        TEST_ASSERT_GREATER_THAN(0, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
     }
@@ -96,6 +118,8 @@ void esp_secure_cert_tlv_test()
     esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
         esp_print_cert_or_key("CA Cert", (const char *)addr, len);
+        TEST_ASSERT_NOT_NULL(addr);
+        TEST_ASSERT_GREATER_THAN(0, len);
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of ca_cert");
     }
@@ -107,6 +131,8 @@ void esp_secure_cert_tlv_test()
     esp_ret = esp_secure_cert_get_priv_key(&priv_key_addr, &priv_key_len);
     if (esp_ret == ESP_OK) {
         esp_print_cert_or_key("Private Key", (const char *)priv_key_addr, priv_key_len);
+        TEST_ASSERT_NOT_NULL(priv_key_addr);
+        TEST_ASSERT_GREATER_THAN(0, priv_key_len);
     } else {
         ESP_LOGE(TAG, "Failed to read Private Key using standard format: %s", esp_err_to_name(esp_ret));
     }
@@ -122,4 +148,9 @@ void esp_secure_cert_tlv_test()
     } else {
         ESP_LOGE(TAG, "Test application failed");
     }
+}
+/* Register test group runner */
+TEST_GROUP_RUNNER(tlv_legacy)
+{
+    RUN_TEST_CASE(tlv_legacy, esp_secure_cert_read_certificates_and_keys);
 }
