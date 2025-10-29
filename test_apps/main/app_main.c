@@ -17,13 +17,20 @@
 
 #include <stdio.h>
 #include "unity.h"
-#include "unity_test_runner.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
-#include "unity_fixture.h"
-#include "unity_fixture_extras.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+// Include Unity headers based on IDF version
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "unity_test_runner.h"
+#include "unity_fixture.h"
+#include "unity_fixture_extras.h"
+#else
+// For IDF 4.x, use older Unity Fixture API
+#include "unity_fixture.h"
+#endif
 
 #define TAG "app_main"
 
@@ -44,7 +51,17 @@ static void run_all_tests(void)
 static void test_task(void *pvParameters)
 {
     vTaskDelay(2); /* Delay a bit to let the main task be deleted */
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    // IDF 5.0+: Use UNITY_MAIN_FUNC macro
     UNITY_MAIN_FUNC(run_all_tests);
+#else
+    // IDF 4.x: Call Unity fixture runner directly
+    const char *argv[] = {"test", "-v"};
+    int argc = sizeof(argv) / sizeof(argv[0]);
+    UnityMain(argc, argv, run_all_tests);
+#endif
+
     vTaskDelete(NULL);
 }
 
