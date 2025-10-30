@@ -6,7 +6,7 @@
 
 /:
   enable:
-    - if: IDF_TARGET in ["esp32c3"]
+    - if: IDF_TARGET in ["esp32c3", "esp32"]
       reason: test is supported on these targets
   depends_components:
     - unity
