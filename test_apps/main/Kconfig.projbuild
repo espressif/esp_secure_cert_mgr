@@ -1,13 +1,13 @@
 menu "Test Apps Configuration"
 
     config TEST_ESP_SECURE_CERT_TLV_LEGACY
-        bool "Enable TLV and legacy format operations"
+        bool "Test TLV and legacy format operations"
         default n
         help
             Enable this option to test the TLV and legacy format operations
 
     config TEST_ESP_SECURE_CERT_CRYPTO
-        bool "Enable cryptographic operations"
+        bool "Test cryptographic operations"
         default n
         help
             Enable this option to test the cryptographic operations

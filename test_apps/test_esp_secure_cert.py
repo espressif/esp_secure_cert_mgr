@@ -411,7 +411,7 @@ def test_esp_secure_cert_tlv(dut: Any) -> None:
 
 @pytest.mark.qemu
 @pytest.mark.parametrize('config', ['crypto'], indirect=True)
-@pytest.mark.parametrize('target', ['esp32c3'])
+@pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
 def test_esp_secure_cert_crypto(dut: Any) -> None:
     """
     Test cryptographic operations on real hardware.
@@ -423,4 +423,5 @@ def test_esp_secure_cert_crypto(dut: Any) -> None:
     Args:
         dut: Device under test fixture (real ESP32 device)
     """
+    setup_flash_image_for_qemu(dut)
     dut.expect(r'Tests finished, rc=0', timeout=10)

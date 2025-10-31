@@ -6,10 +6,23 @@
 
 #include <string.h>
 #include <inttypes.h>
-#include "unity.h"
 #include "esp_log.h"
 #include "esp_secure_cert_tlv_private.h"
+#include "esp_idf_version.h"
+#if CONFIG_HEAP_TRACING
+#include "esp_heap_trace.h"
+#endif
+
+// Memory leak detection support (available from IDF 5.0+)
+#include "unity.h"
 #include "unity_fixture.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "unity_test_utils_memory.h"
+#define MEMORY_LEAK_DETECTION_ENABLED 1
+#else
+#define MEMORY_LEAK_DETECTION_ENABLED 0
+#endif
+
 #define TAG "test_esp_secure_cert_crypto"
 
 /* Test group for cryptographic operations */
@@ -18,11 +31,38 @@ TEST_GROUP(crypto);
 TEST_SETUP(crypto)
 {
     /* Setup code runs before each test in this group */
+
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+    // Start standalone heap tracing to track all allocations
+    ESP_ERROR_CHECK(heap_trace_start(HEAP_TRACE_LEAKS));
+    ESP_LOGI(TAG, "Heap tracing started for crypto test");
+#endif
+
+#if MEMORY_LEAK_DETECTION_ENABLED
+    // Crypto hardware (SHA mutex) is initialized in app_main before tests
+    // Set strict leak detection (0 bytes tolerance) to catch any real leaks
+    unity_utils_set_leak_level(0);
+    // Record free memory before test
+    unity_utils_record_free_mem();
+#endif
 }
 
 TEST_TEAR_DOWN(crypto)
 {
     /* Teardown code runs after each test in this group */
+
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+    // Stop heap tracing and dump leaked allocations with call stacks
+    ESP_ERROR_CHECK(heap_trace_stop());
+    ESP_LOGI(TAG, "========== Heap Trace Results (Leaked Allocations) ==========");
+    heap_trace_dump();
+    ESP_LOGI(TAG, "==============================================================");
+#endif
+
+#if MEMORY_LEAK_DETECTION_ENABLED
+    // Check for memory leaks after test
+    unity_utils_evaluate_leaks();
+#endif
 }
 
 TEST(crypto, esp_secure_cert_crypto_gcm_decrypt)
