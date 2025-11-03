@@ -15,7 +15,7 @@ import base64
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, Union
 from construct import (Struct, Int32ul, Int8ul, Int16ul, Int32sl, Bytes, this)
 from pathlib import Path
 
@@ -104,7 +104,7 @@ class TlvPartitionBuilder:
         self.partition_data = bytearray(b'\xff' * PARTITION_SIZE)
         self.current_offset = 0
 
-    def add_certificate(self, tlv_type: tlv_type_t, cert_path: str | bytes, subtype: int = 0) -> None:
+    def add_certificate(self, tlv_type: tlv_type_t, cert_path: Union[str, bytes], subtype: int = 0) -> None:
         """Add certificate to partition"""
         cert_data = load_certificate(cert_path)
 
@@ -170,7 +170,7 @@ class TlvPartitionBuilder:
 
         self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_SEC_CFG_TLV, subtype, sec_cfg, 0)
 
-    def add_tlv_entry(self, tlv_type: int | tlv_type_t, subtype: int,
+    def add_tlv_entry(self, tlv_type: Union[int, tlv_type_t], subtype: int,
                       data: bytes, flags: int) -> None:
         """Internal method to add TLV entry to partition"""
         if isinstance(tlv_type, tlv_type_t):
@@ -258,11 +258,11 @@ class EspSecureCert:
         """Destructor - cleanup when object is destroyed"""
         self.esp_secure_cert_cleanup()
 
-    def _is_private_key_entry(self, tlv_type: int | tlv_type_t) -> bool:
+    def _is_private_key_entry(self, tlv_type: Union[int, tlv_type_t]) -> bool:
         """Check if entry is a private key"""
         return tlv_type == tlv_type_t.ESP_SECURE_CERT_PRIV_KEY_TLV.value
 
-    def _is_certificate_entry(self, tlv_type: int | tlv_type_t) -> bool:
+    def _is_certificate_entry(self, tlv_type: Union[int, tlv_type_t]) -> bool:
         """Check if entry is a certificate"""
         return tlv_type in [tlv_type_t.ESP_SECURE_CERT_CA_CERT_TLV.value, tlv_type_t.ESP_SECURE_CERT_DEV_CERT_TLV.value]
 
