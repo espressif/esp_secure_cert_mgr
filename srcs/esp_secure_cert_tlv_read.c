@@ -155,12 +155,12 @@ esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t *ctx)
         esp_partition_iterator_release(it);
         it = NULL;
         ESP_LOGE(TAG, "Failed to map partition: %d", err);
-        return NULL;
+        return ESP_FAIL;
     }
     esp_partition_iterator_release(it);
     it = NULL;
     ESP_LOGD(TAG, "Partition mapped successfully");
-    return esp_secure_cert_mapped_addr;
+    return ESP_OK;
 }
 
 /*

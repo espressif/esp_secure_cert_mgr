@@ -72,6 +72,9 @@ static void run_all_tests(void)
 #if CONFIG_TEST_ESP_SECURE_CERT_CRYPTO
     RUN_TEST_GROUP(crypto);
 #endif
+#if CONFIG_TEST_ESP_SECURE_CERT_BASICS
+    RUN_TEST_GROUP(basics);
+#endif
 }
 
 /**

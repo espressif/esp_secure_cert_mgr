@@ -12,6 +12,12 @@ menu "Test Apps Configuration"
         help
             Enable this option to test the cryptographic operations
 
+    config TEST_ESP_SECURE_CERT_BASICS
+        bool "Test basic operations"
+        default n
+        help
+            Enable this option to test the basic operations
+
     config UNITY_FREERTOS_STACK_SIZE
         int "Stack size for the test task"
         default 8192
