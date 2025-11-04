@@ -1,26 +1,100 @@
+/*
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #include <string.h>
 #include <inttypes.h>
 #include "esp_log.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
+#include "esp_idf_version.h"
+
+#if CONFIG_HEAP_TRACING
+#include "esp_heap_trace.h"
+#endif
+
+#include "mbedtls/aes.h"
 #if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
 #else
 #include "psa/crypto.h"
 #endif
+#if SOC_SHA_SUPPORT_PARALLEL_ENG
+#include "sha/sha_parallel_engine.h"
+#else
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+#include "sha/sha_core.h"
+#else
+#include "sha/sha_dma.h"
+#endif
+#endif
 
+// Memory leak detection support (available from IDF 5.0+)
+#include "unity.h"
+#include "unity_fixture.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "unity_test_utils_memory.h"
+#define MEMORY_LEAK_DETECTION_ENABLED 1
+#else
+#define MEMORY_LEAK_DETECTION_ENABLED 0
+#endif
 
 #define TAG "test_esp_secure_cert_tlv"
+
+/* Test group for TLV and Legacy format tests */
+TEST_GROUP(tlv_legacy);
+
+TEST_SETUP(tlv_legacy)
+{
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+    // Start standalone heap tracing to track all allocations
+    ESP_ERROR_CHECK(heap_trace_start(HEAP_TRACE_LEAKS));
+    ESP_LOGI(TAG, "Heap tracing started for test");
+#endif
+
+#if MEMORY_LEAK_DETECTION_ENABLED
+#ifdef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
+    /**
+     * Set leak detection level to 100 bytes to catch leaks due to mapping of partition
+     * in case of cust_flash format and cust_flash_legacy format. Because in these formats,
+     * the partition is mapped to the memory for evert esp_secure_cert operation.
+     */
+    unity_utils_set_leak_level(100);
+#else
+    /**
+     * There should be no leaks in case of TLV format.
+     */
+    unity_utils_set_leak_level(0);
+#endif
+    // Record free memory before test
+    unity_utils_record_free_mem();
+#endif
+}
+
+TEST_TEAR_DOWN(tlv_legacy)
+{
+    /* Teardown code runs after each test in this group */
+
+#ifdef CONFIG_HEAP_TRACING_STANDALONE
+    // Stop heap tracing and dump leaked allocations with call stacks
+    ESP_ERROR_CHECK(heap_trace_stop());
+    ESP_LOGI(TAG, "========== Heap Trace Results (Leaked Allocations) ==========");
+    heap_trace_dump();
+    ESP_LOGI(TAG, "==============================================================");
+#endif
+
+#if MEMORY_LEAK_DETECTION_ENABLED
+    // Check for memory leaks after test
+    unity_utils_evaluate_leaks();
+#endif
+}
 
 #if (MBEDTLS_MAJOR_VERSION < 4)
 static esp_err_t get_sha256(const char *data, uint32_t len, unsigned char *sha256)
 {
-    mbedtls_sha256_context sha_ctx;
-    mbedtls_sha256_init(&sha_ctx);
-    mbedtls_sha256_starts(&sha_ctx, 0);
-    mbedtls_sha256_update(&sha_ctx, (const unsigned char *)data, len);
-    mbedtls_sha256_finish(&sha_ctx, sha256);
-    mbedtls_sha256_free(&sha_ctx);
+    esp_sha(SHA2_256, (const unsigned char *)data, len, sha256);
     return ESP_OK;
 }
 #else
@@ -73,14 +147,14 @@ static void esp_print_cert_or_key(const char *label, const char *data, uint32_t 
     }
 }
 
-void esp_secure_cert_tlv_test()
+TEST(tlv_legacy, esp_secure_cert_read_certificates_and_keys)
 {
     esp_err_t esp_ret = ESP_FAIL;
 
     ESP_LOGI(TAG, "Starting ESP Secure Cert TLV Test Application");
 
     // Read Device Certificate using TLV format
-    // Use the standard API to get device and CA certs, as in esp_secure_cert_get_device_cert and esp_secure_cert_get_ca_cert
+    // Use the standard API to get device and CA certs
     uint32_t len = 0;
     char *addr = NULL;
 
@@ -88,6 +162,12 @@ void esp_secure_cert_tlv_test()
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
         esp_print_cert_or_key("Device Cert", (const char *)addr, len);
+        TEST_ASSERT_NOT_NULL(addr);
+        TEST_ASSERT_GREATER_THAN(0, len);
+        esp_ret = esp_secure_cert_free_device_cert(addr);
+        TEST_ASSERT_EQUAL(ESP_OK, esp_ret);
+        addr = NULL;
+        len = 0;
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of device cert");
     }
@@ -96,6 +176,12 @@ void esp_secure_cert_tlv_test()
     esp_ret = esp_secure_cert_get_ca_cert(&addr, &len);
     if (esp_ret == ESP_OK) {
         esp_print_cert_or_key("CA Cert", (const char *)addr, len);
+        TEST_ASSERT_NOT_NULL(addr);
+        TEST_ASSERT_GREATER_THAN(0, len);
+        esp_ret = esp_secure_cert_free_ca_cert(addr);
+        TEST_ASSERT_EQUAL(ESP_OK, esp_ret);
+        addr = NULL;
+        len = 0;
     } else {
         ESP_LOGE(TAG, "Failed to obtain flash address of ca_cert");
     }
@@ -107,6 +193,12 @@ void esp_secure_cert_tlv_test()
     esp_ret = esp_secure_cert_get_priv_key(&priv_key_addr, &priv_key_len);
     if (esp_ret == ESP_OK) {
         esp_print_cert_or_key("Private Key", (const char *)priv_key_addr, priv_key_len);
+        TEST_ASSERT_NOT_NULL(priv_key_addr);
+        TEST_ASSERT_GREATER_THAN(0, priv_key_len);
+        esp_ret = esp_secure_cert_free_priv_key(priv_key_addr);
+        TEST_ASSERT_EQUAL(ESP_OK, esp_ret);
+        priv_key_addr = NULL;
+        priv_key_len = 0;
     } else {
         ESP_LOGE(TAG, "Failed to read Private Key using standard format: %s", esp_err_to_name(esp_ret));
     }
@@ -122,4 +214,10 @@ void esp_secure_cert_tlv_test()
     } else {
         ESP_LOGE(TAG, "Test application failed");
     }
+}
+
+/* Register test group runner */
+TEST_GROUP_RUNNER(tlv_legacy)
+{
+    RUN_TEST_CASE(tlv_legacy, esp_secure_cert_read_certificates_and_keys);
 }

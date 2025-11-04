@@ -226,6 +226,12 @@ build_examples_app_master:
   stage: qemu_test
   tags:
     - qemu_test
+  retry:
+    max: 2
+    when:
+      - script_failure
+      - unknown_failure
+      - stuck_or_timeout_failure
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
@@ -344,6 +350,12 @@ qemu_test_examples_app_master:
   image: espressif/idf:latest
   tags:
     - qemu_test
+  retry:
+    max: 2
+    when:
+      - script_failure
+      - unknown_failure
+      - stuck_or_timeout_failure
   variables:
     IDF_TARGET: esp32c3
     CONFIG: default

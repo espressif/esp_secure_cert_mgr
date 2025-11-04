@@ -62,8 +62,12 @@ static const esp_partition_t *esp_secure_cert_find_partition(esp_partition_type_
         const esp_partition_t *part = esp_partition_get(it);
         if (part == NULL) {
             ESP_LOGE(TAG, "Failed to get partition");
+            esp_partition_iterator_release(it);
+            it = NULL;
             return NULL;
         } else {
+            esp_partition_iterator_release(it);
+            it = NULL;
             return part;
         }
     }
@@ -360,7 +364,7 @@ static esp_err_t esp_secure_cert_get_addr(size_t offset, char **buffer, uint32_t
 
     *len = data_len;
     *buffer = (char *)esp_secure_cert_mmap(part, offset, *len);
-    if (buffer == NULL) {
+    if (*buffer == NULL) {
         return ESP_FAIL;
     }
 
@@ -383,7 +387,7 @@ esp_err_t esp_secure_cert_get_device_cert(char **buffer, uint32_t *len)
 
     case ESP_SECURE_CERT_PF_CUST_FLASH:
     case ESP_SECURE_CERT_PF_CUST_FLASH_LEGACY:
-        return esp_secure_cert_get_addr(ESP_SECURE_CERT_DEV_CERT_OFFSET, buffer, len);;
+        return esp_secure_cert_get_addr(ESP_SECURE_CERT_DEV_CERT_OFFSET, buffer, len);
 
     case ESP_SECURE_CERT_PF_NVS:
         ret = nvs_get(nvs_namespace_name, ESP_SECURE_CERT_DEV_CERT, NULL, (size_t *)len, NVS_STR);

@@ -114,8 +114,14 @@ const void *esp_secure_cert_get_mapped_addr(void)
     /* Map the entire partition */
     err = esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &esp_secure_cert_mapped_addr, &handle);
     if (err != ESP_OK) {
+        esp_partition_iterator_release(it);
+        it = NULL;
+        ESP_LOGE(TAG, "Failed to map partition: %d", err);
         return NULL;
     }
+    esp_partition_iterator_release(it);
+    it = NULL;
+    ESP_LOGD(TAG, "Partition mapped successfully");
     return esp_secure_cert_mapped_addr;
 }
 
@@ -569,7 +575,7 @@ static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t le
         return esp_ret;
     }
 
-    esp_ret = esp_secure_cert_crypto_gcm_decrypt((const uint8_t *)in_buf, len, (uint8_t *)output_buf, aes_gcm_key, HMAC_ENCRYPTION_AES_GCM_KEY_LEN, iv, 
+    esp_ret = esp_secure_cert_crypto_gcm_decrypt((const uint8_t *)in_buf, len, (uint8_t *)output_buf, aes_gcm_key, HMAC_ENCRYPTION_AES_GCM_KEY_LEN, iv,
                                                 NULL, (const uint8_t *)(in_buf + len), HMAC_ENCRYPTION_TAG_LEN);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to decrypt the data");

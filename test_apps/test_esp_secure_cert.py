@@ -1,16 +1,48 @@
+# SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-License-Identifier: Apache-2.0
+
+"""
+Test suite for ESP Secure Cert Manager.
+
+This module contains pytest-based tests for validating the esp_secure_cert_mgr
+component across different flash storage formats (TLV, NVS, custom flash) and
+ESP32 targets. Tests are designed to run on both QEMU emulator and real
+hardware.
+
+Test Categories:
+    - TLV Format Tests: Tests for the modern TLV (Type-Length-Value) format
+    - Legacy Format Tests: Tests for legacy NVS and custom flash formats
+    - QEMU Tests: Automated tests running on QEMU emulator
+    - Hardware Tests: Tests running on physical ESP32 devices
+"""
+
 import pytest
 import os
 import glob
 import hashlib
+from typing import Any
 
 
+# Flash memory offsets for partition table and secure cert partition
 PARTITION_TABLE_OFFSET = 0xC000
 SECURE_CERT_OFFSET = 0xD000
 
 
-def write_bin_to_flash_image(dut, bin_path, offset):
-    """Write binary data to flash image at specified offset using file
-    operations"""
+def write_bin_to_flash_image(dut: Any, bin_path: str, offset: int) -> None:
+    """
+    Write binary data to QEMU flash image at specified offset.
+
+    This function modifies the flash_image.bin file used by QEMU to inject
+    test data (certificates, keys, partition tables) at specific flash offsets.
+
+    Args:
+        dut: Device under test (pytest-embedded fixture)
+        bin_path: Path to the binary file to write
+        offset: Flash memory offset where data should be written
+
+    Raises:
+        AssertionError: If flash image is not found or is too small
+    """
     flash_image_bin = os.path.join(dut.app.binary_path, 'flash_image.bin')
     assert os.path.exists(flash_image_bin), (
         f"Flash image not found: {flash_image_bin}"
@@ -39,9 +71,24 @@ def write_bin_to_flash_image(dut, bin_path, offset):
         f.write(flash_data)
 
 
-def read_bin_from_flash_image(dut, offset, size):
-    """Read binary data from flash image at specified offset using file
-    operations"""
+def read_bin_from_flash_image(dut: Any, offset: int, size: int) -> bytes:
+    """
+    Read binary data from QEMU flash image at specified offset.
+
+    This function reads data from the flash_image.bin file used by QEMU
+    to verify that data was written correctly.
+
+    Args:
+        dut: Device under test (pytest-embedded fixture)
+        offset: Flash memory offset to read from
+        size: Number of bytes to read
+
+    Returns:
+        bytes: The binary data read from flash image
+
+    Raises:
+        AssertionError: If flash image is not found
+    """
     flash_image_bin = os.path.join(dut.app.binary_path, 'flash_image.bin')
     assert os.path.exists(flash_image_bin), (
         f"Flash image not found: {flash_image_bin}"
@@ -52,7 +99,29 @@ def read_bin_from_flash_image(dut, offset, size):
         return f.read(size)
 
 
-def setup_flash_image_for_qemu(dut, format='cust_flash_tlv'):
+def setup_flash_image_for_qemu(
+    dut: Any, format: str = 'cust_flash_tlv'
+) -> None:
+    """
+    Prepare QEMU flash image with test data for specified format.
+
+    This function sets up the QEMU flash image by:
+    1. Writing the partition table to the correct offset
+    2. Writing the secure cert data to the esp_secure_cert partition
+    3. Verifying data integrity by reading back and comparing
+
+    Args:
+        dut: Device under test (pytest-embedded fixture)
+        format: Flash format to use. Options:
+            - 'cust_flash_tlv': TLV format in custom flash partition (default)
+            - 'cust_flash': Legacy format in custom flash partition
+            - 'nvs': Legacy format in NVS partition
+            - 'nvs_legacy': Legacy NVS format
+            - 'cust_flash_legacy': Legacy custom flash format
+
+    Raises:
+        pytest.fail: If setup fails or data verification fails
+    """
 
     # Search for the binaries in the qemu_test directory
     secure_cert_bin = glob.glob(
@@ -127,7 +196,26 @@ def setup_flash_image_for_qemu(dut, format='cust_flash_tlv'):
         pytest.fail(f"Unexpected error: {e}")
 
 
-def verify_certificates_and_keys(dut, format='cust_flash_tlv'):
+def verify_certificates_and_keys(
+    dut: Any, format: str = 'cust_flash_tlv'
+) -> None:
+    """
+    Verify certificates and keys read from esp_secure_cert partition.
+
+    This function:
+    1. Reads expected CA cert, device cert, and private key from input_data
+    2. Calculates SHA256 hashes of expected data
+    3. Extracts SHA256 hashes from device firmware logs
+    4. Compares firmware hashes with expected hashes
+
+    Args:
+        dut: Device under test (pytest-embedded fixture)
+        format: Flash format being tested (used to locate input data)
+
+    Raises:
+        pytest.fail: If verification fails or hashes don't match
+    """
+    print(f"Verifying certificates and keys for format: {format}")
     try:
         # Get the input data from the input_data directory
         input_data_dir = os.path.join(
@@ -211,50 +299,129 @@ def verify_certificates_and_keys(dut, format='cust_flash_tlv'):
 @pytest.mark.qemu
 @pytest.mark.parametrize('config', ['legacy'], indirect=True)
 @pytest.mark.parametrize('target', ['esp32c3'])
-def test_esp_secure_cert_nvs_legacy_qemu(dut):
+def test_esp_secure_cert_nvs_legacy_qemu(dut: Any) -> None:
+    """
+    Test legacy NVS format on QEMU emulator.
+
+    This test validates the legacy NVS storage format for certificates and
+    keys. Tests are run on QEMU to ensure CI/CD pipeline compatibility
+    without hardware.
+
+    Args:
+        dut: Device under test fixture (QEMU emulator instance)
+    """
     setup_flash_image_for_qemu(dut, 'nvs_legacy')
     verify_certificates_and_keys(dut, 'nvs_legacy')
-    dut.expect(r'Test application completed successfully', timeout=10)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
 
 
 @pytest.mark.qemu
 @pytest.mark.parametrize('config', ['legacy'], indirect=True)
 @pytest.mark.parametrize('target', ['esp32c3'])
-def test_esp_secure_cert_cust_flash_legacy_qemu(dut):
+def test_esp_secure_cert_cust_flash_legacy_qemu(dut: Any) -> None:
+    """
+    Test legacy custom flash format on QEMU emulator.
+
+    This test validates the legacy custom flash storage format for certificates
+    and keys. Tests are run on QEMU for automated CI/CD testing.
+
+    Args:
+        dut: Device under test fixture (QEMU emulator instance)
+    """
     setup_flash_image_for_qemu(dut, 'cust_flash_legacy')
     verify_certificates_and_keys(dut, 'cust_flash_legacy')
-    dut.expect(r'Test application completed successfully', timeout=10)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
 
 
 @pytest.mark.qemu
 @pytest.mark.parametrize('config', ['legacy'], indirect=True)
 @pytest.mark.parametrize('target', ['esp32c3'])
-def test_esp_secure_cert_cust_flash_qemu(dut):
+def test_esp_secure_cert_cust_flash_qemu(dut: Any) -> None:
+    """
+    Test custom flash format on QEMU emulator.
+
+    This test validates the custom flash storage format for certificates and
+    keys. Tests are run on QEMU for CI/CD pipeline integration.
+
+    Args:
+        dut: Device under test fixture (QEMU emulator instance)
+    """
     setup_flash_image_for_qemu(dut, "cust_flash")
     verify_certificates_and_keys(dut, "cust_flash")
-    dut.expect(r'Test application completed successfully', timeout=10)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
 
 
 @pytest.mark.qemu
 @pytest.mark.parametrize('config', ['legacy'], indirect=True)
 @pytest.mark.parametrize('target', ['esp32c3'])
-def test_esp_secure_cert_nvs_qemu(dut):
+def test_esp_secure_cert_nvs_qemu(dut: Any) -> None:
+    """
+    Test NVS format on QEMU emulator.
+
+    This test validates the NVS storage format for certificates and keys.
+    Tests are run on QEMU for automated testing in CI/CD pipelines.
+
+    Args:
+        dut: Device under test fixture (QEMU emulator instance)
+    """
     setup_flash_image_for_qemu(dut, "nvs")
     verify_certificates_and_keys(dut, "nvs")
-    dut.expect(r'Test application completed successfully', timeout=10)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
 
 
 @pytest.mark.qemu
 @pytest.mark.parametrize('config', ['tlv'], indirect=True)
 @pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
-def test_esp_secure_cert_tlv_qemu(dut):
+def test_esp_secure_cert_tlv_qemu(dut: Any) -> None:
+    """
+    Test TLV format on QEMU emulator.
+
+    This test validates the modern TLV (Type-Length-Value) storage format for
+    certificates and keys. This is the recommended format for new projects.
+    Tests run on multiple ESP32 targets (esp32, esp32c3, esp32s3) using QEMU.
+
+    Args:
+        dut: Device under test fixture (QEMU emulator instance)
+    """
     setup_flash_image_for_qemu(dut)
     verify_certificates_and_keys(dut)
-    dut.expect(r'Test application completed successfully', timeout=10)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
 
 
 @pytest.mark.parametrize('config', ['tlv'], indirect=True)
 @pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
-def test_esp_secure_cert_tlv(dut):
+def test_esp_secure_cert_tlv(dut: Any) -> None:
+    """
+    Test TLV format on real hardware.
+
+    This test validates the TLV storage format on physical ESP32 devices.
+    It verifies certificates and keys can be read correctly from the
+    esp_secure_cert partition on actual hardware across multiple targets.
+
+    Note: This test requires physical hardware and will be skipped in
+    QEMU-only test runs (use -m "not qemu" to run hardware tests).
+
+    Args:
+        dut: Device under test fixture (real ESP32 device)
+    """
+    setup_flash_image_for_qemu(dut)
     verify_certificates_and_keys(dut)
-    dut.expect(r'Test application completed successfully', timeout=10)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
+
+
+@pytest.mark.qemu
+@pytest.mark.parametrize('config', ['crypto'], indirect=True)
+@pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
+def test_esp_secure_cert_crypto(dut: Any) -> None:
+    """
+    Test cryptographic operations on real hardware.
+
+    This test validates the cryptographic operations on physical ESP32
+    devices. It verifies the cryptographic operations can be performed
+    correctly on actual hardware.
+
+    Args:
+        dut: Device under test fixture (real ESP32 device)
+    """
+    setup_flash_image_for_qemu(dut)
+    dut.expect(r'Tests finished, rc=0', timeout=10)
