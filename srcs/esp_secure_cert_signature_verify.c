@@ -268,6 +268,7 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
         return ESP_OK;
     }
     ESP_LOGE(TAG, "Signature verification failed");
+    esp_secure_cert_unmap_partition(); // Unmap the partition to free memory if the signature verification fails
     free(signature_blocks);
     return ESP_FAIL;
 }
