@@ -107,7 +107,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv]
+        CONFIG: [default, tlv, crypto, basics]
 
 .build_v5.4:
   extends: .build_base
@@ -115,7 +115,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv]
+        CONFIG: [default, tlv, crypto, basics]
 
 .build_v5.5:
   extends: .build_base
@@ -123,7 +123,15 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv]
+        CONFIG: [default, tlv, crypto, basics]
+
+.build_v6.0:
+  extends: .build_base
+  image: espressif/idf:release-v6.0
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv, crypto, basics]
 
 .build_master:
   extends: .build_base
@@ -131,7 +139,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv]
+        CONFIG: [tlv, crypto, basics]
 
 # Build jobs for each IDF version
 build_v4.3:
@@ -164,6 +172,9 @@ build_v5.4:
 
 build_v5.5:
   extends: .build_v5.5
+
+build_v6.0:
+  extends: .build_v6.0
 
 build_master:
   extends: .build_master
@@ -310,7 +321,7 @@ qemu_test_v5.3:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv]
+        CONFIG: [tlv, crypto, basics]
   dependencies:
     - build_v5.3
 
@@ -320,7 +331,7 @@ qemu_test_v5.4:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv]
+        CONFIG: [tlv, crypto, basics]
   dependencies:
     - build_v5.4
 
@@ -330,9 +341,19 @@ qemu_test_v5.5:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3, esp32]
-        CONFIG: [tlv]
+        CONFIG: [tlv, crypto, basics]
   dependencies:
     - build_v5.5
+
+qemu_test_v6.0:
+  extends: .qemu_test_base
+  image: espressif/idf:release-v6.0
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [tlv, crypto, basics]
+  dependencies:
+    - build_v6.0
 
 qemu_test_master:
   extends: .qemu_test_base
@@ -340,7 +361,7 @@ qemu_test_master:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv]
+        CONFIG: [tlv, crypto, basics]
   dependencies:
     - build_master
 

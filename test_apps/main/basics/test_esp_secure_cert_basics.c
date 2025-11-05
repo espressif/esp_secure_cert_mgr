@@ -90,55 +90,48 @@ TEST(basics, esp_secure_cert_unmap_partition_api_test)
 
     // Test 1: Map the partition first
     ESP_LOGI(TAG, "Test 1: Mapping partition...");
-    ret = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx);
+    esp_secure_cert_partition_ctx_t *esp_secure_cert_partition_ctx_ptr = NULL;
+    ret = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx_ptr);
     TEST_ASSERT_EQUAL(ESP_OK, ret);
     ESP_LOGI(TAG, "Partition mapped successfully");
 
     // Verify partition is mapped
-    TEST_ASSERT_NOT_NULL(esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr);
-    TEST_ASSERT_NOT_EQUAL(0, esp_secure_cert_partition_ctx.handle);
+    TEST_ASSERT_NOT_NULL(esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr);
+    TEST_ASSERT_NOT_EQUAL(0, esp_secure_cert_partition_ctx_ptr->handle);
     ESP_LOGI(TAG, "Partition context verified (handle: %lu, addr: %p)",
-             (unsigned long)esp_secure_cert_partition_ctx.handle,
-             esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr);
+             (unsigned long)esp_secure_cert_partition_ctx_ptr->handle,
+             esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr);
 
     // Test 2: Unmap the partition
     ESP_LOGI(TAG, "Test 2: Unmapping partition...");
-    ret = esp_secure_cert_unmap_partition(&esp_secure_cert_partition_ctx);
-    TEST_ASSERT_EQUAL(ESP_OK, ret);
+    esp_secure_cert_unmap_partition();
     ESP_LOGI(TAG, "Partition unmapped successfully");
 
     // Verify partition is unmapped (context should be reset)
-    TEST_ASSERT_NULL(esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr);
-    TEST_ASSERT_EQUAL(0, esp_secure_cert_partition_ctx.handle);
-    TEST_ASSERT_NULL(esp_secure_cert_partition_ctx.partition);
+    TEST_ASSERT_NULL(esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr);
+    TEST_ASSERT_EQUAL(0, esp_secure_cert_partition_ctx_ptr->handle);
+    TEST_ASSERT_NULL(esp_secure_cert_partition_ctx_ptr->partition);
     ESP_LOGI(TAG, "Partition context cleared successfully");
 
     // Test 3: Unmap again (should return ESP_OK with warning)
     ESP_LOGI(TAG, "Test 3: Unmapping already unmapped partition...");
-    ret = esp_secure_cert_unmap_partition(&esp_secure_cert_partition_ctx);
-    TEST_ASSERT_EQUAL(ESP_OK, ret);
+    esp_secure_cert_unmap_partition();
     ESP_LOGI(TAG, "Unmapping already unmapped partition returned ESP_OK");
 
-    // Test 4: Test NULL parameter
-    ESP_LOGI(TAG, "Test 4: Testing NULL parameter...");
-    ret = esp_secure_cert_unmap_partition(NULL);
-    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, ret);
-    ESP_LOGI(TAG, "NULL parameter correctly returns ESP_ERR_INVALID_ARG");
-
-    // Test 5: Remap the partition after unmapping
-    ESP_LOGI(TAG, "Test 5: Remapping partition after unmap...");
-    ret = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx);
+    // Test 4: Remap the partition after unmapping
+    ESP_LOGI(TAG, "Test 4: Remapping partition after unmap...");
+    ret = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx_ptr);
     TEST_ASSERT_EQUAL(ESP_OK, ret);
 
     // Verify remapping worked
-    TEST_ASSERT_NOT_NULL(esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr);
-    TEST_ASSERT_NOT_EQUAL(0, esp_secure_cert_partition_ctx.handle);
+    TEST_ASSERT_NOT_NULL(esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr);
+    TEST_ASSERT_NOT_EQUAL(0, esp_secure_cert_partition_ctx_ptr->handle);
     ESP_LOGI(TAG, "Partition remapped successfully (handle: %lu, addr: %p)",
-             (unsigned long)esp_secure_cert_partition_ctx.handle,
-             esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr);
+             (unsigned long)esp_secure_cert_partition_ctx_ptr->handle,
+             esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr);
 
-    // Test 6: Verify we can still read data after remap
-    ESP_LOGI(TAG, "Test 6: Verifying data access after remap...");
+    // Test 5: Verify we can still read data after remap
+    ESP_LOGI(TAG, "Test 5: Verifying data access after remap...");
     char *cert_addr = NULL;
     uint32_t cert_len = 0;
     ret = esp_secure_cert_get_device_cert(&cert_addr, &cert_len);
@@ -148,7 +141,6 @@ TEST(basics, esp_secure_cert_unmap_partition_api_test)
     } else {
         ESP_LOGI(TAG, "Device cert not available or read failed (may be expected in some configurations)");
     }
-
     ESP_LOGI(TAG, "esp_secure_cert_unmap_partition tests completed successfully");
 }
 
