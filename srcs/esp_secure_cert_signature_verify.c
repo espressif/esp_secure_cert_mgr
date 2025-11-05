@@ -126,7 +126,7 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
 
     if (sig_block_data == NULL) {
         ESP_LOGE(TAG, "Failed to get signature block data 2");
-    }                                            
+    }
     if (ret != ESP_OK || sig_block_data == NULL) {
         ESP_LOGE(TAG, "Failed to get signature block data");
         return ESP_FAIL;
@@ -175,11 +175,11 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
 #else
     // Use PSA APIs for SHA256 calculation
     size_t hash_length = 0;
-    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256, 
-                                          (const uint8_t *)partition_addr, 
-                                          hash_size, 
-                                          hash, 
-                                          ESP_SECURE_CERT_SHA256_DIGEST_SIZE, 
+    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256,
+                                          (const uint8_t *)partition_addr,
+                                          hash_size,
+                                          hash,
+                                          ESP_SECURE_CERT_SHA256_DIGEST_SIZE,
                                           &hash_length);
     if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to calculate SHA256 hash using PSA, status: %d", status);
@@ -223,31 +223,21 @@ static esp_err_t verify_signature(const ets_secure_boot_signature_t *signature_b
 
 esp_err_t esp_secure_cert_verify_partition_signature(void)
 {
-    const void *partition_addr = esp_secure_cert_get_mapped_addr();
+    esp_secure_cert_partition_ctx_t *ctx = NULL;
+    esp_err_t ret = esp_secure_cert_map_partition(&ctx);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to map partition");
+        return ESP_FAIL;
+    }
+
+    const void *partition_addr = ctx->esp_secure_cert_mapped_addr;
     if (partition_addr == NULL) {
         ESP_LOGE(TAG, "Failed to get mapped partition address");
         return ESP_FAIL;
     }
-
-    esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
-                                                    ESP_PARTITION_SUBTYPE_ANY,
-                                                    ESP_SECURE_CERT_TLV_PARTITION_NAME);
-    if (it == NULL) {
-        ESP_LOGE(TAG, "Failed to find esp_secure_cert partition");
-        return ESP_FAIL;
-    }
-
-    const esp_partition_t *partition = esp_partition_get(it);
-    if (partition == NULL) {
-        ESP_LOGE(TAG, "Failed to get esp_secure_cert partition");
-        esp_partition_iterator_release(it);
-        return ESP_FAIL;
-    }
-    uint32_t partition_size = partition->size;
+    uint32_t partition_size = ctx->partition->size;
     ESP_LOGI(TAG, "Starting signature verification for partition size: %" PRIu32, partition_size);
 
-    esp_partition_iterator_release(it);
-    
     // Find the signature block
     ets_secure_boot_signature_t *signature_blocks = calloc(1, sizeof(ets_secure_boot_signature_t));
     if (signature_blocks == NULL) {
@@ -257,7 +247,7 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
 
     // Calculate hash of all TLV entries except signature blocks
     uint8_t calculated_hash[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    esp_err_t ret = calculate_partition_hash(partition_addr, partition_size, calculated_hash);
+    ret = calculate_partition_hash(partition_addr, partition_size, calculated_hash);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to calculate partition hash");
         free(signature_blocks);
