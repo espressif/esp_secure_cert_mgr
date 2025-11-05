@@ -425,3 +425,18 @@ def test_esp_secure_cert_crypto(dut: Any) -> None:
     """
     setup_flash_image_for_qemu(dut)
     dut.expect(r'Tests finished, rc=0', timeout=10)
+
+
+@pytest.mark.qemu
+@pytest.mark.parametrize('config', ['basics'], indirect=True)
+@pytest.mark.parametrize('target', ['esp32', 'esp32c3', 'esp32s3'])
+def test_esp_secure_cert_basics(dut: Any) -> None:
+    """
+    Test basic operations on real hardware.
+
+    This test validates the basic operations on physical ESP32 devices.
+    It verifies the basic operations can be performed correctly on actual
+    hardware.
+    """
+    setup_flash_image_for_qemu(dut)
+    dut.expect(r'Tests finished, rc=0', timeout=10)

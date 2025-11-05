@@ -14,6 +14,10 @@
 #if __has_include("esp_idf_version.h")
 #include "esp_idf_version.h"
 
+#if ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(4, 4, 0)
+#include "esp_spi_flash.h"
+#endif
+
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 4, 0)
 #include "esp_random.h"
 #else
@@ -67,6 +71,8 @@
 
 static const char *TAG = "esp_secure_cert_tlv";
 
+esp_secure_cert_partition_ctx_t esp_secure_cert_partition_ctx = {0};
+
 #define MIN_ALIGNMENT_REQUIRED 16
 
 
@@ -76,53 +82,75 @@ static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t sub
 
 #endif
 
+/*
+ * Unmap the esp_secure_cert partition
+ */
+void esp_secure_cert_unmap_partition(void)
+{
+    if (esp_secure_cert_partition_ctx.handle == 0) {
+        ESP_LOGW(TAG, "Handle is not initialized");
+        return;
+    }
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    esp_partition_munmap(esp_secure_cert_partition_ctx.handle);
+#else
+    spi_flash_munmap(esp_secure_cert_partition_ctx.handle);
+#endif
+    esp_secure_cert_partition_ctx.handle = 0;
+    esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr = NULL;
+    esp_secure_cert_partition_ctx.partition = NULL;
+    return;
+}
+
 /* This is the mininum required flash address alignment in bytes to write to an encrypted flash partition */
 
 /*
- * Map the entire esp_secure_cert partition
- * and return the virtual address.
- *
- * @note
- * The mapping is done only once and function shall
- * simply return same address in case of successive calls.
- **/
-const void *esp_secure_cert_get_mapped_addr(void)
+ * Initialize the esp_secure_cert partition context.
+ * This function maps the entire esp_secure_cert partition and
+ * populates the context structure with partition information.
+ */
+esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t **ctx)
 {
-    // Once initialized, these variable shall contain valid data till reboot.
-    static const void *esp_secure_cert_mapped_addr;
-    if (esp_secure_cert_mapped_addr) {
-        return esp_secure_cert_mapped_addr;
+    // If already initialized, return immediately
+    if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
+        ESP_LOGD(TAG, "Partition already mapped");
+        *ctx = &esp_secure_cert_partition_ctx;
+        return ESP_OK;
     }
 
     esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
                                   ESP_PARTITION_SUBTYPE_ANY, ESP_SECURE_CERT_TLV_PARTITION_NAME);
     if (it == NULL) {
         ESP_LOGE(TAG, "Partition not found.");
-        return NULL;
+        esp_partition_iterator_release(it);
+        return ESP_FAIL;
     }
 
-    const esp_partition_t *partition = esp_partition_get(it);
-    if (partition == NULL) {
+    esp_secure_cert_partition_ctx.partition = esp_partition_get(it);
+    if (esp_secure_cert_partition_ctx.partition == NULL) {
         ESP_LOGE(TAG, "Could not get partition.");
-        return NULL;
+        esp_partition_iterator_release(it);
+        return ESP_FAIL;
     }
 
     /* Encrypted partitions need to be read via a cache mapping */
-    spi_flash_mmap_handle_t handle;
     esp_err_t err;
 
     /* Map the entire partition */
-    err = esp_partition_mmap(partition, 0, partition->size, SPI_FLASH_MMAP_DATA, &esp_secure_cert_mapped_addr, &handle);
+    err = esp_partition_mmap(esp_secure_cert_partition_ctx.partition, 0, esp_secure_cert_partition_ctx.partition->size, SPI_FLASH_MMAP_DATA,
+                             &esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr, &esp_secure_cert_partition_ctx.handle);
     if (err != ESP_OK) {
         esp_partition_iterator_release(it);
         it = NULL;
         ESP_LOGE(TAG, "Failed to map partition: %d", err);
-        return NULL;
+        return ESP_FAIL;
     }
     esp_partition_iterator_release(it);
     it = NULL;
     ESP_LOGD(TAG, "Partition mapped successfully");
-    return esp_secure_cert_mapped_addr;
+    *ctx = &esp_secure_cert_partition_ctx;
+    return ESP_OK;
 }
 
 /*
@@ -287,11 +315,19 @@ This function retrieves the header of a specific ESP Secure Certificate TLV reco
 static esp_err_t esp_secure_cert_tlv_get_header(esp_secure_cert_tlv_type_t type, uint8_t subtype, esp_secure_cert_tlv_header_t **tlv_header)
 {
     esp_err_t err = ESP_FAIL;
-    char *esp_secure_cert_addr = (char *)esp_secure_cert_get_mapped_addr();
+    esp_secure_cert_partition_ctx_t *esp_secure_cert_partition_ctx_ptr = NULL;
+    err = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx_ptr);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error in obtaining esp_secure_cert partition context");
+        return ESP_FAIL;
+    }
+
+    const char *esp_secure_cert_addr = (const char *)esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr;
     if (esp_secure_cert_addr == NULL) {
         ESP_LOGE(TAG, "Error in obtaining esp_secure_cert memory mapped address");
         return ESP_FAIL;
     }
+
     err = esp_secure_cert_find_tlv(esp_secure_cert_addr, type, subtype, (void **)tlv_header);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Could not find the tlv of type %d and subtype %d", type, subtype);
@@ -315,7 +351,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
     // and length is set to the total length of valid TLV entries
     if (type == ESP_SECURE_CERT_TLV_END) {
         *buffer = (char *)tlv_header;
-        const void *esp_secure_cert_addr = esp_secure_cert_get_mapped_addr();
+        const void *esp_secure_cert_addr = esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr;
         *len = (void*)tlv_header - esp_secure_cert_addr;
         return ESP_OK;
     }
@@ -428,7 +464,15 @@ esp_err_t esp_secure_cert_iterate_to_next_tlv(esp_secure_cert_tlv_iterator_t *tl
     esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)tlv_iterator->iterator;
     if (tlv_header == NULL) {
         ESP_LOGD(TAG, "tlv_header value is NULL, finding the first TLV entry");
-        tlv_header = (esp_secure_cert_tlv_header_t *) esp_secure_cert_get_mapped_addr();
+
+        esp_secure_cert_partition_ctx_t *esp_secure_cert_partition_ctx_ptr = NULL;
+        esp_err_t err = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx_ptr);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Error in obtaining esp_secure_cert partition context");
+            return ESP_FAIL;
+        }
+
+        tlv_header = (esp_secure_cert_tlv_header_t *)esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr;
         // Verify the TLV entry integrity before returning
         if (esp_secure_cert_verify_tlv_integrity(tlv_header)) {
             tlv_iterator->iterator = (void*)tlv_header;
@@ -695,11 +739,18 @@ void esp_secure_cert_tlv_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
 
 bool esp_secure_cert_is_tlv_partition(void)
 {
-    char *esp_secure_cert_addr = (char *)esp_secure_cert_get_mapped_addr();
+    esp_secure_cert_partition_ctx_t *esp_secure_cert_partition_ctx_ptr = NULL;
+    esp_err_t err = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx_ptr);
+    if (err != ESP_OK) {
+        return 0;
+    }
+
+    const char *esp_secure_cert_addr = (const char *)esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr;
     if (esp_secure_cert_addr == NULL) {
         return 0;
     }
-    esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)(esp_secure_cert_addr );
+
+    esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)(esp_secure_cert_addr);
     if (tlv_header->magic == ESP_SECURE_CERT_TLV_MAGIC) {
         ESP_LOGD(TAG, "TLV partition identified");
         return 1;
