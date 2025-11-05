@@ -442,3 +442,164 @@ def test_esp_secure_cert_basics(dut: Any) -> None:
     """
     setup_flash_image_for_qemu(dut)
     dut.expect(r'Tests finished, rc=0', timeout=10)
+
+
+# Secure Verification Test
+@pytest.mark.qemu
+@pytest.mark.parametrize('config', ['secure_verification'], indirect=True)
+@pytest.mark.parametrize(
+    'target,qemu_extra_args',
+    [
+        (
+            'esp32c3',
+            (
+                '-drive file={},if=none,format=raw,id=efuse '
+                '-global driver=nvram.esp32c3.efuse,'
+                'property=drive,value=efuse '
+                '-global driver=timer.esp32c3.timg,'
+                'property=wdt_disable,value=true'
+            ).format(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "qemu_test",
+                    "secure_verification",
+                    "secure_key_0_esp32c3_efuse.bin"
+                )
+            ),
+        ),
+        (
+            'esp32s3',
+            (
+                '-drive file={},if=none,format=raw,id=efuse '
+                '-global driver=nvram.esp32s3.efuse,'
+                'property=drive,value=efuse '
+                '-global driver=timer.esp32s3.timg,'
+                'property=wdt_disable,value=true'
+            ).format(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "qemu_test",
+                    "secure_verification",
+                    "secure_key_0_esp32s3_efuse.bin"
+                )
+            ),
+        ),
+    ],
+    indirect=['qemu_extra_args'],
+)
+def test_esp_secure_cert_secure_verification_qemu(dut: Any) -> None:
+    """
+    Test secure verification operations on QEMU emulator.
+
+    This test validates the secure verification operations on QEMU emulator.
+    It verifies the secure verification operations can be performed correctly
+    on QEMU emulator.
+
+    Args:
+        dut: Device under test fixture (QEMU emulator instance)
+    """
+    setup_flash_image_for_qemu(dut, 'secure_verification')
+    dut.expect(r'Tests finished, rc=0', timeout=10)
+
+
+@pytest.mark.qemu
+@pytest.mark.parametrize(
+    'config',
+    ['sec_verification_flash_encryption'],
+    indirect=True
+)
+@pytest.mark.parametrize(
+    'target,qemu_extra_args',
+    [
+        (
+            'esp32c3',
+            (
+                '-drive file={},if=none,format=raw,id=efuse '
+                '-global driver=nvram.esp32c3.efuse,'
+                'property=drive,value=efuse '
+                '-global driver=timer.esp32c3.timg,'
+                'property=wdt_disable,value=true'
+            ).format(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "qemu_test",
+                    "secure_verification_flash_encrypt",
+                    "secure_key_0_esp32c3_efuse.bin"
+                )
+            ),
+        ),
+        (
+            'esp32s3',
+            (
+                '-drive file={},if=none,format=raw,id=efuse '
+                '-global driver=nvram.esp32s3.efuse,'
+                'property=drive,value=efuse '
+                '-global driver=timer.esp32s3.timg,'
+                'property=wdt_disable,value=true'
+            ).format(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "qemu_test",
+                    "secure_verification_flash_encrypt",
+                    "secure_key_0_esp32s3_efuse.bin"
+                )
+            ),
+        ),
+    ],
+    indirect=['qemu_extra_args'],
+)
+def test_esp_secure_cert_secure_verification_flash_encryption_qemu(dut):
+    setup_flash_image_for_qemu(dut, 'secure_verification')
+    dut.expect(r'Tests finished, rc=0', timeout=10)
+
+
+# Secure Verification Test for corrupted secure cert partition
+@pytest.mark.qemu
+@pytest.mark.parametrize(
+    'config',
+    ['secure_verification_corrupt_partition'],
+    indirect=True
+)
+@pytest.mark.parametrize(
+    'target,qemu_extra_args',
+    [
+        (
+            'esp32c3',
+            (
+                '-drive file={},if=none,format=raw,id=efuse '
+                '-global driver=nvram.esp32c3.efuse,'
+                'property=drive,value=efuse '
+                '-global driver=timer.esp32c3.timg,'
+                'property=wdt_disable,value=true'
+            ).format(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "qemu_test",
+                    "secure_verification",
+                    "secure_key_0_esp32c3_efuse.bin"
+                )
+            ),
+        ),
+        (
+            'esp32s3',
+            (
+                '-drive file={},if=none,format=raw,id=efuse '
+                '-global driver=nvram.esp32s3.efuse,'
+                'property=drive,value=efuse '
+                '-global driver=timer.esp32s3.timg,'
+                'property=wdt_disable,value=true'
+            ).format(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "qemu_test",
+                    "secure_verification",
+                    "secure_key_0_esp32s3_efuse.bin"
+                )
+            ),
+        ),
+    ],
+    indirect=['qemu_extra_args'],
+)
+def test_esp_secure_cert_secure_verification_corrupt_partition_qemu(dut):
+    setup_flash_image_for_qemu(dut, 'secure_verification_corrupt')
+    dut.expect(r'Tests finished, rc=0', timeout=10)

@@ -6,10 +6,10 @@ This document explains the signature verification functionality in the ESP Secur
 
 ### Signature block
 
-The signature block is calculated using the SHA digest of all the TLV entries in the partition, excluding `ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV` and the signing key itself. To generate the signature block, use the `generate_signature_block_using_private_key` function from `esptool.py`. This function is called with the computed SHA of the TLV data and the private signing key as inputs, for example:
+The signature block is calculated using the SHA256 digest of all the existing TLV entries in the partition, excluding TLVs of type `ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV`. To generate the signature block, use the `generate_signature_block_using_private_key` function from `esptool.py`. This function is called with the computed SHA256 of the TLV data and the private signing key as inputs, for example:
 
 ```
-generate_signature_block_using_private_key(contents=<SHA_of_TLV_data>, keyfiles=[<path/to/private_key>])
+generate_signature_block_using_private_key(contents=<SHA256_of_TLV_data>, keyfiles=[<path/to/private_key>])
 ```
 
 The resulting signature block is then added to the end of the esp_secure_cert partition as a TLV entry.
@@ -57,7 +57,7 @@ typedef struct {
 ```
 
 ### Multiple Signature Blocks
-The system supports up to 3 signature blocks for redundancy:
+The system supports up to 3 signature blocks:
 - **Signature Block 0**: Primary signature block
 - **Signature Block 1**: Secondary signature block  
 - **Signature Block 2**: Tertiary signature block
@@ -70,8 +70,8 @@ The verification process tries each signature block in order until one succeeds.
 
 ![](../_static/signature_block.png)
 
-- SHA is calculated from all TLV entries except SIGNATURE_BLOCK_TLV.
-- Signature Block TLV is created with generated signature block using SHA and signing key.
+- SHA256 is calculated from all TLV entries except SIGNATURE_BLOCK_TLV.
+- Signature Block TLV is created with generated signature block using SHA256 and signing key.
 - Signature Block TLV will be appended at the end of all entries.
 
 ## 2. Secure Verification
