@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(test_esp_secure_cert_tlv)
+project(test_esp_secure_cert)
 
 # Flash the custom partition named `esp_secure_cert` ONLY
 # DO NOT flash the partition table as it will corrupt the boot process
