@@ -1,5 +1,10 @@
 # This file contains the list of changes across different versions
 
+## v2.8.0
+* Added feature of secure verification for esp-secure-cert partition.
+* It verifies whether the esp-secure-cert partition is signed or not, with signing-key.
+* It depends upon esp-idf secure boot, and follows the same flow.
+
 ## v2.7.2
 * Removed unused mbedTLS header imports and adds support for mbedTLS v4.x
 

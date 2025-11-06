@@ -21,7 +21,7 @@ if(IDF_VERSION_MAJOR GREATER_EQUAL 5)
     idf_component_register(
         SRC_DIRS "." ${src_dir}
         INCLUDE_DIRS "." "../../private_include"
-        REQUIRES unity mbedtls efuse bootloader
+        PRIV_REQUIRES unity efuse bootloader_support nvs_flash
         WHOLE_ARCHIVE
     )
 else()
@@ -29,6 +29,6 @@ else()
     idf_component_register(
         SRC_DIRS "." ${src_dir}
         INCLUDE_DIRS "." "../../private_include"
-        REQUIRES unity mbedtls efuse bootloader
+        PRIV_REQUIRES unity efuse bootloader_support nvs_flash
     )
 endif()

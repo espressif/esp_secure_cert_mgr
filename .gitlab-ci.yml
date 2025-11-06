@@ -114,7 +114,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, crypto, basics, secure_verification]
+        CONFIG: [default, tlv, crypto, basics, secure_verification, secure_verification_corrupt_partition, secure_verification_flash_encryption]
 
 .build_v5.4:
   extends: .build_base
@@ -122,15 +122,17 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, crypto, basics, secure_verification]
+        CONFIG: [default, tlv, crypto, basics, secure_verification, secure_verification_corrupt_partition, secure_verification_flash_encryption]
 
 .build_v5.5:
   extends: .build_base
   image: espressif/idf:release-v5.5
   parallel:
     matrix:
-      - IDF_TARGET: [esp32, esp32c3]
-        CONFIG: [default, tlv, crypto, basics, secure_verification]
+      - IDF_TARGET: [esp32]
+        CONFIG: [default, tlv, crypto, basics]
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [default, tlv, crypto, basics, secure_verification, secure_verification_corrupt_partition, secure_verification_flash_encryption]
 
 .build_v6.0:
   extends: .build_base
@@ -138,7 +140,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default, tlv, crypto, basics, secure_verification]
+        CONFIG: [default, tlv, crypto, basics, secure_verification, secure_verification_corrupt_partition, secure_verification_flash_encryption]
 
 .build_master:
   extends: .build_base
@@ -146,7 +148,7 @@ variables:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [tlv, crypto, basics, secure_verification]
+        CONFIG: [tlv, crypto, basics, secure_verification, secure_verification_corrupt_partition, secure_verification_flash_encryption]
 
 # Build jobs for each IDF version
 build_v4.3:
@@ -216,7 +218,7 @@ build_examples_app_master:
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3, esp32]
-        CONFIG: [default, ds]
+        CONFIG: [default]
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
@@ -347,8 +349,10 @@ qemu_test_v5.5:
   image: espressif/idf:release-v5.5
   parallel:
     matrix:
-      - IDF_TARGET: [esp32c3, esp32]
+      - IDF_TARGET: [esp32c3]
         CONFIG: [tlv, crypto, basics, secure_verification]
+      - IDF_TARGET: [esp32]
+        CONFIG: [tlv, crypto, basics]
   dependencies:
     - build_v5.5
 

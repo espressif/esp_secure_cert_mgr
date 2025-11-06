@@ -39,6 +39,10 @@ TEST_TEAR_DOWN(secure_verification)
 extern const char secure_boot_key_pem[];
 extern const char fake_key_pem[];
 
+static esp_sign_verify_ctx_t sign_verify_ctx = {
+    .offset = 0, // Offset of esp-secure-cert partition (currently not in use)
+};
+
 #ifndef CONFIG_TEST_APP_SECURE_VERIFICATION_CORRUPT_PARTITION
 // 32-byte array for the secure boot key digest: 640cb9b4793b6bce72fc92e3f3c977cd69acd2cd287ae0e533cf48f38e34093f
 static uint8_t secure_boot_digest[32] = {
@@ -65,7 +69,7 @@ TEST(secure_verification, test_case_1_secure_boot_key_burn_and_verify)
 
     // Secure boot key is already burned to eFuse block 0
     ESP_LOGI(TAG, "Performing secure verification...");
-    esp_err_t ret = esp_secure_cert_verify_partition_signature();
+    esp_err_t ret = esp_secure_cert_verify_partition_signature(&sign_verify_ctx);
 
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "TEST CASE 1: esp_secure_cert partition signature verification PASSED");
@@ -88,7 +92,7 @@ TEST(secure_verification, test_case_2_revoke_secure_boot_key_and_verify)
     TEST_ASSERT_EQUAL_MESSAGE(ESP_OK, ret, "Failed to revoke secure boot key");
 
     ESP_LOGI(TAG, "Performing secure verification...");
-    ret = esp_secure_cert_verify_partition_signature();
+    ret = esp_secure_cert_verify_partition_signature(&sign_verify_ctx);
 
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "TEST CASE 2: Secure verification succeeded unexpectedly");
@@ -107,14 +111,20 @@ TEST(secure_verification, test_case_3_burn_fake_key_and_verify)
     ESP_LOGI(TAG, "Expected: Secure verification should FAIL");
 
     // Burn the fake key to second eFuse block
+#if CONFIG_SECURE_FLASH_ENC_ENABLED
+    esp_err_t ret = esp_efuse_write_key(EFUSE_BLK_KEY2,
+        ESP_EFUSE_KEY_PURPOSE_SECURE_BOOT_DIGEST1,
+        fake_key_digest, 32);
+#else
     esp_err_t ret = esp_efuse_write_key(EFUSE_BLK_KEY1,
         ESP_EFUSE_KEY_PURPOSE_SECURE_BOOT_DIGEST1,
         fake_key_digest, 32);
+#endif
     TEST_ASSERT_EQUAL_MESSAGE(ESP_OK, ret, "Failed to burn fake key");
 
     // Perform secure verification - should fail
     ESP_LOGI(TAG, "Performing secure verification...");
-    ret = esp_secure_cert_verify_partition_signature();
+    ret = esp_secure_cert_verify_partition_signature(&sign_verify_ctx);
 
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "TEST CASE 3: Secure verification succeeded unexpectedly");
@@ -133,18 +143,27 @@ TEST(secure_verification, test_case_4_revoke_fake_key_and_burn_secure_boot_key_a
     ESP_LOGI(TAG, "Expected: Secure verification should PASS");
 
     // Revoke the fake key from second eFuse block
+    ESP_LOGI(TAG, "Revoking fake key from eFuse block 1");
     esp_err_t ret = esp_efuse_set_digest_revoke(1);
     TEST_ASSERT_EQUAL_MESSAGE(ESP_OK, ret, "Failed to revoke fake key");
 
     // Burn the secure boot key to third eFuse block (slot 2) since slots 0 and 1 are revoked
+#if CONFIG_SECURE_FLASH_ENC_ENABLED
+    ESP_LOGI(TAG, "Burning secure boot key to eFuse block 3");
+    ret = esp_efuse_write_key(EFUSE_BLK_KEY3,
+        ESP_EFUSE_KEY_PURPOSE_SECURE_BOOT_DIGEST2,
+        secure_boot_digest, 32);
+#else
+    ESP_LOGI(TAG, "Burning secure boot key to eFuse block 2");
     ret = esp_efuse_write_key(EFUSE_BLK_KEY2,
         ESP_EFUSE_KEY_PURPOSE_SECURE_BOOT_DIGEST2,
         secure_boot_digest, 32);
+#endif
     TEST_ASSERT_EQUAL_MESSAGE(ESP_OK, ret, "Failed to burn secure boot key");
 
     // Perform secure verification - should PASS
     ESP_LOGI(TAG, "Performing secure verification...");
-    ret = esp_secure_cert_verify_partition_signature();
+    ret = esp_secure_cert_verify_partition_signature(&sign_verify_ctx);
 
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "TEST CASE 4: esp_secure_cert partition signature verification PASSED");
@@ -164,7 +183,7 @@ TEST(secure_verification, test_case_5_corrupt_secure_cert_partition_and_verify)
 
     // Perform secure verification - should FAIL
     ESP_LOGI(TAG, "Performing secure verification...");
-    esp_err_t ret = esp_secure_cert_verify_partition_signature();
+    esp_err_t ret = esp_secure_cert_verify_partition_signature(&sign_verify_ctx);
 
     if (ret == ESP_OK) {
         ESP_LOGE(TAG, "TEST CASE 5: Secure verification succeeded unexpectedly");

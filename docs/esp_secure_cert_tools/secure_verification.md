@@ -6,18 +6,17 @@ This document explains the signature verification functionality in the ESP Secur
 
 ### Signature block
 
-The signature block is calculated using the SHA256 digest of all the existing TLV entries in the partition, excluding TLVs of type `ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV`. To generate the signature block, use the `generate_signature_block_using_private_key` function from `esptool.py`. This function is called with the computed SHA256 of the TLV data and the private signing key as inputs, for example:
-
-```
-generate_signature_block_using_private_key(contents=<SHA256_of_TLV_data>, keyfiles=[<path/to/private_key>])
-```
+The signature block is calculated using the SHA256 digest of all the existing TLV entries in the partition, excluding TLVs of type `ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV`.
 
 The resulting signature block is then added to the end of the esp_secure_cert partition as a TLV entry.
 
 #### Signing key
 
-You must generate the signing keys on the host system, and **it is critical that the same keys used for secure boot are also used here** for signature verification, or that their key digests are stored in efuse for proper verification. User may generate up to same number of blocks that are supported in
-by Secure Boot in the hardware with corresponding signing keys.
+**It is critical that the same keys used for secure boot are also used here** for signature verification. It is highly recommended that this feature is used along with secure boot V2 feature.
+
+Please note that if this feature is enabled on the device then it will be difficult to enable secure boot (if not already enabled) on that device going forward.
+
+User may generate up to same number of signature block TLVs that are supported by Secure Boot in the hardware with corresponding signing keys.
 
 #### Signature Block format
 
@@ -34,19 +33,36 @@ typedef struct {
 ```
 
 ### Signature Block Data
-The signature block data follows the ESP-IDF secure boot v2 format:
+The signature block data follows:
+
 ```c
-struct ets_secure_boot_sig_block {
-    uint8_t magic_byte;
-    uint8_t version;
-    uint8_t _reserved1;
-    uint8_t _reserved2;
-    uint8_t image_digest[32];
-    ets_rsa_pubkey_t key;
-    uint8_t signature[384];
-    uint32_t block_crc;
-    uint8_t _padding[16];
-};
+typedef struct {
+    uint8_t version;                 /* Signature block version */
+    uint8_t reserved1[3];              /* Reserved for future use */
+    uint32_t offset;                 /* Offset for hash calculation (Currently not in use, set to 0) */
+    uint32_t length;                 /* Length of data for hash calculation (Currently not in use, set to 0) */
+    uint8_t algorithm;
+    uint8_t reserved2[3];              /* Reserved for future use */
+#if CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME
+    ets_rsa_pubkey_t rsa_public_key; /* RSA public key structure */
+    uint8_t signature[ESP_SECURE_CERT_RSA3072_SIG_SIZE];  /* RSA signature */
+#elif CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME
+    struct {
+        uint8_t curve_id;
+#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_192_BITS
+        uint8_t pubkey_point[ESP_SECURE_CERT_ECDSA192_KEY_SIZE];
+        uint8_t signature[ESP_SECURE_CERT_ECDSA192_SIG_SIZE];
+#elif CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_256_BITS
+        uint8_t pubkey_point[ESP_SECURE_CERT_ECDSA256_KEY_SIZE];
+        uint8_t signature[ESP_SECURE_CERT_ECDSA256_SIG_SIZE];
+#elif CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
+        uint8_t pubkey_point[ESP_SECURE_CERT_ECDSA384_KEY_SIZE]
+        uint8_t signature[ESP_SECURE_CERT_ECDSA384_SIG_SIZE];
+#endif
+    } ecdsa;
+
+#endif
+} __attribute__((packed)) esp_secure_cert_signature_t;
 ```
 
 ### TLV Footer
@@ -57,7 +73,7 @@ typedef struct {
 ```
 
 ### Multiple Signature Blocks
-The system supports up to 3 signature blocks:
+The feature supports up to 3 signature blocks:
 - **Signature Block 0**: Primary signature block
 - **Signature Block 1**: Secondary signature block  
 - **Signature Block 2**: Tertiary signature block
@@ -74,45 +90,11 @@ The verification process tries each signature block in order until one succeeds.
 - Signature Block TLV is created with generated signature block using SHA256 and signing key.
 - Signature Block TLV will be appended at the end of all entries.
 
-## 2. Secure Verification
-
-The ESP Secure Certificate component provides built-in signature verification functionality that integrates with ESP-IDF's secure boot system. The signature verification is performed at application startup to ensure the integrity and authenticity of the esp_secure_cert partition.
-
-### API Usage
-
-The signature verification is automatically called in the application's `app_main()` function when the `CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION` configuration is enabled:
-
-```c
-#include "esp_secure_cert_signature_verify.h"
-
-void app_main()
-{
-#if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
-    // Perform signature verification at startup
-    ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
-    esp_err_t sig_ret = esp_secure_cert_verify_partition_signature();
-    if (sig_ret == ESP_OK) {
-        ESP_LOGI(TAG, "esp_secure_cert partition signature verification PASSED");
-    } else {
-        ESP_LOGE(TAG, "esp_secure_cert partition signature verification FAILED");
-    }
-#endif
-    
-    // Continue with normal application logic...
-}
-```
-
-The verification process:
-1. Calculates a SHA256 hash of all TLV entries except signature blocks
-2. Verifies the public key in the signature block, by comparing it's  digest with efuse and verifies the signature using the embedded public key in the signature block
-3. Multiple signature blocks are supported. This is for if one signing key is revoked, the partition can still be verified using another valid key(s).
-4. Returns `ESP_OK` if any signature block verification succeeds
-
-## 3. Using configure_esp_secure_cert.py
+## 2. Generating Signed Images
 
 The `configure_esp_secure_cert.py` script provides functionality to add signature blocks to existing unsigned esp_secure_cert partition or create new signed esp_secure_cert partitions.
 
-### Adding Signature Block to Existing Binary
+### Appending signature to existing esp_secure_cert partition
 
 To add a signature block to an existing esp_secure_cert partition:
 
@@ -124,7 +106,7 @@ python tools/configure_esp_secure_cert.py \
     --signing-scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384'] \
 ```
 
-### Creating New Signed Binary
+### Generating new esp_secure_cert partition with signature.
 
 To create a new esp_secure_cert binary with signature blocks:
 
@@ -133,9 +115,9 @@ python tools/configure_esp_secure_cert.py \
     --private-key path/to/client_private_key.pem \
     --device-cert path/to/device_cert.pem \
     --ca-cert path/to/ca_cert.pem \
-    --secure-sign
+    --secure-sign \
     --signing-key-file path/to/signing_private_key.pem \
-    --signing-scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384]
+    --signing-scheme ['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384']
     --target_chip esp32c3
 ```
 
@@ -162,6 +144,47 @@ The script generates the following files in the `esp_secure_cert_data/` director
 - `signature_block_0.bin`: Primary signature block
 - `signature_block_1.bin`: Secondary signature block (if multiple keys provided)
 - `signature_block_2.bin`: Tertiary signature block (if multiple keys provided)
+
+## 3. Secure Verification
+
+The ESP Secure Certificate Manager component provides built-in signature verification functionality that integrates with ESP-IDF's secure boot system. The signature verification is performed at application startup to ensure the integrity and authenticity of the esp_secure_cert partition.
+
+### API Usage
+
+The signature verification is automatically called in the application's `app_main()` function when the `CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION` configuration is enabled:
+
+```c
+#include "esp_secure_cert_signature_verify.h"
+
+void app_main()
+{
+#if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
+    // Perform signature verification at startup
+    esp_sign_verify_ctx_t *sign_verify;
+    ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
+    esp_err_t sig_ret = esp_secure_cert_verify_partition_signature(sign_verify);
+    if (sig_ret == ESP_OK) {
+        ESP_LOGI(TAG, "esp_secure_cert partition signature verification PASSED");
+    } else {
+        ESP_LOGE(TAG, "esp_secure_cert partition signature verification FAILED");
+    }
+#endif
+    
+    // Continue with normal application logic...
+}
+```
+
+The verification process:
+1. Calculates a SHA256 hash of all TLV entries except signature blocks
+2. Verifies the public key in the signature block, by comparing it's digest with the public key digest that is stored in the efuses and verifies the signature using the embedded public key in the signature block
+3. Multiple signature blocks are supported. This is for if one signing key is revoked, the partition can still be verified using another valid key(s).
+4. Returns `ESP_OK` if any signature block verification succeeds
+
+#### esp_sign_verify_ctx
+
+- The `esp_sign_verify_ctx_t` structure is used to configure the behavior of the signature verification API:
+- This struct includes fields
+    - `offset`: It's the offset from where the esp-secure-cert contents will be read (**Currently this field is not in use**)
 
 ## 4. Configuration Requirements
 
