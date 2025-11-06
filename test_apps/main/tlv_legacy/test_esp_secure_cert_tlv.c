@@ -141,7 +141,6 @@ static void esp_print_cert_or_key(const char *label, const char *data, uint32_t 
         if (strncmp(data, pem_header, strlen(pem_header)) == 0) {
             actual_len -= 1; // Remove the last '\0' from the PEM data for sha256 calculation
         }
-        printf("actual_len of %s: %d\n", label, actual_len);
         print_sha256_of_data(label, data, actual_len);
     } else {
         ESP_LOGW(TAG, "%s: No data found", label);

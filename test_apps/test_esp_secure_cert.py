@@ -552,7 +552,7 @@ def test_esp_secure_cert_secure_verification_qemu(dut: Any) -> None:
 )
 def test_esp_secure_cert_secure_verification_flash_encryption_qemu(dut):
     setup_flash_image_for_qemu(
-        dut, 'secure_verification', partition_table=False
+        dut, 'secure_verification_flash_encrypt', partition_table=False
     )
     dut.expect(r'Tests finished, rc=0', timeout=10)
 

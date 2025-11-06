@@ -1,5 +1,10 @@
 # This file contains the list of changes across different versions
 
+## v2.8.0
+* Added feature of secure verification for esp-secure-cert partition.
+* It verifies whether the esp-secure-cert partition is signed or not, with signing-key.
+* It depends upon esp-idf secure boot, and follows the same flow.
+
 ## v2.7.1
 * Added a new API `esp_secure_cert_unmap_partition` to unmap the `esp_secure_cert` partition
 

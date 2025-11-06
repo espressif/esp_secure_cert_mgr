@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_fault.h"
+#include "assert.h"
 #include "esp_partition.h"
 #include "esp_crc.h"
 #include "esp_system.h"
@@ -42,13 +43,22 @@ typedef struct esp_secure_cert_signature {
 } __attribute__((packed)) esp_secure_cert_signature_t;
 
 /**
+ * @brief Cache structure for signature block information
+ */
+typedef struct {
+    char *sig_block_data[ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS];
+    uint32_t sig_block_data_len[ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS];
+    bool cached[ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS];
+} sig_block_cache_t;
+
+/**
  * @brief This API finds all the signature block TLV in the partition and stores
  *        them in the sig_blocks structure
  */
 static esp_err_t find_signature_block(const void *partition_addr, size_t partition_size,
-                                     ets_secure_boot_signature_t *sig_blocks)
+                                     ets_secure_boot_signature_t *sig_blocks, sig_block_cache_t *sig_block_cache)
 {
-    ets_secure_boot_sig_block_t *blocks[ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS] = {NULL, NULL, NULL};
+    ets_secure_boot_sig_block_t *blocks[ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS] = { NULL };
     char *sig_block_data = NULL;
     uint32_t sig_block_data_len = 0;
     int found_blocks = 0;
@@ -58,9 +68,21 @@ static esp_err_t find_signature_block(const void *partition_addr, size_t partiti
 
     // Try to find signature blocks for subtypes 0, 1, and 2 (up to 3 signature blocks)
     for (int subtype = 0; subtype < ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS; subtype++) {
-        esp_err_t ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
-                                                    subtype,
-                                                    &sig_block_data, &sig_block_data_len);
+        esp_err_t ret = ESP_FAIL;
+        if (sig_block_cache->cached[subtype]) {
+            sig_block_data = sig_block_cache->sig_block_data[subtype];
+            sig_block_data_len = sig_block_cache->sig_block_data_len[subtype];
+            ret = ESP_OK;
+        } else {
+            ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
+                                                        subtype,
+                                                        &sig_block_data, &sig_block_data_len);
+            if (ret == ESP_OK) {
+                sig_block_cache->cached[subtype] = true;
+                sig_block_cache->sig_block_data[subtype] = sig_block_data;
+                sig_block_cache->sig_block_data_len[subtype] = sig_block_data_len;
+            }
+        }
 
         if (ret == ESP_OK && sig_block_data != NULL) {
             ESP_LOGI(TAG, "Found signature block with subtype %d at data offset %p, length %" PRIu32,
@@ -95,7 +117,7 @@ static esp_err_t find_signature_block(const void *partition_addr, size_t partiti
     for (int i = 0; i < ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS; i++) {
         if (blocks[i] != NULL) {
             memcpy(&sig_blocks->block[i], blocks[i], sizeof(ets_secure_boot_sig_block_t));
-            ESP_LOGI(TAG, "Copied signature block %d to output structure", i);
+            ESP_LOGV(TAG, "Copied signature block %d to output structure", i);
         }
     }
 
@@ -104,16 +126,10 @@ static esp_err_t find_signature_block(const void *partition_addr, size_t partiti
 
 
 /**
- * @brief Calculate hash of all TLV entries except signature blocks (ultra-optimized version)
- *
- * This ultra-optimized version:
- * 1. Uses esp_secure_cert_tlv_get_addr() to get signature block data offset directly
- * 2. Calculates the end offset by subtracting header size from data offset
- * 3. Calculates hash of all data from start to end offset in one operation
- * 4. Completely avoids while loops for both finding and hashing
+ * @brief Calculate hash of all TLV entries except signature blocks
  */
 static esp_err_t calculate_partition_hash(const void *partition_addr, size_t partition_size,
-                                        uint8_t *hash)
+                                        uint8_t *hash, sig_block_cache_t *sig_block_cache)
 {
     char *sig_block_data = NULL;
     uint32_t sig_block_data_len = 0;
@@ -124,13 +140,15 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
                                                 ESP_SECURE_CERT_SUBTYPE_0,
                                                 &sig_block_data, &sig_block_data_len);
 
-    if (sig_block_data == NULL) {
-        ESP_LOGE(TAG, "Failed to get signature block data 2");
-    }
     if (ret != ESP_OK || sig_block_data == NULL) {
         ESP_LOGE(TAG, "Failed to get signature block data");
         return ESP_FAIL;
     }
+
+    /* Cache the signature block data */
+    sig_block_cache->cached[ESP_SECURE_CERT_SUBTYPE_0] = true;
+    sig_block_cache->sig_block_data[ESP_SECURE_CERT_SUBTYPE_0] = sig_block_data;
+    sig_block_cache->sig_block_data_len[ESP_SECURE_CERT_SUBTYPE_0] = sig_block_data_len;
 
     // Calculate the offset of the signature block header
     // sig_block_data points to the data (after header), so we need to subtract header size
@@ -139,9 +157,9 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
     // Calculate hash size: from partition start to signature block header start
     hash_size = sig_block_header - (const uint8_t *)partition_addr;
 
-    ESP_LOGI(TAG, "Found signature block at data offset %p, header at %p",
+    ESP_LOGD(TAG, "Found signature block at data offset %p, header at %p",
              sig_block_data, sig_block_header);
-    ESP_LOGI(TAG, "Hash size: %zu bytes (from start to signature block header)", hash_size);
+    ESP_LOGV(TAG, "Hash size: %zu bytes (from start to signature block header)", hash_size);
 
 #if (MBEDTLS_MAJOR_VERSION < 4)
     // Initialize SHA256 context
@@ -155,7 +173,7 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
         return ESP_FAIL;
     }
 
-    // Hash all data in one operation (no while loops at all!)
+    // Hash all data in one operation
     sha_ret = mbedtls_sha256_update(&ctx, (const uint8_t *)partition_addr, hash_size);
     if (sha_ret != 0) {
         ESP_LOGE(TAG, "Failed to update SHA256 calculation");
@@ -191,7 +209,7 @@ static esp_err_t calculate_partition_hash(const void *partition_addr, size_t par
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "Successfully calculated hash of %zu bytes using PSA APIs", hash_size);
+    ESP_LOGD(TAG, "Successfully calculated hash...");
 #endif
 
     return ESP_OK;
@@ -221,9 +239,12 @@ static esp_err_t verify_signature(const ets_secure_boot_signature_t *signature_b
     return ESP_OK;
 }
 
-esp_err_t esp_secure_cert_verify_partition_signature(void)
+esp_err_t esp_secure_cert_verify_partition_signature(esp_sign_verify_ctx_t *sign_verify_ctx)
 {
     esp_secure_cert_partition_ctx_t *ctx = NULL;
+    sig_block_cache_t sig_block_cache;
+    memset(&sig_block_cache, 0, sizeof(sig_block_cache_t));
+
     esp_err_t ret = esp_secure_cert_map_partition(&ctx);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to map partition");
@@ -239,7 +260,7 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
     ESP_LOGI(TAG, "Starting signature verification for partition size: %" PRIu32, partition_size);
 
     // Find the signature block
-    ets_secure_boot_signature_t *signature_blocks = calloc(1, sizeof(ets_secure_boot_signature_t));
+    ets_secure_boot_signature_t *signature_blocks = calloc(ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS, sizeof(ets_secure_boot_signature_t));
     if (signature_blocks == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for signature blocks");
         return ESP_FAIL;
@@ -247,14 +268,14 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
 
     // Calculate hash of all TLV entries except signature blocks
     uint8_t calculated_hash[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    ret = calculate_partition_hash(partition_addr, partition_size, calculated_hash);
+    ret = calculate_partition_hash(partition_addr, partition_size, calculated_hash, &sig_block_cache);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to calculate partition hash");
         free(signature_blocks);
         return ESP_FAIL;
     }
 
-    ret = find_signature_block(partition_addr, partition_size, signature_blocks);
+    ret = find_signature_block(partition_addr, partition_size, signature_blocks, &sig_block_cache);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to find signature block");
         free(signature_blocks);
@@ -263,12 +284,16 @@ esp_err_t esp_secure_cert_verify_partition_signature(void)
     // Verify the signature
     ret = verify_signature(signature_blocks, calculated_hash, sizeof(calculated_hash));
     if (ret == ESP_OK) {
+        ESP_FAULT_ASSERT(ret == ESP_OK);
         ESP_LOGI(TAG, "esp_secure_cert partition signature verification successful");
         free(signature_blocks);
         return ESP_OK;
     }
     ESP_LOGE(TAG, "Signature verification failed");
-    esp_secure_cert_unmap_partition(); // Unmap the partition to free memory if the signature verification fails
+    if (sign_verify_ctx != NULL && sign_verify_ctx->abort_on_fail) {
+        ESP_LOGE(TAG, "Aborting on failure");
+        abort();
+    }
     free(signature_blocks);
     return ESP_FAIL;
 }
