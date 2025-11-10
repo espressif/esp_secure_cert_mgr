@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## 2.3.6
+* Fixed Python 3.7 compatibility by replacing union type operator (|) with typing.Union
+
 ## 2.3.5
 * Fixed package name to comply with PEP 625 (changed from `esp-secure-cert-tool` to `esp_secure_cert_tool`)
 
