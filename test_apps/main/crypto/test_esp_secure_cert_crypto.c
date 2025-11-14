@@ -65,7 +65,7 @@ TEST_TEAR_DOWN(crypto)
 #endif
 }
 
-TEST(crypto, esp_secure_cert_crypto_gcm_decrypt)
+TEST(crypto, test_esp_secure_cert_crypto_gcm_decrypt)
 {
     ESP_LOGI(TAG, "Testing GCM decryption");
 
@@ -170,6 +170,6 @@ TEST(crypto, esp_secure_cert_convert_key_to_der)
 /* Register test group runner */
 TEST_GROUP_RUNNER(crypto)
 {
-    RUN_TEST_CASE(crypto, esp_secure_cert_crypto_gcm_decrypt);
+    RUN_TEST_CASE(crypto, test_esp_secure_cert_crypto_gcm_decrypt);
     RUN_TEST_CASE(crypto, esp_secure_cert_convert_key_to_der);
 }

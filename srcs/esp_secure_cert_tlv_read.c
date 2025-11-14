@@ -31,12 +31,6 @@
 #include "esp_fault.h"
 #include "esp_heap_caps.h"
 
-#include "mbedtls/gcm.h"
-#include "mbedtls/sha256.h"
-#include "mbedtls/ecdsa.h"
-#include "mbedtls/pk.h"
-#include "mbedtls/version.h"
-
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_config.h"
 #include "esp_secure_cert_tlv_read.h"
@@ -47,23 +41,10 @@
 #include "esp_hmac.h"
 #endif
 
-#if (MBEDTLS_VERSION_NUMBER < 0x03000000)
-/* mbedtls 2.x backward compatibility */
-#define MBEDTLS_2X_COMPAT 1
-/**
- * Mbedtls-3.0 forward compatibility
- */
-#ifndef MBEDTLS_PRIVATE
-#define MBEDTLS_PRIVATE(member) member
-#endif
-#endif /* (MBEDTLS_VERSION_NUMBER < 0x03000000) */
-
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
 #include "spi_flash_mmap.h"
 #include "esp_memory_utils.h"
-#include "entropy_poll.h"
 #else
-#include "mbedtls/entropy_poll.h"
 #include "soc/soc_memory_layout.h"
 #endif
 

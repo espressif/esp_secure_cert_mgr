@@ -28,7 +28,7 @@
 
 #include "esp_idf_version.h"
 #include "soc/soc_caps.h"
-
+#include "esp_secure_cert_tlv_private.h"
 /**
  * These includes are needed for the crypto operations,
  * nvs flash operations and esp_secure_cert operations to
@@ -44,7 +44,9 @@
 #endif
 #endif
 #include "bignum_impl.h"
+#if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/aes.h"
+#endif // MBEDTLS_MAJOR_VERSION < 4
 #include "mbedtls/gcm.h"
 #include "nvs_flash.h"
 #include "esp_secure_cert_read.h"
@@ -97,6 +99,7 @@ static void initialize_crypto(void)
     esp_sha(SHA2_256, (const unsigned char *)input, 256, sha_output);
     ESP_LOGI(TAG, "SHA hardware initialized");
 
+#if (MBEDTLS_MAJOR_VERSION < 4)
     // Initialize AES/GCM hardware mutex by performing a dummy GCM operation
     mbedtls_gcm_context gcm_ctx;
     mbedtls_gcm_init(&gcm_ctx);
@@ -111,7 +114,14 @@ static void initialize_crypto(void)
 
     esp_mpi_enable_hardware_hw_op();
     esp_mpi_disable_hardware_hw_op();
-
+#else
+    unsigned char dummy_key[16] = {0};
+    unsigned char dummy_input[16] = {0};
+    unsigned char dummy_output[16] = {0};
+    esp_secure_cert_crypto_gcm_decrypt(dummy_input, sizeof(dummy_input), dummy_output,
+                                      dummy_key, sizeof(dummy_key),
+                                      dummy_input, NULL, NULL, 0);
+#endif // MBEDTLS_MAJOR_VERSION < 4
 
     /**
      *  These operations are needed to initialize the related structures

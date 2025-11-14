@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.7.2
+* Removed unused mbedTLS header imports and adds support for mbedTLS v4.x
+
 ## v2.7.1
 * Added a new API `esp_secure_cert_unmap_partition` to unmap the `esp_secure_cert` partition
 
