@@ -22,8 +22,10 @@
 #include "mbedtls/ssl.h"
 #include "mbedtls/pk.h"
 #include "mbedtls/x509.h"
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
+#endif // MBEDTLS_VERSION_NUMBER < 0x04000000
 #include "mbedtls/error.h"
 #include "esp_idf_version.h"
 
@@ -50,6 +52,9 @@ static void esp_print_cert_or_key(const char *label, const char *data, uint32_t 
 }
 
 #ifdef CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
+
+#define SIG_SIZE 1000
+
 static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned char *dev_cert, size_t dev_cert_len)
 {
     mbedtls_x509_crt crt;
@@ -75,16 +80,19 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
     const size_t sig_len = 256;
     uint32_t hash[8] = {[0 ... 7] = 0xAABBCCDD};
 
-    sig = (unsigned char *) calloc(1, 1000 * sizeof(char));
+    sig = (unsigned char *) calloc(1, SIG_SIZE * sizeof(char));
     if (sig == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for signature");
         goto exit;
     }
+    size_t sig_len_out = 0;
 
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
     ret = esp_ds_rsa_sign(NULL, NULL, NULL, 0, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
-#else
+#elif ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
     ret = esp_ds_rsa_sign(NULL, NULL, NULL, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
+#else
+    ret = esp_ds_rsa_sign(NULL, MBEDTLS_MD_SHA256, (const unsigned char *) hash, sizeof(hash), sig, SIG_SIZE, &sig_len_out);
 #endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %02X", ret);
@@ -111,14 +119,18 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
 {
     static const char *pers = "Hello";
     mbedtls_x509_crt crt;
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context ctr_drbg;
+#endif // MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_pk_context pk;
     unsigned char *sig = NULL;
 
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     mbedtls_ctr_drbg_init(&ctr_drbg);
-    mbedtls_x509_crt_init(&crt);
     mbedtls_entropy_init(&entropy);
+#endif // MBEDTLS_VERSION_NUMBER < 0x04000000
+    mbedtls_x509_crt_init(&crt);
     mbedtls_pk_init(&pk);
     esp_err_t esp_ret = ESP_FAIL;
     if (priv_key == NULL || dev_cert == NULL) {
@@ -133,12 +145,15 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
     } else {
         ESP_LOGI(TAG, "Successfully parsed the certificate");
     }
+
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen(pers));
     if (ret != 0) {
         ESP_LOGE(TAG, "mbedtls_ctr_drbg_seed returned -0x%04x", -ret );
         esp_ret = ESP_FAIL;
         goto exit;
     }
+#endif // MBEDTLS_VERSION_NUMBER < 0x04000000
 
     esp_secure_cert_key_type_t key_type = ESP_SECURE_CERT_DEFAULT_FORMAT_KEY;
 #ifndef CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
@@ -218,8 +233,10 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
 exit:
     free(sig);
     mbedtls_pk_free(&pk);
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     mbedtls_entropy_free(&entropy);
     mbedtls_ctr_drbg_free(&ctr_drbg);
+#endif // MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_x509_crt_free(&crt);
     return esp_ret;
 }

@@ -15,7 +15,6 @@
 #include "esp_heap_trace.h"
 #endif
 
-#include "mbedtls/aes.h"
 #if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
 #else
