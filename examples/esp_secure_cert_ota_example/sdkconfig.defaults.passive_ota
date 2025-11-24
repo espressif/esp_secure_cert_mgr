@@ -1,0 +1,23 @@
+# Configuration for Passive OTA Partition Mode
+# To use: cp sdkconfig.defaults.passive_ota sdkconfig.defaults
+
+# Enable OTA functionality
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_APP_PROJECT_VER_FROM_CONFIG=y
+CONFIG_APP_PROJECT_VER="1.0.0"
+
+# Enable NVS
+CONFIG_NVS_ENCRYPTION=n
+
+# Enable secure cert manager
+CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS=n
+
+# Enable OTA data partition
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# OTA Mode: Use Passive OTA Partition
+CONFIG_EXAMPLE_ESP_SECURE_CERT_USE_PASSIVE_OTA=y
+
+# OTA timeout
+CONFIG_EXAMPLE_OTA_RECV_TIMEOUT=5000

@@ -54,6 +54,7 @@ static const char *TAG = "esp_secure_cert_tlv";
 
 /* Global partition context - shared across read and write operations */
 esp_secure_cert_partition_ctx_t esp_secure_cert_partition_ctx = {0};
+static const esp_partition_t *custom_partition = NULL;
 
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
@@ -82,6 +83,15 @@ void esp_secure_cert_unmap_partition(void)
     return;
 }
 
+esp_err_t esp_secure_cert_tlv_set_partition_offset(const esp_partition_t *partition)
+{
+    if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
+        esp_secure_cert_unmap_partition();
+    }
+    custom_partition = partition;
+    return ESP_OK;
+}
+
 /* This is the mininum required flash address alignment in bytes to write to an encrypted flash partition */
 
 /*
@@ -91,42 +101,45 @@ void esp_secure_cert_unmap_partition(void)
  */
 esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t **ctx)
 {
-    // If already initialized, return immediately
+    const esp_partition_t *partition_to_use = NULL;
+
+    if (custom_partition != NULL) {
+        partition_to_use = custom_partition;
+    } else {
+        esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
+                                      ESP_PARTITION_SUBTYPE_ANY, ESP_SECURE_CERT_TLV_PARTITION_NAME);
+        if (it == NULL) {
+            ESP_LOGE(TAG, "Partition not found.");
+            return ESP_FAIL;
+        }
+
+        partition_to_use = esp_partition_get(it);
+        esp_partition_iterator_release(it);
+        if (partition_to_use == NULL) {
+            ESP_LOGE(TAG, "Could not get partition.");
+            return ESP_FAIL;
+        }
+    }
+
     if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
-        ESP_LOGD(TAG, "Partition already mapped");
-        *ctx = &esp_secure_cert_partition_ctx;
-        return ESP_OK;
+        if (esp_secure_cert_partition_ctx.partition == partition_to_use) {
+            ESP_LOGD(TAG, "Partition already mapped");
+            *ctx = &esp_secure_cert_partition_ctx;
+            return ESP_OK;
+        } else {
+            esp_secure_cert_unmap_partition();
+        }
     }
 
-    esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
-                                  ESP_PARTITION_SUBTYPE_ANY, ESP_SECURE_CERT_TLV_PARTITION_NAME);
-    if (it == NULL) {
-        ESP_LOGE(TAG, "Partition not found.");
-        esp_partition_iterator_release(it);
-        return ESP_FAIL;
-    }
+    esp_secure_cert_partition_ctx.partition = partition_to_use;
 
-    esp_secure_cert_partition_ctx.partition = esp_partition_get(it);
-    if (esp_secure_cert_partition_ctx.partition == NULL) {
-        ESP_LOGE(TAG, "Could not get partition.");
-        esp_partition_iterator_release(it);
-        return ESP_FAIL;
-    }
-
-    /* Encrypted partitions need to be read via a cache mapping */
     esp_err_t err;
-
-    /* Map the entire partition */
     err = esp_partition_mmap(esp_secure_cert_partition_ctx.partition, 0, esp_secure_cert_partition_ctx.partition->size, SPI_FLASH_MMAP_DATA,
                              &esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr, &esp_secure_cert_partition_ctx.handle);
     if (err != ESP_OK) {
-        esp_partition_iterator_release(it);
-        it = NULL;
         ESP_LOGE(TAG, "Failed to map partition: %d", err);
         return ESP_FAIL;
     }
-    esp_partition_iterator_release(it);
-    it = NULL;
     ESP_LOGD(TAG, "Partition mapped successfully");
     *ctx = &esp_secure_cert_partition_ctx;
     return ESP_OK;

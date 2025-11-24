@@ -1,0 +1,11 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# Note: if you change the phy_init or app partition offset, make sure to change the offset in Kconfig.projbuild
+# NVS partition for storing configuration
+nvs,               data,  nvs,       0xA000,      0x6000,
+# esp_secure_cert partition - must be encrypted if using flash encryption
+esp_secure_cert,  0x3F,          ,    0x10000,      0x2000, encrypted
+# OTA partitions - Two OTA app partitions (no factory to save space)
+ota_0,             app,   ota_0,     0x20000,     0xE8000,
+ota_1,             app,   ota_1,     0x110000,    0xE0000,
+# OTA data partition to store OTA update information
+otadata,           data,  ota,       0x1F0000,    0x2000,
