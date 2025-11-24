@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## 2.3.7
+* Fixed the `configure_esp_secure_cert.py` tool for custom data as file.
+* Unable to add the TLV entry, regression caused due TLV parser MR.
+
 ## 2.3.6
 * Fixed Python 3.7 compatibility by replacing union type operator (|) with typing.Union
 
