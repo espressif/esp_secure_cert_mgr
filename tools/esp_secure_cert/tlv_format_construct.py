@@ -559,6 +559,10 @@ class EspSecureCert:
                             with open(processed_data, 'rb') as f:
                                 processed_data = f.read()
 
+                            print(f"  Adding direct data (subtype {tlv_subtype})")
+                            builder.add_tlv_entry(tlv_type, tlv_subtype, processed_data, 0)
+                            processed_count += 1
+
                         else:
                             # If processed_data is a .bin file path, read its contents as bytes
                             if isinstance(processed_data, str) and processed_data.lower().endswith('.bin') and os.path.isfile(processed_data):
