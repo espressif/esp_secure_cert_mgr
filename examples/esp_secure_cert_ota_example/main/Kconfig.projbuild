@@ -29,54 +29,19 @@ menu "ESP Secure Cert OTA Example Configuration"
 
     endchoice
 
-    config EXAMPLE_USE_SIMULATED_OTA
-        bool "Use simulated OTA data (no network download)"
-        default n
+    config EXAMPLE_FIRMWARE_UPGRADE_URL
+        string "firmware upgrade url endpoint"
+        default "https://192.168.0.3:8070/esp_secure_cert.bin"
         help
-            When enabled, uses simulated certificate data instead of downloading from network.
-            Useful for testing OTA mechanisms without requiring WiFi or a server.
-            When disabled, will download from the URL specified below.
+            URL of server which hosts the esp_secure_cert binary file
 
-    config EXAMPLE_WIFI_SSID
-        string "WiFi SSID"
-        default "myssid"
-        depends on !EXAMPLE_USE_SIMULATED_OTA
-        help
-            SSID (network name) to connect to.
-
-    config EXAMPLE_WIFI_PASSWORD
-        string "WiFi Password"
-        default "mypassword"
-        depends on !EXAMPLE_WIFI_SSID
-        help
-            WiFi password (WPA or WPA2) to use.
-
-    config EXAMPLE_CERT_OTA_URL
-        string "ESP Secure Cert OTA URL"
-        default "http://192.168.1.100:8000/esp_secure_cert.bin"
-        depends on !EXAMPLE_USE_SIMULATED_OTA
-        help
-            URL of the esp_secure_cert binary file to download.
-            Examples:
-              http://192.168.1.100:8000/esp_secure_cert.bin
-              https://your-server.com/certs/esp_secure_cert.bin
-
-            To serve file locally:
-              python3 -m http.server 8000
-            Then use: http://<your-pc-ip>:8000/esp_secure_cert.bin
-
-    config EXAMPLE_CERT_OTA_URL_USE_HTTPS
-        bool "Use HTTPS for OTA URL"
-        default n
-        depends on !EXAMPLE_USE_SIMULATED_OTA
-        help
-            Enable if your OTA URL uses HTTPS.
-            You may need to provide server certificate for validation.
+    config EXAMPLE_CERT_OTA_URL_FROM_STDIN
+        bool
+        default y if EXAMPLE_FIRMWARE_UPGRADE_URL = "FROM_STDIN"
 
     config EXAMPLE_OTA_RECV_TIMEOUT
         int "OTA receive timeout (ms)"
-        default 5000
+        default 10000
         help
             Maximum time for receiving OTA data (in milliseconds).
-
 endmenu

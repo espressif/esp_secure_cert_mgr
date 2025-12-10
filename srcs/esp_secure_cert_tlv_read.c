@@ -103,6 +103,12 @@ esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t **ctx)
 {
     const esp_partition_t *partition_to_use = NULL;
 
+    if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
+        ESP_LOGD(TAG, "Partition already mapped");
+        *ctx = &esp_secure_cert_partition_ctx;
+        return ESP_OK;
+    }
+
     if (custom_partition != NULL) {
         partition_to_use = custom_partition;
     } else {
@@ -118,16 +124,6 @@ esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t **ctx)
         if (partition_to_use == NULL) {
             ESP_LOGE(TAG, "Could not get partition.");
             return ESP_FAIL;
-        }
-    }
-
-    if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
-        if (esp_secure_cert_partition_ctx.partition == partition_to_use) {
-            ESP_LOGD(TAG, "Partition already mapped");
-            *ctx = &esp_secure_cert_partition_ctx;
-            return ESP_OK;
-        } else {
-            esp_secure_cert_unmap_partition();
         }
     }
 
