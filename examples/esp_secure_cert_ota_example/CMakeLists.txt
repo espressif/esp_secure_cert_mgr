@@ -5,11 +5,11 @@ cmake_minimum_required(VERSION 3.5)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(esp_secure_cert_ota_example)
 
-if(CONFIG_EXAMPLE_ESP_SECURE_CERT_ENABLE_CI)
+if(CONFIG_EXAMPLE_ESP_SECURE_CERT_OTA_TEST)
     # Flash the custom partition named `esp_secure_cert`
     set(partition esp_secure_cert)
     idf_build_get_property(project_dir PROJECT_DIR)
-    set(image_file ${project_dir}/tests/esp_secure_cert.bin)
+    set(image_file ${project_dir}/tests/esp_secure_cert_before.bin)
     partition_table_get_partition_info(offset "--partition-name ${partition}" "offset")
     if(EXISTS ${image_file})
         esptool_py_flash_target_image(flash "${partition}" "${offset}" "${image_file}")

@@ -37,33 +37,36 @@
 #define ESP_SECURE_CERT_CUST_FLASH_PARTITION_TYPE           0x3F
 
 // NVS namespace and keys for recovery
-#define NVS_NAMESPACE_OTA_RECOVERY    "ecs"
-#define NVS_KEY_STAGING_ADDR          "stg_addr"
-#define NVS_KEY_STAGING_SIZE          "stg_size"
-#define NVS_KEY_STAGING_LABEL         "stg_label"
-#define NVS_KEY_TYPE                   "type"
-#define NVS_KEY_SUBTYPE                "subtype"
+#define NVS_NAMESPACE_STAGING_PARTITION     "esc"
+#define NVS_PARTITION_STAGING_ADDR          "stg_addr"
+#define NVS_PARTITION_STAGING_SIZE          "stg_size"
+#define NVS_PARTITION_STAGING_LABEL         "stg_label"
+#define NVS_PARTITION_STAGING_TYPE          "stg_type"
+#define NVS_PARTITION_STAGING_SUBTYPE       "stg_subtype"
 
-#define OTA_URL_SIZE 256
+#define MAX_OTA_URL_SIZE 256
 
 static char TAG[] = "esp_secure_cert_ota_example";
 
-#if defined(CONFIG_EXAMPLE_CERT_OTA_URL_USE_HTTPS) && !defined(CONFIG_EXAMPLE_USE_CERT_BUNDLE)
 extern const uint8_t server_cert_pem_start[] asm("_binary_ca_cert_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_ca_cert_pem_end");
-#endif
 
-static void get_ca_cert()
+static void read_custom_data()
 {
-    char *ca_cert_buffer = NULL;
-    uint32_t ca_cert_len = 0;
-    esp_err_t err = esp_secure_cert_get_ca_cert(&ca_cert_buffer, &ca_cert_len);
+    // Example: Read CA certificate using TLV API with type and subtype
+    esp_secure_cert_tlv_config_t tlv_config = {
+        .type = ESP_SECURE_CERT_USER_DATA_1,
+        .subtype = ESP_SECURE_CERT_SUBTYPE_0
+    };
+    esp_secure_cert_tlv_info_t tlv_info = {0};
+
+    esp_err_t err = esp_secure_cert_get_tlv_info(&tlv_config, &tlv_info);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read CA certificate (err=0x%x)", err);
+        ESP_LOGE(TAG, "Failed to read custom data (err=0x%x)", err);
     } else {
-        ESP_LOGI(TAG, "Successfully read CA certificate (length=%lu)", ca_cert_len);
-        ESP_LOGI(TAG, "CA Certificate:\n%.*s", ca_cert_len, ca_cert_buffer);
-        esp_secure_cert_free_ca_cert(ca_cert_buffer);
+        ESP_LOGI(TAG, "Successfully read custom data (length=%lu)", tlv_info.length);
+        ESP_LOGI(TAG, "Custom Data:\n%.*s", tlv_info.length, tlv_info.data);
+        esp_secure_cert_free_tlv_info(&tlv_info);
     }
 }
 
@@ -113,11 +116,13 @@ static esp_err_t register_partition(size_t offset, size_t size, const char *labe
             ESP_LOGE(TAG, "Failed to register %s partition (err=0x%x)", label, error);
             return error;
         }
+        return ESP_OK;
     }
-    ESP_LOGI(TAG, "Use <%s> partition (0x%08" PRIx32 ")", (*p_partition)->label, (*p_partition)->address);
-    return ESP_OK;
+    ESP_LOGI(TAG, "Partition <%s> already registered at offset 0x%08" PRIx32, (*p_partition)->label, (*p_partition)->address);
+    return ESP_ERR_NOT_FOUND;
 }
 
+#if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
 /**
  * @brief Save staging partition info to NVS for recovery
  *
@@ -129,14 +134,14 @@ static esp_err_t save_staging_info_to_nvs(const esp_partition_t *staging_partiti
     nvs_handle_t nvs_handle;
     esp_err_t err;
 
-    err = nvs_open(NVS_NAMESPACE_OTA_RECOVERY, NVS_READWRITE, &nvs_handle);
+    err = nvs_open(NVS_NAMESPACE_STAGING_PARTITION, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open NVS namespace: %s", esp_err_to_name(err));
         return err;
     }
 
     // Save staging partition address
-    err = nvs_set_u32(nvs_handle, NVS_KEY_STAGING_ADDR, staging_partition->address);
+    err = nvs_set_u32(nvs_handle, NVS_PARTITION_STAGING_ADDR, staging_partition->address);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to save staging address: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
@@ -144,7 +149,7 @@ static esp_err_t save_staging_info_to_nvs(const esp_partition_t *staging_partiti
     }
 
     // Save staging partition size
-    err = nvs_set_u32(nvs_handle, NVS_KEY_STAGING_SIZE, staging_partition->size);
+    err = nvs_set_u32(nvs_handle, NVS_PARTITION_STAGING_SIZE, staging_partition->size);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to save staging size: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
@@ -152,20 +157,20 @@ static esp_err_t save_staging_info_to_nvs(const esp_partition_t *staging_partiti
     }
 
     // Save staging partition label (for debugging)
-    err = nvs_set_str(nvs_handle, NVS_KEY_STAGING_LABEL, staging_partition->label);
+    err = nvs_set_str(nvs_handle, NVS_PARTITION_STAGING_LABEL, staging_partition->label);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to save staging label: %s", esp_err_to_name(err));
     }
 
     // Save staging partition type
-    err = nvs_set_u8(nvs_handle, NVS_KEY_TYPE, staging_partition->type);
+    err = nvs_set_u8(nvs_handle, NVS_PARTITION_STAGING_TYPE, staging_partition->type);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to save staging type: %s", esp_err_to_name(err));
         // Non-critical, continue
     }
 
     // Save staging partition subtype
-    err = nvs_set_u8(nvs_handle, NVS_KEY_SUBTYPE, staging_partition->subtype);
+    err = nvs_set_u8(nvs_handle, NVS_PARTITION_STAGING_SUBTYPE, staging_partition->subtype);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to save staging subtype: %s", esp_err_to_name(err));
         // Non-critical, continue
@@ -194,18 +199,18 @@ static esp_err_t clear_staging_info_from_nvs(void)
     nvs_handle_t nvs_handle;
     esp_err_t err;
 
-    err = nvs_open(NVS_NAMESPACE_OTA_RECOVERY, NVS_READWRITE, &nvs_handle);
+    err = nvs_open(NVS_NAMESPACE_STAGING_PARTITION, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open NVS namespace: %s", esp_err_to_name(err));
         return err;
     }
 
     // Erase all keys (optional, but cleaner)
-    nvs_erase_key(nvs_handle, NVS_KEY_STAGING_ADDR);
-    nvs_erase_key(nvs_handle, NVS_KEY_STAGING_SIZE);
-    nvs_erase_key(nvs_handle, NVS_KEY_STAGING_LABEL);
-    nvs_erase_key(nvs_handle, NVS_KEY_TYPE);
-    nvs_erase_key(nvs_handle, NVS_KEY_SUBTYPE);
+    nvs_erase_key(nvs_handle, NVS_PARTITION_STAGING_ADDR);
+    nvs_erase_key(nvs_handle, NVS_PARTITION_STAGING_SIZE);
+    nvs_erase_key(nvs_handle, NVS_PARTITION_STAGING_LABEL);
+    nvs_erase_key(nvs_handle, NVS_PARTITION_STAGING_TYPE);
+    nvs_erase_key(nvs_handle, NVS_PARTITION_STAGING_SUBTYPE);
 
     err = nvs_commit(nvs_handle);
     nvs_close(nvs_handle);
@@ -216,6 +221,7 @@ static esp_err_t clear_staging_info_from_nvs(void)
 
     return err;
 }
+#endif /* !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA */
 
 /**
  * @brief Check for recovery and restore staging partition if needed
@@ -235,7 +241,7 @@ static esp_err_t check_and_recover_staging_partition(void)
     uint8_t staging_type = 0;
     uint8_t staging_subtype = 0;
 
-    err = nvs_open(NVS_NAMESPACE_OTA_RECOVERY, NVS_READONLY, &nvs_handle);
+    err = nvs_open(NVS_NAMESPACE_STAGING_PARTITION, NVS_READONLY, &nvs_handle);
     if (err != ESP_OK) {
         // Namespace doesn't exist - no recovery needed
         ESP_LOGD(TAG, "No recovery info found (namespace doesn't exist)");
@@ -243,7 +249,7 @@ static esp_err_t check_and_recover_staging_partition(void)
     }
 
     // Read staging partition info
-    err = nvs_get_u32(nvs_handle, NVS_KEY_STAGING_ADDR, &staging_addr);
+    err = nvs_get_u32(nvs_handle, NVS_PARTITION_STAGING_ADDR, &staging_addr);
     if (err != ESP_OK) {
         // Key doesn't exist - no recovery needed
         ESP_LOGD(TAG, "No recovery info found (staging address key missing)");
@@ -251,7 +257,7 @@ static esp_err_t check_and_recover_staging_partition(void)
         return ESP_ERR_NOT_FOUND;
     }
 
-    err = nvs_get_u32(nvs_handle, NVS_KEY_STAGING_SIZE, &staging_size);
+    err = nvs_get_u32(nvs_handle, NVS_PARTITION_STAGING_SIZE, &staging_size);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read staging size from NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
@@ -260,21 +266,21 @@ static esp_err_t check_and_recover_staging_partition(void)
 
     // Read label (optional)
     size_t required_size = sizeof(staging_label);
-    err = nvs_get_str(nvs_handle, NVS_KEY_STAGING_LABEL, staging_label, &required_size);
+    err = nvs_get_str(nvs_handle, NVS_PARTITION_STAGING_LABEL, staging_label, &required_size);
     if (err != ESP_OK) {
         // Label not critical, use default
         strncpy(staging_label, "recovery_staging", sizeof(staging_label) - 1);
         staging_label[sizeof(staging_label) - 1] = '\0'; // Ensure null termination
     }
 
-    err = nvs_get_u8(nvs_handle, NVS_KEY_TYPE, &staging_type);
+    err = nvs_get_u8(nvs_handle, NVS_PARTITION_STAGING_TYPE, &staging_type);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read staging type from NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
         return err;
     }
 
-    err = nvs_get_u8(nvs_handle, NVS_KEY_SUBTYPE, &staging_subtype);
+    err = nvs_get_u8(nvs_handle, NVS_PARTITION_STAGING_SUBTYPE, &staging_subtype);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read staging subtype from NVS: %s", esp_err_to_name(err));
         nvs_close(nvs_handle);
@@ -297,7 +303,7 @@ static esp_err_t check_and_recover_staging_partition(void)
         return err;
     }
 
-    err = esp_secure_cert_tlv_set_partition_offset(recovered_partition);
+    err = esp_secure_cert_tlv_set_partition(recovered_partition);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set staging partition offset: %s", esp_err_to_name(err));
         return err;
@@ -375,24 +381,7 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
     if (ret == ESP_OK && ota_state == ESP_OTA_IMG_VALID) {
         ESP_LOGW(TAG, "Passive OTA app partition <%s> contains a valid app image eligible for rollback.",
                  staging_partition->label);
-        ESP_LOGW(TAG, "To avoid overwriting, will use unallocated space instead");
-
-        // Fall back to unallocated space
-        uint32_t staging_offset;
-        ret = partition_utils_find_unallocated(NULL, primary_esp_secure_cert->size,
-                                               ESP_PARTITION_TABLE_OFFSET + ESP_PARTITION_TABLE_SIZE,
-                                               &staging_offset, NULL);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to find unallocated space. Cannot proceed.");
-            return ret;
-        }
-
-        ret = register_partition(staging_offset, primary_esp_secure_cert->size, "StagingESC",
-                               ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, &staging_partition);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to register staging partition");
-            return ret;
-        }
+        return ESP_ERR_NOT_SUPPORTED;
     }
 #endif
 
@@ -415,20 +404,17 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
 #else
     #error "No OTA mode selected"
 #endif
-
-    // Set staging and final partitions in OTA config
     ota_config->partition.staging = staging_partition;
 #if CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
     ota_config->partition.final = NULL;
 #else
     ota_config->partition.final = primary_esp_secure_cert;
 #endif
-
     ESP_LOGI(TAG, "Starting OTA download to staging partition <%s>...", staging_partition->label);
-    esp_err_t ota_ret = esp_https_ota(ota_config);
+    err = esp_https_ota(ota_config);
 
-    if (ota_ret != ESP_OK) {
-        ESP_LOGE(TAG, "HTTPS OTA failed (err=0x%x)", ota_ret);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HTTPS OTA failed (err=0x%x)", err);
 
         // Cleanup: deregister temporary partition if it was created
 #if CONFIG_EXAMPLE_ESP_SECURE_CERT_OTA_USE_UNALLOCATED_SPACE
@@ -438,10 +424,11 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
             esp_partition_deregister_external(staging_partition);
         }
 #endif
-        return ota_ret;
+        return err;
     }
 
     ESP_LOGI(TAG, "OTA download completed successfully");
+#if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
     /* Save staging partition info to NVS for recovery*/
     ESP_LOGI(TAG, "Saving staging partition info to NVS for recovery");
     err = save_staging_info_to_nvs(staging_partition);
@@ -451,61 +438,47 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
         ESP_LOGI(TAG, "Successfully saved staging partition info to NVS for recovery");
     }
 
-#if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
-    // For staged OTA modes, copy from staging to primary partition
-    if (staging_partition != primary_esp_secure_cert) {
-        esp_secure_cert_tlv_set_partition_offset(staging_partition);
-
-        /* Check if we can read the ca cert from the staging partition*/
-        ESP_LOGI(TAG, "Checking CA certificate in the staging partition");
-        get_ca_cert();
-
-        ESP_LOGW(TAG, "Ensure stable power supply! Loss of power at this stage may corrupt esp_secure_cert partition");
-        ESP_LOGI(TAG, "Copying from <%s> staging partition to <%s>...",
-                 staging_partition->label, primary_esp_secure_cert->label);
-
-        ota_ret = esp_partition_copy(primary_esp_secure_cert, 0, staging_partition, 0, primary_esp_secure_cert->size);
-
-        if (ota_ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to copy partition to primary esp_secure_cert (err=0x%x). Partition may be corrupted!", ota_ret);
-            // Cleanup: deregister temporary partition
-#if CONFIG_EXAMPLE_ESP_SECURE_CERT_OTA_USE_UNALLOCATED_SPACE
-            esp_partition_deregister_external(staging_partition);
-#elif CONFIG_EXAMPLE_ESP_SECURE_CERT_USE_PASSIVE_OTA && CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
-            if (staging_partition != esp_ota_get_next_update_partition(NULL)) {
-                esp_partition_deregister_external(staging_partition);
-            }
-#endif
-            return ota_ret;
-        }
-
-        ESP_LOGI(TAG, "Successfully copied to primary esp_secure_cert partition");
-        esp_secure_cert_tlv_set_partition_offset(NULL);
-
-        /* Check if we can read the ca cert from the primary partition*/
-        ESP_LOGI(TAG, "Checking CA certificate in the primary partition after copying");
-        get_ca_cert();
-
-        // Clear recovery info from NVS after successful copy
-        err = clear_staging_info_from_nvs();
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to clear recovery info from NVS: %s", esp_err_to_name(err));
-            // Non-critical, continue
-        }
-
+    esp_secure_cert_tlv_set_partition(staging_partition);
+    /* Check if we can read the ca cert from the staging partition*/
+    ESP_LOGI(TAG, "Checking CA certificate in the staging partition");
+    read_custom_data();
+    ESP_LOGW(TAG, "Ensure stable power supply! Loss of power at this stage may corrupt esp_secure_cert partition");
+    ESP_LOGI(TAG, "Copying from <%s> staging partition to <%s>...",
+             staging_partition->label, primary_esp_secure_cert->label);
+    err = esp_partition_copy(primary_esp_secure_cert, 0, staging_partition, 0, primary_esp_secure_cert->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to copy partition to primary esp_secure_cert (err=0x%x). Partition may be corrupted!", err);
         // Cleanup: deregister temporary partition
 #if CONFIG_EXAMPLE_ESP_SECURE_CERT_OTA_USE_UNALLOCATED_SPACE
         esp_partition_deregister_external(staging_partition);
-        ESP_LOGI(TAG, "Deregistered temporary staging partition");
 #elif CONFIG_EXAMPLE_ESP_SECURE_CERT_USE_PASSIVE_OTA && CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
         if (staging_partition != esp_ota_get_next_update_partition(NULL)) {
             esp_partition_deregister_external(staging_partition);
-            ESP_LOGI(TAG, "Deregistered temporary staging partition");
         }
 #endif
+        return err;
     }
-#endif
-
+    ESP_LOGI(TAG, "Successfully copied to primary esp_secure_cert partition");
+    esp_secure_cert_tlv_set_partition(NULL);
+    /* Check if we can read the ca cert from the primary partition*/
+    ESP_LOGI(TAG, "Checking CA certificate in the primary partition after copying");
+    read_custom_data();
+    // Clear recovery info from NVS after successful copy
+    err = clear_staging_info_from_nvs();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to clear recovery info from NVS: %s", esp_err_to_name(err));
+    }
+    // Cleanup: deregister temporary partition
+#if CONFIG_EXAMPLE_ESP_SECURE_CERT_OTA_USE_UNALLOCATED_SPACE
+    esp_partition_deregister_external(staging_partition);
+    ESP_LOGI(TAG, "Deregistered temporary staging partition");
+#elif CONFIG_EXAMPLE_ESP_SECURE_CERT_USE_PASSIVE_OTA && CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+    if (staging_partition != esp_ota_get_next_update_partition(NULL)) {
+        esp_partition_deregister_external(staging_partition);
+        ESP_LOGI(TAG, "Deregistered temporary staging partition");
+    }
+#endif /* CONFIG_EXAMPLE_ESP_SECURE_CERT_OTA_USE_UNALLOCATED_SPACE */
+#endif /* CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA */
     ESP_LOGI(TAG, "ESP Secure Cert OTA update completed successfully");
     return ESP_OK;
 }
@@ -516,16 +489,17 @@ static void esp_secure_cert_ota_task(void *pvParameter)
     esp_http_client_config_t config = {
         .url = CONFIG_EXAMPLE_FIRMWARE_UPGRADE_URL,
         .event_handler = _http_event_handler,
+        .cert_pem = (const char *)server_cert_pem_start,
         .keep_alive_enable = true,
         .timeout_ms = CONFIG_EXAMPLE_OTA_RECV_TIMEOUT,
         .skip_cert_common_name_check = true,
     };
 
 #ifdef CONFIG_EXAMPLE_CERT_OTA_URL_FROM_STDIN
-    char url_buf[OTA_URL_SIZE];
+    char url_buf[MAX_OTA_URL_SIZE];
     if (strcmp(config.url, "FROM_STDIN") == 0) {
         example_configure_stdin_stdout();
-        fgets(url_buf, OTA_URL_SIZE, stdin);
+        fgets(url_buf, MAX_OTA_URL_SIZE, stdin);
         int len = strlen(url_buf);
         url_buf[len - 1] = '\0';
         config.url = url_buf;
@@ -592,13 +566,12 @@ void app_main(void)
         ESP_LOGW(TAG, "You can now verify data and retry copy operation");
         ESP_LOGW(TAG, "========================================");
         ESP_LOGI(TAG, "Reading CA certificate from recovered staging partition");
-        get_ca_cert();
-        clear_staging_info_from_nvs();
+        read_custom_data();
     } else if (err != ESP_ERR_NOT_FOUND) {
         ESP_LOGE(TAG, "Failed to recover staging partition: %s", esp_err_to_name(err));
     } else {
         ESP_LOGI(TAG, "No recovery needed - checking CA certificate in original partition");
-        get_ca_cert();
+        read_custom_data();
     }
 
     xTaskCreate(&esp_secure_cert_ota_task, "esp_secure_cert_ota_task", 8192, NULL, 5, NULL);

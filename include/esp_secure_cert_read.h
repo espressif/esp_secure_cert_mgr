@@ -234,8 +234,6 @@ esp_err_t esp_secure_cert_get_priv_key_type(esp_secure_cert_key_type_t *priv_key
 esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_block_id);
 #endif
 
-esp_err_t esp_secure_cert_set_partition_offset(const esp_partition_t *partition);
-
 #ifdef __cplusplus
 }
 #endif

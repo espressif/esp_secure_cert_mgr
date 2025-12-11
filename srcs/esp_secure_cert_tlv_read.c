@@ -83,7 +83,7 @@ void esp_secure_cert_unmap_partition(void)
     return;
 }
 
-esp_err_t esp_secure_cert_tlv_set_partition_offset(const esp_partition_t *partition)
+esp_err_t esp_secure_cert_tlv_set_partition(const esp_partition_t *partition)
 {
     if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
         esp_secure_cert_unmap_partition();

@@ -183,10 +183,25 @@ esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t **ctx);
  * @note
  * After calling this function, any subsequent calls to esp_secure_cert APIs
  * will automatically remap the partition as needed.
+ *
+ * @note
+ * This API is to unmap the partition from the memory. So if any esp_secure_cert API returned pointer(s), those pointers will become invalid after the usage of this API.
  */
 void esp_secure_cert_unmap_partition(void);
 
-esp_err_t esp_secure_cert_tlv_set_partition_offset(const esp_partition_t *partition);
+
+/**
+ * @brief Set the esp_secure_cert partition to be used for the next esp_secure_cert operation.
+ *
+ * @param partition The partition to be used for the next esp_secure_cert operation.
+ *
+ * @return ESP_OK on success, otherwise an error code.
+ *
+ * @note
+ * This API, before setting new partition, internally unmaps the previously set partition. So if any esp_secure_cert is called before which had returned pointer(s), those pointers will become invalid after the usage of this API.
+ * User should call again those APIs after setting new partition.
+ */
+esp_err_t esp_secure_cert_tlv_set_partition(const esp_partition_t *partition);
 
 #ifdef __cplusplus
 }
