@@ -13,7 +13,6 @@ import zlib
 import struct
 import base64
 import shutil
-import hashlib
 import subprocess
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Any, Optional, Union
@@ -72,6 +71,15 @@ TLV_MAGIC = 0xBA5EBA11
 PARTITION_SIZE = 0x2000  # 8KB
 MAGIC_END = 0xFFFF
 
+SECURE_VERIFICATION_VERSION_1 = 0x01
+
+ECDSA_SIG_BLOCK_MAGIC = 0xE7
+
+RSA3072_ALGORITHM = 0
+ECDSA192_ALGORITHM = 1
+ECDSA256_ALGORITHM = 2
+ECDSA384_ALGORITHM = 3
+
 esp_secure_cert_data_dir = 'esp_secure_cert_data'
 # hmac_key_file is generated when HMAC_KEY is calculated,
 # it is used when burning HMAC_KEY to efuse
@@ -95,13 +103,25 @@ TlvFooter = Struct(
     "crc" / Int32ul,    # Little-endian 32-bit CRC
 )
 
-EspSecCertSig = Struct(
-            "version" / Int8ul,           # Signature block version
-            "offset" / Int32ul,            # Offset for hash calculation
-            "length" / Int32ul,            # Length of hashed data
-            "algorithm" / Int8ul,          # Algorithm: 0=RSA3072, 1=ECDSA192, 2=ECDSA256, 3=ECDSA384
-            "public_key" / GreedyBytes,    # Public key (size varies by algorithm)
-            # Signature appended after public key
+EspSecCertSigRSA = Struct(
+    "version" / Int8ul,           # Signature block version
+    "reserved1" / Bytes(3),       # Reserved for future use
+    "offset" / Int32ul,           # Offset for hash calculation
+    "length" / Int32ul,           # Length of hashed data
+    "algorithm" / Int8ul,         # Algorithm: 0=RSA3072, 1=ECDSA192, 2=ECDSA256, 3=ECDSA384
+    "reserved2" / Bytes(3),       # Reserved for future use
+    "rsa_signature_block" / GreedyBytes,    # RSA signature
+)
+
+EspSecCertSigECDSA = Struct(
+    "version" / Int8ul,           # Signature block version
+    "reserved1" / Bytes(3),       # Reserved for future use
+    "offset" / Int32ul,           # Offset for hash calculation
+    "length" / Int32ul,           # Length of hashed data
+    "algorithm" / Int8ul,         # Algorithm: 0=RSA3072, 1=ECDSA192, 2=ECDSA256, 3=ECDSA384
+    "reserved2" / Bytes(3),       # Reserved for future use
+    "public_key" / Bytes(lambda ctx: 49 if ctx.algorithm == 1 else (65 if ctx.algorithm == 2 else 97)),  # curve_id(1) + key_size
+    "signature" / Bytes(lambda ctx: 48 if ctx.algorithm == 1 else (64 if ctx.algorithm == 2 else 96)),  # Signature size
 )
 
 TlvEntry = Struct(
@@ -223,18 +243,30 @@ class TlvPartitionBuilder:
         # Use provided partition_length or current offset (for backward compatibility)
         length = partition_length if partition_length is not None else self.current_offset
 
-        # Build signature block matching firmware structure exactly
-        sig_block_data = struct.pack('<B', 1)           # version (1 byte)
-        sig_block_data += b'\x00' * 3                  # reserved1[3] (3 bytes)
-        sig_block_data += struct.pack('<I', offset)     # offset (4 bytes)
-        sig_block_data += struct.pack('<I', length)     # length (4 bytes)
-        sig_block_data += struct.pack('<B', algorithm)  # algorithm (1 byte)
-        sig_block_data += b'\x00' * 3                  # reserved2[3] (3 bytes)
-        sig_block_data += public_key                # ets_rsa_pubkey_t structure
-        sig_block_data += signature                 # RSA signature
+        if algorithm == RSA3072_ALGORITHM:
+            sig_block_data = EspSecCertSigRSA.build({
+                "version": SECURE_VERIFICATION_VERSION_1,
+                "reserved1": b'\x00' * 3,
+                "offset": offset,
+                "length": length,
+                "algorithm": algorithm,
+                "reserved2": b'\x00' * 3,
+                "rsa_signature_block": signature,
+            })
+        else:
+            sig_block_data = EspSecCertSigECDSA.build({
+                "version": SECURE_VERIFICATION_VERSION_1,
+                "reserved1": b'\x00' * 3,
+                "offset": offset,
+                "length": length,
+                "algorithm": algorithm,
+                "reserved2": b'\x00' * 3,
+                "public_key": public_key,
+                "signature": signature,
+            })
         self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV, subtype, sig_block_data, 0)
 
-    def add_tlv_entry(self, tlv_type: int | tlv_type_t, subtype: int,
+    def add_tlv_entry(self, tlv_type: Union[int, tlv_type_t], subtype: int,
                       data: bytes, flags: int) -> None:
         """Internal method to add TLV entry to partition"""
         if isinstance(tlv_type, tlv_type_t):
@@ -1150,7 +1182,7 @@ class EspSecureCert:
             return algorithm, binary_key
 
     def _sign_data_with_espsecure(self, private_key_path: str, bin_data: bytes, algorithm: int) -> bytes:
-        """Generate signature using espsecure.sign_data API
+        """Generate signature using espsecure.sign_data API with --skip-padding
         Args:
             private_key_path: Path to the private key file
             bin_data: The partition data (bytes) to sign - espsecure.sign_data will hash it internally
@@ -1158,44 +1190,90 @@ class EspSecureCert:
         Returns: signature bytes in little-endian format (as expected by firmware)
         """
         try:
+            # Create temporary files for input/output
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.bin', delete=False) as temp_input:
+                temp_input_path = temp_input.name
+                temp_input.write(bin_data)
 
-            with open(private_key_path, 'rb') as keyfile:
-                sig_block = generate_signature_block_using_private_key(
-                    keyfiles=[keyfile],
-                    contents=bin_data)
+            with tempfile.NamedTemporaryFile(mode='rb', suffix='_signed.bin', delete=False) as temp_output:
+                temp_output_path = temp_output.name
+
+            try:
+                # Use sign_data API with skip_padding=True
+                print(f"Calling sign_data API with skip_padding=True")
+                print(f"  Input file: {temp_input_path} ({len(bin_data)} bytes)")
+                print(f"  Output file: {temp_output_path}")
+                print(f"  Private key: {private_key_path}")
+
+                with open(private_key_path, 'rb') as keyfile:
+                    with open(temp_input_path, 'rb') as datafile:
+                        try:
+                            sign_data(
+                                version="2",  # Must be string, not int
+                                keyfile=[keyfile],
+                                output=temp_output_path,
+                                append_signatures=False,
+                                hsm=False,
+                                hsm_config=None,
+                                pub_key=[],
+                                signature=[],
+                                datafile=datafile,
+                                skip_padding=True  # Skip sector padding
+                            )
+                        except Exception as e:
+                            print(f"sign_data API call failed: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            raise
+
+                # Read the signed output
+                if not os.path.exists(temp_output_path):
+                    raise ValueError(f"Output file was not created: {temp_output_path}")
+
+                with open(temp_output_path, 'rb') as f:
+                    signed_data = f.read()
+
+                if len(signed_data) == 0:
+                    raise ValueError(f"Output file is empty: {temp_output_path}")
+
+                data_length = len(bin_data)
+
+                sig_block = signed_data[data_length:]
+
+                print(f"Original data length: {data_length} bytes")
+                print(f"Signed data length: {len(signed_data)} bytes")
+                print(f"Signature block offset: {data_length}")
+                print(f"Signature block length: {len(sig_block)} bytes")
 
                 # Validate signature block
+                if len(sig_block) < 2:
+                    raise ValueError("Signature block too short")
+
                 magic, version = struct.unpack("BB", sig_block[:2])
-                if magic != 0xE7:
-                    raise ValueError("Invalid signature block magic byte")
+                if magic != ECDSA_SIG_BLOCK_MAGIC:
+                    raise ValueError(f"Invalid signature block magic byte: 0x{magic:02X}, expected 0x{ECDSA_SIG_BLOCK_MAGIC:02X}")
 
-                if algorithm == 0:  # RSA3072
-                    # RSA signature at offset 812-1196 (384 bytes)
-                    # Signature is already in little-endian format (byte-swapped) as expected by ROM API
-                    signature = sig_block[812:1196]
-                    print(f"RSA3072 signature extracted: {len(signature)} bytes")
-
-                elif algorithm == 1:  # ECDSA192
+                # Extract signature based on algorithm
+                if algorithm == ECDSA192_ALGORITHM:
                     # ECDSA SHA256 signature block format: <BBBx32sB64s64s1031x
                     # signature_rs is at offset 101-165 (64 bytes), but P192 only uses first 48 bytes
                     # Signature is in microecc format: little-endian r||s concatenated
                     signature = sig_block[101:101+48]  # 48 bytes: 24 bytes r + 24 bytes s
-                    print(f"ECDSA192 signature extracted: {len(signature)} bytes (microecc format)")
+                    print(f"ECDSA192 signature extracted: {len(signature)} bytes")
 
-                elif algorithm == 2:  # ECDSA256
+                elif algorithm == ECDSA256_ALGORITHM:
                     # ECDSA SHA256 signature block format: <BBBx32sB64s64s1031x
                     # signature_rs is at offset 101-165 (64 bytes)
                     # Signature is in microecc format: little-endian r||s concatenated
                     signature = sig_block[101:165]  # 64 bytes: 32 bytes r + 32 bytes s
+                    print(f"ECDSA256 signature extracted: {len(signature)} bytes")
 
-                    print(f"ECDSA256 signature extracted: {len(signature)} bytes (microecc format)")
-
-                elif algorithm == 3:  # ECDSA384
+                elif algorithm == ECDSA384_ALGORITHM:
                     # ECDSA SHA384 signature block format: <BBBx48sB96s96s951x
                     # signature_rs is at offset 149-245 (96 bytes)
                     # Signature is in microecc format: little-endian r||s concatenated
                     signature = sig_block[149:245]  # 96 bytes: 48 bytes r + 48 bytes s
-                    print(f"ECDSA384 signature extracted: {len(signature)} bytes (microecc format)")
+                    print(f"ECDSA384 signature extracted: {len(signature)} bytes")
                 else:
                     raise ValueError(f"Unsupported algorithm: {algorithm}")
 
@@ -1205,13 +1283,20 @@ class EspSecureCert:
                 if calc_crc != blk_crc:
                     raise ValueError("Signature block CRC32 mismatch")
 
-            return signature
+                return signature
+
+            finally:
+                # Clean up temporary files
+                if os.path.exists(temp_input_path):
+                    os.unlink(temp_input_path)
+                if os.path.exists(temp_output_path):
+                    os.unlink(temp_output_path)
 
         except Exception as e:
             print(f"Error generating signature with espsecure.sign_data: {e}")
             raise
 
-    def add_signature_block_using_existing_key(self, data_file_path: str, signing_key_file: list[str] | str):
+    def add_signature_block_using_existing_key(self, data_file_path: str, signing_key_file: list[str] | str, signing_scheme: str):
         """Add signature block to the partition using existing key
 
         Args:
@@ -1227,6 +1312,8 @@ class EspSecureCert:
             signing_key_file = [signing_key_file]
         elif not isinstance(signing_key_file, (list, tuple)):
             raise ValueError("signing_key_file must be a string, list, or tuple")
+
+        self.signing_scheme = signing_scheme
 
         # Validate all key files exist
         for key_path in signing_key_file:
@@ -1254,25 +1341,16 @@ class EspSecureCert:
 
                 # Extract public key and detect algorithm using espsecure
                 algorithm, public_key = self._extract_public_key_and_algorithm(keyfile_path)
-                # Generate signature block using espsecure
-                signature = self._sign_data_with_espsecure(keyfile_path, bin_data, algorithm)
 
-                with tempfile.NamedTemporaryFile(delete=False) as tmp_digest:
-                    tmp_digest_path = tmp_digest.name
-
-                try:
+                if algorithm == RSA3072_ALGORITHM:
                     with open(keyfile_path, 'rb') as keyfile:
-                        digest_sbv2_public_key(keyfile, tmp_digest_path)
+                        signature_block = generate_signature_block_using_private_key(
+                            keyfiles=[keyfile],
+                            contents=bin_data)
+                    signature = signature_block
+                else: # ECDSA192, ECDSA256, ECDSA384
+                    signature = self._sign_data_with_espsecure(keyfile_path, bin_data, algorithm)
 
-                    with open(tmp_digest_path, 'rb') as f:
-                        public_key_digest = f.read()
-
-                    print(f"Public key digest (for eFuse comparison): {public_key_digest.hex()}")
-                finally:
-                    if os.path.exists(tmp_digest_path):
-                        os.unlink(tmp_digest_path)
-
-                # Add signature block with correct partition length
                 self.builder.add_signature_block(algorithm, public_key, signature, self.signature_block_no, original_partition_length)
                 self.signature_block_no += 1
 

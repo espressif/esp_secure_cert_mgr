@@ -29,7 +29,7 @@ csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
 bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
 supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
-                     'esp32c6', 'esp32h2', 'esp32p4'}
+                     'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5'}
 
 def cleanup(args):
     if args.keep_ds_data is False:
@@ -273,12 +273,10 @@ def main():
             esp_secure_cert.add_entry(entry_priv)
 
         if args.bin_filename is not None and args.secure_sign:
-            if args.signing_scheme is not None:
-                esp_secure_cert.signing_scheme = args.signing_scheme
-            else:
+            if args.signing_scheme is None:
                 raise ValueError("Signing scheme is not set")
 
-            signed_bin_filename = esp_secure_cert.add_signature_block_using_existing_key(os.path.abspath(args.bin_filename), args.signing_key_file)
+            signed_bin_filename = esp_secure_cert.add_signature_block_using_existing_key(os.path.abspath(args.bin_filename), args.signing_key_file, args.signing_scheme)
 
             if not args.skip_flash:
                 esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, signed_bin_filename)
@@ -294,8 +292,7 @@ def main():
 
         if args.secure_sign:
             # Set the secure boot scheme
-            esp_secure_cert.signing_scheme = args.signing_scheme
-            bin_filename = esp_secure_cert.add_signature_block_using_existing_key(bin_filename, args.signing_key_file)
+            bin_filename = esp_secure_cert.add_signature_block_using_existing_key(bin_filename, args.signing_key_file, args.signing_scheme)
 
         if not args.skip_flash:
             esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)

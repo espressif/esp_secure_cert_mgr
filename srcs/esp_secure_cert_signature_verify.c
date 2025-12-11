@@ -5,522 +5,354 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
+#include <stddef.h>
 #include <inttypes.h>
 #include "esp_log.h"
 #include "esp_err.h"
-#include "esp_fault.h"
-#include "assert.h"
 #include "esp_partition.h"
 #include "esp_crc.h"
-#include "esp_system.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_config.h"
 #include "esp_secure_cert_tlv_private.h"
 #include "esp_secure_cert_signature_verify.h"
 #include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_boot.h"
-#include "esp_efuse.h"
-#include "esp_efuse_table.h"
 #include "soc/soc_caps.h"
+
+/* Include ROM headers for ECDSA curve constants */
+#if SOC_ECDSA_SUPPORTED
+#include "rom/ecdsa.h"
+#endif
+
 #if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
+#if defined(MBEDTLS_SHA384_C)
+#include "mbedtls/sha512.h"
+#endif
 #else
 #include "psa/crypto.h"
 #endif
 
-#include "mbedtls/rsa.h"
-#include "mbedtls/ecdsa.h"
-#include "mbedtls/ecp.h"
-#include "mbedtls/bignum.h"
-#include "mbedtls/md.h"
-
-#if CONFIG_SECURE_BOOT_V2_RSA_ENABLED || CONFIG_SECURE_BOOT_V2_ECDSA_ENABLED
-#include "rom/ets_sys.h"
-
-/* Include chip-specific ROM secure boot headers */
-#if CONFIG_IDF_TARGET_ESP32
-#include "esp32/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32S2
-#include "esp32s2/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32C3
-#include "esp32c3/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32S3
-#include "esp32s3/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32C2
-#include "esp32c2/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32C6
-#include "esp32c6/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32P4
-#include "esp32p4/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32C5
-#include "esp32c5/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32C61
-#include "esp32c61/rom/secure_boot.h"
-#elif CONFIG_IDF_TARGET_ESP32H4
-#include "esp32h4/rom/secure_boot.h"
-#endif
-
-/* Include ECDSA ROM headers for chips that support ECDSA */
-#if CONFIG_SECURE_BOOT_V2_ECDSA_ENABLED && SOC_ECDSA_SUPPORTED
-#if CONFIG_IDF_TARGET_ESP32H2
-#include "esp32h2/rom/ecdsa.h"
-#elif CONFIG_IDF_TARGET_ESP32P4
-#include "esp32p4/rom/ecdsa.h"
-#elif CONFIG_IDF_TARGET_ESP32C5
-#include "esp32c5/rom/ecdsa.h"
-#elif CONFIG_IDF_TARGET_ESP32C61
-#include "esp32c61/rom/ecdsa.h"
-#elif CONFIG_IDF_TARGET_ESP32H4
-#include "esp32h4/rom/ecdsa.h"
-#endif
-#endif /* CONFIG_SECURE_BOOT_V2_ECDSA_ENABLED && SOC_ECDSA_SUPPORTED */
-
-#endif /* CONFIG_SECURE_BOOT_V2_RSA_ENABLED || CONFIG_SECURE_BOOT_V2_ECDSA_ENABLED */
-
 static const char *TAG = "esp_secure_cert_sig_verify";
 
-#define ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS          SECURE_BOOT_NUM_BLOCKS
-#define ESP_SECURE_CERT_SHA256_DIGEST_SIZE            32
-#define ESP_SECURE_CERT_SHA256_ALGORITHM              0
+#define SECURE_VERIFICATION_VERSION_1   0x01
 
-/* Algorithm types */
-#define ESP_SECURE_CERT_SIG_ALGO_RSA3072              0
-#define ESP_SECURE_CERT_SIG_ALGO_ECDSA192             1
-#define ESP_SECURE_CERT_SIG_ALGO_ECDSA256             2
-#define ESP_SECURE_CERT_SIG_ALGO_ECDSA384             3
-
-/* RSA 3072 key parameters */
-#define ESP_SECURE_CERT_RSA3072_KEY_SIZE              384
-#define ESP_SECURE_CERT_RSA3072_SIG_SIZE              384
+#define SHA256_ALGORITHM                 0
 
 /* ECDSA key and signature sizes */
-#define ESP_SECURE_CERT_ECDSA192_KEY_SIZE             48
-#define ESP_SECURE_CERT_ECDSA192_SIG_SIZE             48
-#define ESP_SECURE_CERT_ECDSA256_KEY_SIZE             64
-#define ESP_SECURE_CERT_ECDSA256_SIG_SIZE             64
-#define ESP_SECURE_CERT_ECDSA384_KEY_SIZE             96
-#define ESP_SECURE_CERT_ECDSA384_SIG_SIZE             96
+#define ECDSA192_KEY_SIZE                48
+#define ECDSA192_SIG_SIZE                48
+#define ECDSA256_KEY_SIZE                64
+#define ECDSA256_SIG_SIZE                64
+#define ECDSA384_KEY_SIZE                96
+#define ECDSA384_SIG_SIZE                96
 
-/* Calculate maximum number of eFuse key blocks from EFUSE_BLK_KEY_MAX enum */
-#define MAX_EFUSE_KEY_BLOCKS                          (EFUSE_BLK_KEY_MAX - EFUSE_BLK_KEY0)
+/* ECDSA signature block size - use sizeof for type safety */
+#define ECDSA_SIG_BLOCK_SIZE             sizeof(ets_secure_boot_sig_block_t)
 
+/* ECDSA signature block version */
+#define ECDSA_SIG_BLOCK_VERSION          0x03
 
-/* Signature structure optimized for esp_secure_cert */
+#define ECDSA_SHA_VERSION_384            1
+
+#define SHA384_DIGEST_SIZE               48  /* For P-384 curve */
+
 typedef struct {
-    uint8_t version;                 /* Signature block version */
-    uint8_t reserved1[3];              /* Reserved for future use */
-    uint32_t offset;                 /* Offset for hash calculation (Currently not in use, set to 0) */
-    uint32_t length;                 /* Length of data for hash calculation (Currently not in use, set to 0) */
+    uint8_t version;
+    uint8_t reserved1[3];
+    uint32_t sign_data_offset;
+    uint32_t sign_data_length;
     uint8_t algorithm;
-    uint8_t reserved2[3];              /* Reserved for future use */
+    uint8_t reserved2[3];
 #if CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME
-    ets_rsa_pubkey_t rsa_public_key; /* RSA public key structure */
-    uint8_t signature[ESP_SECURE_CERT_RSA3072_SIG_SIZE];  /* RSA signature */
+    ets_secure_boot_sig_block_t rsa_signature_block;
 #elif CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME
     struct {
         uint8_t curve_id;
 #if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_192_BITS
-        uint8_t pubkey_point[ESP_SECURE_CERT_ECDSA192_KEY_SIZE];
-        uint8_t signature[ESP_SECURE_CERT_ECDSA192_SIG_SIZE];
+        uint8_t pubkey_point[ECDSA192_KEY_SIZE];
+        uint8_t signature[ECDSA192_SIG_SIZE];
 #elif CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_256_BITS
-        uint8_t pubkey_point[ESP_SECURE_CERT_ECDSA256_KEY_SIZE];
-        uint8_t signature[ESP_SECURE_CERT_ECDSA256_SIG_SIZE];
+        uint8_t pubkey_point[ECDSA256_KEY_SIZE];
+        uint8_t signature[ECDSA256_SIG_SIZE];
 #elif CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
-        uint8_t pubkey_point[ESP_SECURE_CERT_ECDSA384_KEY_SIZE]
-        uint8_t signature[ESP_SECURE_CERT_ECDSA384_SIG_SIZE];
+        uint8_t pubkey_point[ECDSA384_KEY_SIZE];
+        uint8_t signature[ECDSA384_SIG_SIZE];
 #endif
     } ecdsa;
-
 #endif
 } __attribute__((packed)) esp_secure_cert_signature_t;
 
-/**
- * @brief Calculate SHA256 digest of public key
- */
-static esp_err_t calculate_pubkey_digest(const uint8_t *pubkey, size_t pubkey_len, uint8_t *digest)
-{
-#if (MBEDTLS_MAJOR_VERSION < 4)
-    mbedtls_sha256_context ctx;
-    mbedtls_sha256_init(&ctx);
-
-    int ret = mbedtls_sha256_starts(&ctx, ESP_SECURE_CERT_SHA256_ALGORITHM);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to start SHA256 for public key");
-        mbedtls_sha256_free(&ctx);
-        return ESP_FAIL;
-    }
-
-    ret = mbedtls_sha256_update(&ctx, pubkey, pubkey_len);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to update SHA256 for public key");
-        mbedtls_sha256_free(&ctx);
-        return ESP_FAIL;
-    }
-
-    ret = mbedtls_sha256_finish(&ctx, digest);
-    if (ret != 0) {
-        ESP_LOGE(TAG, "Failed to finish SHA256 for public key");
-        mbedtls_sha256_free(&ctx);
-        return ESP_FAIL;
-    }
-
-    mbedtls_sha256_free(&ctx);
-#else
-    size_t hash_length = 0;
-    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256, pubkey, pubkey_len,
-                                          digest, ESP_SECURE_CERT_SHA256_DIGEST_SIZE, &hash_length);
-    if (status != PSA_SUCCESS || hash_length != ESP_SECURE_CERT_SHA256_DIGEST_SIZE) {
-        ESP_LOGE(TAG, "Failed to calculate SHA256 for public key");
-        return ESP_FAIL;
-    }
-#endif
-    return ESP_OK;
-}
-
-/**
- * @brief Calculate hash of partition data (all TLV entries except signature blocks)
- */
 static esp_err_t calculate_partition_hash(const void *partition_addr, size_t partition_size,
-                                        uint8_t *hash)
+                                          uint8_t *hash_out, size_t *hash_len_out, uint8_t curve_id)
 {
     char *sig_block_data = NULL;
     uint32_t sig_block_data_len = 0;
 
-    /* Get first signature block to determine hash boundary */
     esp_err_t ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
-                                                ESP_SECURE_CERT_SUBTYPE_0,
-                                                &sig_block_data, &sig_block_data_len);
-
+                                                  ESP_SECURE_CERT_SUBTYPE_0,
+                                                  &sig_block_data, &sig_block_data_len);
     if (ret != ESP_OK || sig_block_data == NULL) {
-        ESP_LOGE(TAG, "Failed to get signature block data");
+        ESP_LOGE(TAG, "Failed to get signature block");
         return ESP_FAIL;
     }
 
-    /* Calculate hash boundary */
     const uint8_t *sig_block_header = (const uint8_t *)sig_block_data - sizeof(esp_secure_cert_tlv_header_t);
     size_t hash_size = sig_block_header - (const uint8_t *)partition_addr;
 
-    ESP_LOGI(TAG, "Calculating partition hash: %zu bytes", hash_size);
-
+    bool use_sha384 = false;
+#if CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME && CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
+    /* Determine hash algorithm based on curve */
+    use_sha384 = (curve_id == ECDSA_CURVE_P384);
+#endif
+    (void)curve_id;
 
 #if (MBEDTLS_MAJOR_VERSION < 4)
-    mbedtls_sha256_context ctx;
-    mbedtls_sha256_init(&ctx);
+    if (use_sha384) {
+#if defined(MBEDTLS_SHA384_C)
+        mbedtls_sha512_context ctx;
+        mbedtls_sha512_init(&ctx);
 
-    int sha_ret = mbedtls_sha256_starts(&ctx, ESP_SECURE_CERT_SHA256_ALGORITHM);
-    if (sha_ret != 0) {
-        ESP_LOGE(TAG, "Failed to start SHA256");
+        if (mbedtls_sha512_starts(&ctx, 1) != 0 ||  /* 1 = SHA-384 */
+            mbedtls_sha512_update(&ctx, (const uint8_t *)partition_addr, hash_size) != 0 ||
+            mbedtls_sha512_finish(&ctx, hash_out) != 0) {
+            mbedtls_sha512_free(&ctx);
+            ESP_LOGE(TAG, "SHA384 calculation failed");
+            return ESP_FAIL;
+        }
+        mbedtls_sha512_free(&ctx);
+        *hash_len_out = SHA384_DIGEST_SIZE;
+#else
+        ESP_LOGE(TAG, "SHA384 not supported in mbedTLS");
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
+    } else {
+        mbedtls_sha256_context ctx;
+        mbedtls_sha256_init(&ctx);
+
+        if (mbedtls_sha256_starts(&ctx, SHA256_ALGORITHM) != 0 ||
+            mbedtls_sha256_update(&ctx, (const uint8_t *)partition_addr, hash_size) != 0 ||
+            mbedtls_sha256_finish(&ctx, hash_out) != 0) {
+            mbedtls_sha256_free(&ctx);
+            ESP_LOGE(TAG, "SHA256 calculation failed");
+            return ESP_FAIL;
+        }
         mbedtls_sha256_free(&ctx);
-        return ESP_FAIL;
-    }
-
-    sha_ret = mbedtls_sha256_update(&ctx, (const uint8_t *)partition_addr, hash_size);
-    if (sha_ret != 0) {
-        ESP_LOGE(TAG, "Failed to update SHA256");
-        mbedtls_sha256_free(&ctx);
-        return ESP_FAIL;
-    }
-
-    sha_ret = mbedtls_sha256_finish(&ctx, hash);
-    mbedtls_sha256_free(&ctx);
-    if (sha_ret != 0) {
-        ESP_LOGE(TAG, "Failed to finish SHA256");
-        return ESP_FAIL;
+        *hash_len_out = ESP_SECURE_BOOT_DIGEST_LEN;
     }
 #else
-
-
-    size_t hash_length = 0;
-    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256,
-                                          padded_data ? padded_data : (const uint8_t *)partition_addr,
-                                          padded_hash_size,
-                                          hash, ESP_SECURE_CERT_SHA256_DIGEST_SIZE, &hash_length);
-    if (padded_data) {
-        free(padded_data);
-    }
-    if (status != PSA_SUCCESS || hash_length != ESP_SECURE_CERT_SHA256_DIGEST_SIZE) {
-        ESP_LOGE(TAG, "Failed to calculate partition hash");
-        return ESP_FAIL;
+    if (use_sha384) {
+        size_t hash_length = 0;
+        psa_status_t status = psa_hash_compute(PSA_ALG_SHA_384,
+                                              (const uint8_t *)partition_addr,
+                                              hash_size,
+                                              hash_out, SHA384_DIGEST_SIZE, &hash_length);
+        if (status != PSA_SUCCESS || hash_length != SHA384_DIGEST_SIZE) {
+            ESP_LOGE(TAG, "SHA384 calculation failed");
+            return ESP_FAIL;
+        }
+        *hash_len_out = SHA384_DIGEST_SIZE;
+    } else {
+        size_t hash_length = 0;
+        psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256,
+                                              (const uint8_t *)partition_addr,
+                                              hash_size,
+                                              hash_out, ESP_SECURE_BOOT_DIGEST_LEN, &hash_length);
+        if (status != PSA_SUCCESS || hash_length != ESP_SECURE_BOOT_DIGEST_LEN) {
+            ESP_LOGE(TAG, "SHA256 calculation failed");
+            return ESP_FAIL;
+        }
+        *hash_len_out = ESP_SECURE_BOOT_DIGEST_LEN;
     }
 #endif
 
-    ESP_LOGI(TAG, "Partition hash calculated successfully");
     return ESP_OK;
 }
-
-/**
- * @brief Verify public key digest against eFuse secure boot digest
- */
-static esp_err_t verify_pubkey_against_efuse(const uint8_t *pubkey_digest)
-{
-    ESP_LOGI(TAG, "Verifying public key digest against eFuse");
-
-    /* Iterate through all eFuse key blocks */
-    for (unsigned int block_id = 0; block_id < MAX_EFUSE_KEY_BLOCKS; block_id++) {
-
-        /* For standard secure boot digest slots, check revocation */
-        if (block_id < SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS) {
-#if SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS
-            /* Check if this digest is revoked */
-            bool is_revoked = esp_efuse_get_digest_revoke(block_id);
-            if (is_revoked) {
-                ESP_LOGI(TAG, "eFuse key digest %u is revoked, skipping", block_id);
-                continue;
-            }
-#endif
-        }
-
-        /* Read the digest from eFuse using esp_efuse_read_block API */
-        uint8_t efuse_digest[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-        esp_efuse_block_t efuse_block = EFUSE_BLK_KEY0 + block_id;
-
-        esp_err_t ret = esp_efuse_read_block(efuse_block, efuse_digest, 0,
-                                             ESP_SECURE_CERT_SHA256_DIGEST_SIZE * 8);
-        if (ret != ESP_OK) {
-            ESP_LOGD(TAG, "Failed to read eFuse block %d (block %u): %s",
-                     efuse_block, block_id, esp_err_to_name(ret));
-            continue;
-        }
-
-        /* Check if digest is empty (all zeros) */
-        bool is_empty = true;
-        for (int j = 0; j < ESP_SECURE_CERT_SHA256_DIGEST_SIZE; j++) {
-            if (efuse_digest[j] != 0) {
-                is_empty = false;
-                break;
-            }
-        }
-
-        if (is_empty) {
-            ESP_LOGD(TAG, "eFuse block %u is empty", block_id);
-            continue;
-        }
-
-        /* Compare calculated digest with eFuse digest */
-        if (memcmp(pubkey_digest, efuse_digest, ESP_SECURE_CERT_SHA256_DIGEST_SIZE) == 0) {
-            ESP_LOGI(TAG, "Public key digest matches eFuse block %u", block_id);
-            return ESP_OK;
-        } else {
-            ESP_LOGD(TAG, "Public key digest does not match eFuse block %u", block_id);
-        }
-    }
-
-    ESP_LOGE(TAG, "Public key digest does not match any eFuse secure boot digest");
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, pubkey_digest, ESP_SECURE_CERT_SHA256_DIGEST_SIZE, ESP_LOG_ERROR);
-    return ESP_FAIL;
-}
-
-#if CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME
-/**
- * @brief Verify RSA signature using ROM API
- */
-static esp_err_t verify_rsa_signature(const esp_secure_cert_signature_t *sig_block,
-                                      const uint8_t *data_hash)
-{
-    ESP_LOGI(TAG, "Verifying RSA 3072 signature using ROM API");
-
-    /* Copy RSA public key to aligned buffer to avoid packed struct warnings */
-    ets_rsa_pubkey_t rsa_key;
-    memcpy(&rsa_key, &sig_block->rsa_public_key, sizeof(ets_rsa_pubkey_t));
-
-    /* Calculate public key digest for eFuse comparison
-     * Based on ESP-IDF Secure Boot V2, the digest is SHA256 of the full ets_rsa_pubkey_t:
-     * n[384] + e[4] + rinv[384] + mdash[4] = 776 bytes
-     */
-    uint8_t pubkey_digest[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    esp_err_t ret = calculate_pubkey_digest((const uint8_t *)&rsa_key,
-                                           sizeof(ets_rsa_pubkey_t),
-                                           pubkey_digest);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to calculate RSA public key digest");
-        return ESP_FAIL;
-    }
-
-    /* Verify public key against eFuse */
-    ret = verify_pubkey_against_efuse(pubkey_digest);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "RSA public key verification against eFuse failed");
-        return ESP_FAIL;
-    }
-    /* Verify RSA-PSS signature using ROM API */
-    uint8_t verified_digest[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    bool sig_valid = ets_rsa_pss_verify(&rsa_key,
-                                        sig_block->signature,
-                                        data_hash,
-                                        verified_digest);
-
-    if (!sig_valid) {
-        ESP_LOGE(TAG, "RSA signature verification failed");
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI(TAG, "RSA signature verified successfully");
-    return ESP_OK;
-}
-#endif /* CONFIG_SECURE_BOOT_V2_RSA_ENABLED */
 
 #if CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME
-/**
- * @brief Verify ECDSA signature using ROM API
- */
-static esp_err_t verify_ecdsa_signature(const esp_secure_cert_signature_t *sig_block,
-                                       const uint8_t *data_hash, uint8_t algorithm)
+static inline void get_ecdsa_params(uint8_t curve_id, size_t *pubkey_len, size_t *sig_len, size_t *hash_len)
 {
-    uint8_t ecdsa_pubkey[ESP_SECURE_CERT_ECDSA256_KEY_SIZE+1];
+    switch (curve_id) {
+    case ECDSA_CURVE_P192:
+        *pubkey_len = ECDSA192_KEY_SIZE;
+        *sig_len = ECDSA192_SIG_SIZE;
+        if (hash_len) *hash_len = ESP_SECURE_BOOT_DIGEST_LEN;
+        break;
+    case ECDSA_CURVE_P256:
+        *pubkey_len = ECDSA256_KEY_SIZE;
+        *sig_len = ECDSA256_SIG_SIZE;
+        if (hash_len) *hash_len = ESP_SECURE_BOOT_DIGEST_LEN;
+        break;
+#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
+    case ECDSA_CURVE_P384:
+        *pubkey_len = ECDSA384_KEY_SIZE;
+        *sig_len = ECDSA384_SIG_SIZE;
+        if (hash_len) *hash_len = SHA384_DIGEST_SIZE;
+        break;
+#endif
+    default:
+        *pubkey_len = 0;
+        *sig_len = 0;
+        if (hash_len) *hash_len = 0;
+        break;
+    }
+}
 
-    uint8_t signature[ESP_SECURE_CERT_ECDSA256_SIG_SIZE];
-    memcpy(signature, sig_block->signature, ESP_SECURE_CERT_ECDSA256_SIG_SIZE);
-
-    uint8_t pubkey_digest[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    esp_err_t ret = calculate_pubkey_digest(ecdsa_pubkey, ESP_SECURE_CERT_ECDSA256_KEY_SIZE, pubkey_digest);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to calculate ECDSA public key digest");
-        return ESP_FAIL;
+static esp_err_t construct_ecdsa_sig_block(const uint8_t *hash, size_t hash_len,
+                                           uint8_t curve_id, const uint8_t *pubkey,
+                                           size_t pubkey_len, const uint8_t *signature,
+                                           size_t sig_len, ets_secure_boot_sig_block_t *block)
+{
+    if (!hash || !pubkey || !signature || !block) {
+        return ESP_ERR_INVALID_ARG;
     }
 
-    /* Verify public key against eFuse */
-    ret = verify_pubkey_against_efuse(pubkey_digest);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "ECDSA public key verification against eFuse failed");
-        return ESP_FAIL;
+    memset(block, 0, ECDSA_SIG_BLOCK_SIZE);
+    uint8_t *block_bytes = (uint8_t *)block;
+
+    block->magic_byte = ETS_SECURE_BOOT_V2_SIGNATURE_MAGIC;
+    block->version = ECDSA_SIG_BLOCK_VERSION;
+    block->ecdsa.key.curve_id = curve_id;
+
+#if CONFIG_SECURE_BOOT_ECDSA_KEY_LEN_384_BITS
+    if (curve_id == ECDSA_CURVE_P384) {
+        block_bytes[2] = ECDSA_SHA_VERSION_384;
     }
-    uint8_t curve_id = ecdsa_pubkey[0];
-    uint8_t pubkey_point[64];
-    memcpy(pubkey_point, sig_block->ecdsa_pubkey + 1, 64);
+#endif
 
-    uint8_t verified_digest[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    int rom_ret = ets_ecdsa_verify(pubkey_point,
-                                   signature,
-                                   curve_id,
-                                   data_hash,
-                                   verified_digest);
+    memcpy(block->image_digest, hash, hash_len);
+    memcpy(block->ecdsa.key.point, pubkey, pubkey_len);
+    memcpy(block->ecdsa.signature, signature, sig_len);
 
-    if (rom_ret != 0) {
-        ESP_LOGE(TAG, "ECDSA signature verification failed (ROM returned %d)", rom_ret);
-        return ESP_FAIL;
-    }
+    uint32_t crc = esp_crc32_le(0, block_bytes, offsetof(ets_secure_boot_sig_block_t, block_crc));
+    block->block_crc = crc;
 
-    ESP_LOGI(TAG, "ECDSA signature verified successfully");
     return ESP_OK;
 }
-#endif /* CONFIG_SECURE_BOOT_V2_ECDSA_ENABLED */
+#endif
 
-/**
- * @brief Parse and verify signature block
- */
-static esp_err_t verify_signature_block(const esp_secure_cert_signature_t *sig_block,
-                                               const uint8_t *partition_hash)
+static esp_err_t get_signature_blocks(const uint8_t *partition_hash,
+                                     size_t partition_hash_len,
+                                     ets_secure_boot_signature_t *sig_blocks)
 {
-    if (sig_block == NULL || partition_hash == NULL) {
-        ESP_LOGE(TAG, "Invalid parameters for signature verification");
-        return ESP_FAIL;
-    }
-
-    ESP_LOGI(TAG, "Signature block version: %d, algorithm: %d", sig_block->version, sig_block->algorithm);
-
-#if !CONFIG_SECURE_BOOT_V2_ENABLED
-    ESP_LOGW(TAG, "Secure boot V2 not enabled - skipping signature verification");
-    return ESP_OK;
-#else
+    int found_count = 0;
     esp_err_t ret = ESP_FAIL;
 
-    /* Verify based on algorithm */
-    switch (sig_block->algorithm) {
-        case ESP_SECURE_CERT_SIG_ALGO_RSA3072:
+    memset(sig_blocks, 0, sizeof(ets_secure_boot_signature_t));
+
+    for (int subtype = 0; subtype < SECURE_BOOT_NUM_BLOCKS; subtype++) {
+        char *sig_data = NULL;
+        uint32_t sig_len = 0;
+
+        ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
+                                           subtype, &sig_data, &sig_len);
+        if (ret != ESP_OK || !sig_data || sig_len < sizeof(esp_secure_cert_signature_t)) {
+            continue;
+        }
+
+        esp_secure_cert_signature_t *esp_sig = (esp_secure_cert_signature_t *)sig_data;
+        if (esp_sig->version != SECURE_VERIFICATION_VERSION_1) {
+            ESP_LOGE(TAG, "Unsupported signature version: %d", esp_sig->version);
+            return ESP_FAIL;
+        }
+
 #if CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME
-            ret = verify_rsa_signature(sig_block, partition_hash);
-#else
-            ESP_LOGE(TAG, "RSA signature verification not enabled (set CONFIG_SECURE_BOOT_V2_RSA_ENABLED=y)");
-            ret = ESP_FAIL;
-#endif
-            break;
+        memcpy(&sig_blocks->block[subtype], &esp_sig->rsa_signature_block,
+               sizeof(ets_secure_boot_sig_block_t));
+#else /* CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME */
+        size_t pubkey_len, sig_size, hash_len;
+        get_ecdsa_params(esp_sig->ecdsa.curve_id, &pubkey_len, &sig_size, &hash_len);
 
-        case ESP_SECURE_CERT_SIG_ALGO_ECDSA192:
-        case ESP_SECURE_CERT_SIG_ALGO_ECDSA256:
-        case ESP_SECURE_CERT_SIG_ALGO_ECDSA384:
-#if CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME
-            ret = verify_ecdsa_signature(sig_block, partition_hash, sig_block->algorithm);
-#else
-            ESP_LOGE(TAG, "ECDSA signature verification not enabled (set CONFIG_SECURE_BOOT_V2_ECDSA_ENABLED=y)");
-            ret = ESP_FAIL;
-#endif
-            break;
+        if (partition_hash_len != hash_len) {
+            ESP_LOGE(TAG, "Hash length mismatch: got %zu, expected %zu", partition_hash_len, hash_len);
+            return ESP_FAIL;
+        }
 
-        default:
-            ESP_LOGE(TAG, "Unsupported signature algorithm: %d", sig_block->algorithm);
-            ret = ESP_FAIL;
-            break;
+        ret = construct_ecdsa_sig_block(partition_hash, hash_len, esp_sig->ecdsa.curve_id,
+                                        esp_sig->ecdsa.pubkey_point, pubkey_len,
+                                        esp_sig->ecdsa.signature, sig_size,
+                                        &sig_blocks->block[subtype]);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+#endif
+        found_count++;
     }
 
+    if (found_count == 0) {
+        ESP_LOGW(TAG, "No signature blocks found");
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t verify_signature(const ets_secure_boot_signature_t *sig_blocks,
+                                  const uint8_t *hash, size_t hash_len)
+{
+    void *verify_buf = calloc(SECURE_BOOT_NUM_BLOCKS, hash_len);
+    if (!verify_buf) {
+        ESP_LOGE(TAG, "Memory allocation failed");
+        return ESP_FAIL;
+    }
+
+    esp_err_t ret = esp_secure_boot_verify_sbv2_signature_block(sig_blocks, hash, verify_buf);
+    free(verify_buf);
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Signature verification failed");
+    }
     return ret;
-#endif
 }
 
 esp_err_t esp_secure_cert_verify_partition_signature(esp_sign_verify_ctx_t *sign_verify_ctx)
 {
+    (void)sign_verify_ctx; /* Not used at the moment */
     esp_secure_cert_partition_ctx_t *ctx = NULL;
-    ESP_LOGI(TAG, "Starting custom signature verification");
+    uint8_t partition_hash[SHA384_DIGEST_SIZE];
+    size_t partition_hash_len = 0;
+    uint8_t curve_id = 0;
 
-    /* Map partition */
     esp_err_t ret = esp_secure_cert_map_partition(&ctx);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK || !ctx->esp_secure_cert_mapped_addr) {
         ESP_LOGE(TAG, "Failed to map partition");
         return ESP_FAIL;
     }
 
-    const void *partition_addr = ctx->esp_secure_cert_mapped_addr;
-    if (partition_addr == NULL) {
-        ESP_LOGE(TAG, "Failed to get mapped partition address");
+    char *sig_data = NULL;
+    uint32_t sig_len = 0;
+    ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
+                                       ESP_SECURE_CERT_SUBTYPE_0, &sig_data, &sig_len);
+    if (ret != ESP_OK || !sig_data || sig_len < sizeof(esp_secure_cert_signature_t)) {
+        ESP_LOGE(TAG, "Failed to get signature block");
         return ESP_FAIL;
     }
 
-    /* Calculate partition hash (all data except signature blocks) */
-    uint8_t partition_hash[ESP_SECURE_CERT_SHA256_DIGEST_SIZE];
-    ret = calculate_partition_hash(partition_addr, ctx->partition->size, partition_hash);
+#if CONFIG_SECURE_SIGNED_APPS_ECDSA_V2_SCHEME
+    curve_id = ((esp_secure_cert_signature_t *)sig_data)->ecdsa.curve_id;
+#endif
+
+    ret = calculate_partition_hash(ctx->esp_secure_cert_mapped_addr, ctx->partition->size,
+                                   partition_hash, &partition_hash_len, curve_id);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to calculate partition hash");
         return ESP_FAIL;
     }
 
-    /* Try to verify with each signature block */
-    bool verification_passed = false;
-    for (int subtype = 0; subtype < ESP_SECURE_CERT_MAX_SIGNATURE_BLOCKS; subtype++) {
-        char *sig_block_data = NULL;
-        uint32_t sig_block_data_len = 0;
-
-        ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
-                                          subtype, &sig_block_data, &sig_block_data_len);
-        if (ret != ESP_OK) {
-            ESP_LOGD(TAG, "No signature block found for subtype %d", subtype);
-            continue;
-        }
-
-        if (sig_block_data == NULL || sig_block_data_len < sizeof(esp_secure_cert_signature_t)) {
-            ESP_LOGD(TAG, "Invalid signature block %d", subtype);
-            continue;
-        }
-
-        /* Parse signature block */
-        esp_secure_cert_signature_t *sig_block = (esp_secure_cert_signature_t *)sig_block_data;
-        ESP_LOGI(TAG, "Attempting verification with signature block %d", subtype);
-        /* Verify signature */
-        ret = verify_signature_block(sig_block, partition_hash);
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "Signature verification successful with block %d", subtype);
-            verification_passed = true;
-            break;
-        } else {
-            ESP_LOGW(TAG, "Signature verification failed with block %d", subtype);
-        }
+    ets_secure_boot_signature_t *sig_blocks = calloc(1, sizeof(ets_secure_boot_signature_t));
+    if (!sig_blocks) {
+        ESP_LOGE(TAG, "Memory allocation failed");
+        return ESP_FAIL;
     }
 
-    if (verification_passed) {
-        ESP_FAULT_ASSERT(ret == ESP_OK);
-        ESP_LOGI(TAG, "esp_secure_cert partition signature verification successful");
-        return ESP_OK;
+    ret = get_signature_blocks(partition_hash, partition_hash_len, sig_blocks);
+    if (ret == ESP_OK) {
+        ret = verify_signature(sig_blocks, partition_hash, partition_hash_len);
+    } else {
+        ESP_LOGE(TAG, "Failed to get signature blocks");
     }
 
-    return ESP_FAIL;
+    free(sig_blocks);
+    return ret;
 }
