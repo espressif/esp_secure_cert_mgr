@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 typedef struct esp_sign_verify_ctx {
-    uint32_t offset; /* Offset of esp-secure-cert partition (currently not in use) */
+    /* No context needed for now, This is for future use (kept for compatibility reasons)*/
 } esp_sign_verify_ctx_t;
 
 /**

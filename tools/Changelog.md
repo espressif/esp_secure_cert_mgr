@@ -2,7 +2,7 @@
 
 ## 2.4.0
 * Added feature in the `configure_esp_secure_cert.py` tool to secure-sign the esp-secure-cert partition binary.
-* It a sign the binary while generating new partition as well as to existing partition.
+* It signs the binary while generating new partition as well as to existing partition.
 
 ## 2.3.7
 * Fixed the `configure_esp_secure_cert.py` tool for custom data as file.
