@@ -188,6 +188,12 @@ def main():
         default=None,
         help='Bin filename to use')
 
+    parser.add_argument(
+        '--append-integrity',
+        dest='append_integrity',
+        metavar='[/path/to/esp_secure_cert.bin]',
+        help='Append an integrity TLV entry containing SHA256 of the entire partition (excluding integrity TLV itself) to an existing .bin file')
+
     args = parser.parse_args()
 
     idf_target = args.target_chip
@@ -204,6 +210,14 @@ def main():
 
     if args.parse_bin:
         EspSecureCert.parse_esp_secure_cert_bin(args.parse_bin)
+        return
+
+    if args.append_integrity:
+        if not os.path.exists(args.append_integrity):
+            print(f'ERROR: The provided binary file does not exist: {args.append_integrity}')
+            sys.exit(-1)
+        EspSecureCert.append_integrity_tlv(args.append_integrity)
+        print(f'Successfully appended integrity TLV to: {args.append_integrity}')
         return
 
     if (args.privkey is not None and os.path.exists(args.privkey) is False):

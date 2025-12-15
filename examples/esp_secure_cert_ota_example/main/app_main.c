@@ -428,7 +428,24 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
     }
 
     ESP_LOGI(TAG, "OTA download completed successfully");
+    ESP_LOGI(TAG, "Checking footer TLV in the staging partition after downloading");
+    err = esp_secure_cert_tlv_footer_check();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to check footer TLV in the staging partition after downloading: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "Footer TLV checked successfully");
+
 #if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
+    esp_secure_cert_tlv_set_partition(staging_partition);
+#if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
+    err = esp_secure_cert_verify_partition_signature(NULL);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to verify esp_secure_cert partition signature: %s", esp_err_to_name(err));
+        esp_secure_cert_tlv_set_partition(NULL);
+        return err;
+    }
+#endif
     /* Save staging partition info to NVS for recovery*/
     ESP_LOGI(TAG, "Saving staging partition info to NVS for recovery");
     err = save_staging_info_to_nvs(staging_partition);
@@ -438,7 +455,6 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
         ESP_LOGI(TAG, "Successfully saved staging partition info to NVS for recovery");
     }
 
-    esp_secure_cert_tlv_set_partition(staging_partition);
     /* Check if we can read the ca cert from the staging partition*/
     ESP_LOGI(TAG, "Checking CA certificate in the staging partition");
     read_custom_data();
@@ -459,6 +475,12 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
         return err;
     }
     ESP_LOGI(TAG, "Successfully copied to primary esp_secure_cert partition");
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to check footer TLV in the primary partition after copying: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "Footer TLV checked successfully");
+
     esp_secure_cert_tlv_set_partition(NULL);
     /* Check if we can read the ca cert from the primary partition*/
     ESP_LOGI(TAG, "Checking CA certificate in the primary partition after copying");

@@ -107,7 +107,7 @@ This mode writes directly to the original partition without staging.
 - No NVS overhead
 
 **Disadvantages:**
-- ⚠️ **DANGEROUS**: Interruption will corrupt partition
+- **DANGEROUS**: Interruption will corrupt partition
 - No rollback capability
 - No resume capability
 - Device may become unbootable if interrupted

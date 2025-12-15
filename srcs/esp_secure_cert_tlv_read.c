@@ -36,6 +36,7 @@
 #include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_cert_tlv_private.h"
 #include "esp_secure_cert_crypto.h"
+#include "mbedtls/sha256.h"
 
 #if SOC_HMAC_SUPPORTED
 #include "esp_hmac.h"
@@ -843,3 +844,74 @@ esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_block_id) {
     return ESP_OK;
 }
 #endif /* CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS */
+
+esp_err_t esp_secure_cert_tlv_footer_check(void)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_secure_cert_partition_ctx_t *esp_secure_cert_partition_ctx_ptr = NULL;
+
+    // Map partition if not already mapped
+    err = esp_secure_cert_map_partition(&esp_secure_cert_partition_ctx_ptr);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error in obtaining esp_secure_cert partition context");
+        return ESP_FAIL;
+    }
+
+    const void *esp_secure_cert_addr = esp_secure_cert_partition_ctx_ptr->esp_secure_cert_mapped_addr;
+    if (esp_secure_cert_addr == NULL) {
+        ESP_LOGE(TAG, "Error in obtaining esp_secure_cert memory mapped address");
+        return ESP_FAIL;
+    }
+
+    // Find integrity TLV entry with highest subtype
+    esp_secure_cert_tlv_header_t *integrity_tlv_header = NULL;
+    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, ESP_SECURE_CERT_TLV_TYPE_INTEGRITY, ESP_SECURE_CERT_SUBTYPE_MAX, (void **)&integrity_tlv_header);
+    if (err != ESP_OK) {
+        ESP_LOGD(TAG, "Integrity TLV not found in partition");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    // Verify integrity TLV integrity
+    if (!esp_secure_cert_verify_tlv_integrity(integrity_tlv_header)) {
+        ESP_LOGE(TAG, "Integrity TLV integrity verification failed");
+        return ESP_FAIL;
+    }
+
+    // Extract SHA256 from integrity TLV data (SHA256 is 32 bytes)
+    const size_t SHA256_SIZE = 32;
+    if (integrity_tlv_header->length != SHA256_SIZE) {
+        ESP_LOGE(TAG, "Invalid integrity TLV data length: expected %zu bytes, got %u", SHA256_SIZE, integrity_tlv_header->length);
+        return ESP_FAIL;
+    }
+
+    uint8_t stored_sha256[SHA256_SIZE];
+    memcpy(stored_sha256, integrity_tlv_header->value, SHA256_SIZE);
+
+    // Calculate SHA256 of partition data excluding integrity TLV
+    // The data to calculate SHA256 on is from start of partition to start of integrity TLV
+    size_t partition_size = esp_secure_cert_partition_ctx_ptr->partition->size;
+    size_t integrity_tlv_offset = (const char *)integrity_tlv_header - (const char *)esp_secure_cert_addr;
+
+    if (integrity_tlv_offset > partition_size) {
+        ESP_LOGE(TAG, "Invalid integrity TLV offset: %zu > partition size %zu", integrity_tlv_offset, partition_size);
+        return ESP_FAIL;
+    }
+
+    // Calculate SHA256 of partition data up to (but not including) integrity TLV
+    uint8_t calculated_sha256[SHA256_SIZE];
+    mbedtls_sha256_context sha256_ctx;
+    mbedtls_sha256_init(&sha256_ctx);
+    mbedtls_sha256_starts(&sha256_ctx, 0); // 0 = SHA256, not SHA224
+    mbedtls_sha256_update(&sha256_ctx, (const uint8_t *)esp_secure_cert_addr, integrity_tlv_offset);
+    mbedtls_sha256_finish(&sha256_ctx, calculated_sha256);
+    mbedtls_sha256_free(&sha256_ctx);
+
+    // Compare stored and calculated SHA256
+    if (memcmp(stored_sha256, calculated_sha256, SHA256_SIZE) != 0) {
+        ESP_LOGE(TAG, "Integrity TLV SHA256 mismatch: stored %s, calculated %s", stored_sha256, calculated_sha256);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Integrity TLV SHA256 verification passed (subtype %d)", integrity_tlv_header->subtype);
+    return ESP_OK;
+}

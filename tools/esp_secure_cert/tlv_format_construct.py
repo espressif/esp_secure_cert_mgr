@@ -15,6 +15,9 @@ import base64
 import shutil
 import subprocess
 from typing import Dict, List, Tuple, Any, Union
+import hashlib
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Any, Optional, Union
 from construct import (Struct, Int32ul, Int8ul, Int16ul, Int32sl, Bytes, this, GreedyBytes)
 import tempfile
 try:
@@ -263,7 +266,6 @@ class TlvPartitionBuilder:
         """Internal method to add TLV entry to partition"""
         if isinstance(tlv_type, tlv_type_t):
             tlv_type = tlv_type.value
-
         # Build TLV entry using construct
         tlv_data = {
             "header": {
@@ -311,8 +313,35 @@ class TlvPartitionBuilder:
 
         print(f"Added TLV entry: type={tlv_type}, subtype={subtype}, length={len(complete_tlv)}")
 
+    def add_integrity_tlv(self, subtype: int = 0) -> None:
+        """Add integrity TLV containing SHA256 of all data before integrity TLV (excluding integrity TLV itself)"""
+        # Calculate SHA256 of all data up to current_offset (excluding integrity TLV)
+        partition_data_for_sha = self.partition_data[:self.current_offset]
+        partition_sha256 = hashlib.sha256(partition_data_for_sha).digest()
+
+        # Integrity TLV data is the SHA256 value (32 bytes)
+        integrity_data = partition_sha256
+
+        # Add integrity TLV entry
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY, subtype, integrity_data, 0)
+        print(f"Added integrity TLV (subtype {subtype}) with SHA256: {partition_sha256.hex()}")
+
     def build_partition(self, output_file: str) -> None:
         """Write partition to file with proper TLV termination"""
+        # Add integrity TLV by default (before end marker)
+        self.add_integrity_tlv(0)
+
+        # Add TLV termination marker at the end
+        # This prevents the parser from reading uninitialized flash (0xFFFFFFFF)
+        end_marker = struct.pack('<I', 0xFFFF)  # 16-bit end marker as used in the parser
+
+        # Ensure we don't exceed partition size
+        if self.current_offset + len(end_marker) > PARTITION_SIZE:
+            raise ValueError(f"Cannot add end marker: partition size would exceed {PARTITION_SIZE} bytes")
+
+        # Add the end marker
+        self.partition_data[self.current_offset:self.current_offset + len(end_marker)] = end_marker
+        self.current_offset += len(end_marker)
 
         with open(output_file, 'wb') as f:
             f.write(self.partition_data[:self.current_offset])
@@ -1065,6 +1094,113 @@ class EspSecureCert:
                 print(f"        TLV type: {tlv_type}, subtype: {tlv_subtype}")
         print(f"  - tlv_entries_raw.txt: {os.path.join(output_dir, 'tlv_entries_raw.txt')}")
         print(f"  - All files in: {output_dir}")
+
+    @staticmethod
+    def append_integrity_tlv(bin_file_path: str) -> None:
+        """
+        Append integrity TLV to an existing esp_secure_cert.bin file.
+        Finds the last TLV entry, checks if it's an integrity TLV, and appends
+        a new integrity TLV with incremented subtype.
+        """
+        if not os.path.isfile(bin_file_path):
+            raise FileNotFoundError(f"Binary file not found: {bin_file_path}")
+
+        # Read the existing binary file
+        with open(bin_file_path, 'rb') as f:
+            data = f.read()
+
+        if len(data) == 0:
+            raise ValueError("Binary file is empty")
+
+        # Parse all TLV entries to find the last one and highest integrity subtype
+        tlv_entries = EspSecureCert._parse_tlv_entries_from_bin(bin_file_path)
+
+        if not tlv_entries:
+            raise ValueError("No valid TLV entries found in binary file")
+
+        # Get the last TLV entry (for optimization - quick check)
+        last_entry = tlv_entries[-1]
+        last_type = last_entry['header']['type']
+
+        # TLV header size is 12 bytes (struct.calcsize('I6BH'))
+        TLV_HEADER_SIZE = 12
+
+        # Find the highest subtype of integrity TLV (if any exists)
+        highest_integrity_subtype = -1
+        for entry in tlv_entries:
+            if entry['header']['type'] == tlv_format.tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY:
+                if entry['header']['subtype'] > highest_integrity_subtype:
+                    highest_integrity_subtype = entry['header']['subtype']
+
+        # Determine the next subtype for integrity TLV
+        if highest_integrity_subtype >= 0:
+            # Integrity TLV exists, increment from highest subtype
+            next_subtype = highest_integrity_subtype + 1
+            if next_subtype > 16:
+                raise ValueError(f"Cannot append integrity TLV: maximum subtype (16) reached")
+        else:
+            # No integrity TLV exists, start with subtype 0
+            next_subtype = 0
+
+        # Calculate offset where new integrity TLV should be appended
+        # This is after the last TLV entry
+        last_entry_total_size = (
+            TLV_HEADER_SIZE +
+            last_entry['header']['length'] +
+            _calculate_padding(last_entry['header']['length']) +
+            4  # CRC footer
+        )
+        append_offset = last_entry['offset'] + last_entry_total_size
+
+        # Calculate SHA256 of all data before the new integrity TLV
+        # This includes all existing TLVs but excludes the new integrity TLV
+        data_for_sha = data[:append_offset]
+        partition_sha256 = hashlib.sha256(data_for_sha).digest()
+
+        # Build the new integrity TLV entry
+        integrity_data = partition_sha256  # 32 bytes for SHA256
+
+        # Create TLV header
+        tlv_header = {
+            "magic": TLV_MAGIC,
+            "flags": 0,
+            "reserved": b'\x00\x00\x00',
+            "type": tlv_format.tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY.value,
+            "subtype": next_subtype,
+            "length": len(integrity_data),
+        }
+
+        # Build header
+        header_bytes = TlvHeader.build(tlv_header)
+        padding_len = _calculate_padding(len(integrity_data))
+        padding = b'\x00' * padding_len
+
+        # Calculate CRC32 for the TLV entry (header + data + padding)
+        crc_data = header_bytes + integrity_data + padding
+        crc = zlib.crc32(crc_data, 0xffffffff) & 0xffffffff
+
+        # Build footer
+        footer_bytes = TlvFooter.build({"crc": crc})
+
+        # Complete TLV entry
+        complete_tlv = crc_data + footer_bytes
+
+        # Check if we exceed partition size
+        if append_offset + len(complete_tlv) > PARTITION_SIZE:
+            raise ValueError(f"Cannot append integrity TLV: partition size would exceed {PARTITION_SIZE} bytes")
+
+        # Append the integrity TLV to the binary file
+        with open(bin_file_path, 'r+b') as f:
+            f.seek(append_offset)
+            # Remove any end marker if present
+            f.write(complete_tlv)
+            # Add end marker after the new integrity TLV
+            end_marker = struct.pack('<I', 0xFFFF)
+            if append_offset + len(complete_tlv) + len(end_marker) <= PARTITION_SIZE:
+                f.write(end_marker)
+
+        print(f"Appended integrity TLV (subtype {next_subtype}) with SHA256: {partition_sha256.hex()}")
+        print(f"Total size after append: {append_offset + len(complete_tlv)} bytes")
 
     @staticmethod
     def _parse_tlv_entries_from_bin(bin_file_path):

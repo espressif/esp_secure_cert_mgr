@@ -203,6 +203,21 @@ void esp_secure_cert_unmap_partition(void);
  */
 esp_err_t esp_secure_cert_tlv_set_partition(const esp_partition_t *partition);
 
+/**
+ * @brief Check the integrity TLV entry and verify partition integrity.
+ *
+ * This API checks if an integrity TLV entry is present in the esp_secure_cert partition.
+ * It finds the integrity TLV entry with the highest subtype and extracts the SHA256 value
+ * from it, then compares it with the calculated SHA256 of the entire partition
+ * (excluding the integrity TLV itself).
+ *
+ * @return
+ *      - ESP_OK    Integrity TLV found and SHA256 verification passed
+ *      - ESP_FAIL  Integrity TLV not found or SHA256 verification failed
+ *      - ESP_ERR_NOT_FOUND Integrity TLV not present in partition
+ */
+esp_err_t esp_secure_cert_tlv_footer_check(void);
+
 #ifdef __cplusplus
 }
 #endif

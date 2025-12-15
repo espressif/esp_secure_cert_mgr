@@ -269,7 +269,7 @@ build_examples_app_ota_master:
         echo "Using default requirements file: requirements.txt"
         pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
       fi
-    - idf-ci build run --target $IDF_TARGET
+    - idf-ci build run --target $IDF_TARGET -m "qemu" --paths .
   artifacts:
     paths:
       - examples/esp_secure_cert_ota_example/build_${IDF_TARGET}_${CONFIG}
@@ -527,6 +527,6 @@ qemu_test_examples_app_ota_master:
       fi
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     # Run the sanity test from examples app
-    - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
+    - pytest test_esp_secure_cert_ota.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
   dependencies:
     - build_examples_app_ota_master
