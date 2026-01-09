@@ -18,6 +18,7 @@
 #include "soc/soc_caps.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
+#include "esp_secure_cert_signature_verify.h"
 
 #include "mbedtls/ssl.h"
 #include "mbedtls/pk.h"
@@ -31,7 +32,6 @@
 
 #if SOC_ECDSA_SUPPORTED
 #include "ecdsa/ecdsa_alt.h"
-#include "esp_efuse.h"
 #endif
 #define TAG "esp_secure_cert_app"
 
@@ -117,7 +117,6 @@ exit:
 #else
 static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key_len, unsigned char *dev_cert, size_t dev_cert_len)
 {
-    static const char *pers = "Hello";
     mbedtls_x509_crt crt;
 #if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     mbedtls_entropy_context entropy;
@@ -147,6 +146,7 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
     }
 
 #if (MBEDTLS_VERSION_NUMBER < 0x04000000)
+    static const char *pers = "Hello";
     ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen(pers));
     if (ret != 0) {
         ESP_LOGE(TAG, "mbedtls_ctr_drbg_seed returned -0x%04x", -ret );
@@ -247,6 +247,17 @@ void app_main()
     uint32_t len = 0;
     char *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;
+
+#if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
+    // Perform signature verification at startup
+    ESP_LOGI(TAG, "Starting esp_secure_cert partition signature verification...");
+    esp_err_t sig_ret = esp_secure_cert_verify_partition_signature(NULL);
+    if (sig_ret == ESP_OK) {
+        ESP_LOGI(TAG, "esp_secure_cert partition signature verification PASSED");
+    } else {
+        ESP_LOGE(TAG, "esp_secure_cert partition signature verification FAILED");
+    }
+#endif
 
     esp_ret = esp_secure_cert_get_device_cert(&addr, &len);
     if (esp_ret == ESP_OK) {

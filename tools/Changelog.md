@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## 2.4.0
+* Added feature in the `configure_esp_secure_cert.py` tool to secure-sign the esp-secure-cert partition binary.
+* It signs the binary while generating new partition as well as to existing partition.
+
 ## 2.3.7
 * Fixed the `configure_esp_secure_cert.py` tool for custom data as file.
 * Unable to add the TLV entry, regression caused due TLV parser MR.

@@ -18,9 +18,16 @@ build_dir = "build_@t_@w"
 build_log_filename = "build.log"
 size_json_filename = "size.json"
 
+ignore_warning_strs = [
+    "DeprecationWarning",
+    "CryptographyDeprecationWarning",
+    "Warning: Deprecated: Option"
+]
+
+
 collect_app_info_filename = "app_info_@p.txt"
 
 check_manifest_rules = true
 manifest_filepatterns = [
-    '**/.build-test-rules.yml',
+    '.build-test-rules.yml',
 ]

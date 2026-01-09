@@ -24,4 +24,16 @@ menu "Test Apps Configuration"
         help
             Set the stack size for the test task
 
+    config TEST_ESP_SECURE_CERT_SECURE_VERIFICATION
+        bool "Test secure verification operations"
+        default n
+        help
+            Enable this option to test the secure verification operations
+
+    config TEST_APP_SECURE_VERIFICATION_CORRUPT_PARTITION
+        bool "Test secure verification operations with corrupt secure cert partition"
+        default n
+        help
+            Enable this option to test the secure verification operations with corrupt secure cert partition.
+
 endmenu

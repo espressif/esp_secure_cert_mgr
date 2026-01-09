@@ -26,6 +26,7 @@ typedef enum esp_secure_cert_tlv_type {
     ESP_SECURE_CERT_HMAC_ECDSA_KEY_SALT,
     ESP_SECURE_CERT_TLV_SEC_CFG,
     ESP_SECURE_CERT_TEE_SEC_STORAGE_KEY_TLV,
+    ESP_SECURE_CERT_SIGNATURE_BLOCK_TLV,
     // Any new tlv types should be added above this
     ESP_SECURE_CERT_TLV_END = 50,
     //Custom data types

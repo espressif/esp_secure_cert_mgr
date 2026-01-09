@@ -29,7 +29,7 @@ csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
 bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
 supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
-                     'esp32c6', 'esp32h2', 'esp32p4'}
+                     'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5'}
 
 def cleanup(args):
     if args.keep_ds_data is False:
@@ -162,6 +162,32 @@ def main():
         metavar='[/path/to/esp_secure_cert.bin]',
         help='Parse an esp_secure_cert.bin file and generate CSV with extracted certificates/keys')
 
+    parser.add_argument(
+        '--secure-sign',
+        dest='secure_sign',
+        action='store_true',
+        help='Enable secure boot')
+
+    parser.add_argument(
+        '--signing-scheme',
+        dest='signing_scheme',
+        choices=['rsa3072', 'ecdsa192', 'ecdsa256', 'ecdsa384'],
+        default='rsa3072',
+        help='Secure boot scheme to use')
+
+    parser.add_argument(
+        '--signing-key-file',
+        dest='signing_key_file',
+        default="secure_boot_key.bin",
+        nargs='+',
+        help='Signing key file(s) to use. You can provide multiple files separated by space.')
+
+    parser.add_argument(
+        '--esp-secure-cert-file',
+        dest='bin_filename',
+        default=None,
+        help='Bin filename to use')
+
     args = parser.parse_args()
 
     idf_target = args.target_chip
@@ -246,10 +272,28 @@ def main():
             }
             esp_secure_cert.add_entry(entry_priv)
 
+        if args.bin_filename is not None and args.secure_sign:
+            if args.signing_scheme is None:
+                raise ValueError("Signing scheme is not set")
+
+            signed_bin_filename = esp_secure_cert.add_signature_block_using_existing_key(os.path.abspath(args.bin_filename), args.signing_key_file, args.signing_scheme)
+
+            if not args.skip_flash:
+                esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, signed_bin_filename)
+            else:
+                print(f'To flash manually: esptool.py --chip {args.target_chip} -p {args.port} write_flash {args.sec_cert_part_offset} {signed_bin_filename}')
+
+            return
+
         if args.esp_secure_cert_csv is not None:
             esp_secure_cert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
 
         bin_filename = esp_secure_cert.generate_esp_secure_cert(args.target_chip, args.port)
+
+        if args.secure_sign:
+            # Set the secure boot scheme
+            bin_filename = esp_secure_cert.add_signature_block_using_existing_key(bin_filename, args.signing_key_file, args.signing_scheme)
+
         if not args.skip_flash:
             esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
         else:
