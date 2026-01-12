@@ -36,7 +36,19 @@
 #include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_cert_tlv_private.h"
 #include "esp_secure_cert_crypto.h"
+
+/* Include mbedtls version info to check MBEDTLS_MAJOR_VERSION */
+#if __has_include("mbedtls/build_info.h")
+#include "mbedtls/build_info.h"
+#elif __has_include("mbedtls/version.h")
+#include "mbedtls/version.h"
+#endif
+
+#if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/sha256.h"
+#else
+#include "psa/crypto.h"
+#endif
 
 #if SOC_HMAC_SUPPORTED
 #include "esp_hmac.h"
@@ -899,12 +911,27 @@ esp_err_t esp_secure_cert_tlv_footer_check(void)
 
     // Calculate SHA256 of partition data up to (but not including) integrity TLV
     uint8_t calculated_sha256[SHA256_SIZE];
+
+#if (MBEDTLS_MAJOR_VERSION < 4)
     mbedtls_sha256_context sha256_ctx;
     mbedtls_sha256_init(&sha256_ctx);
     mbedtls_sha256_starts(&sha256_ctx, 0); // 0 = SHA256, not SHA224
     mbedtls_sha256_update(&sha256_ctx, (const uint8_t *)esp_secure_cert_addr, integrity_tlv_offset);
     mbedtls_sha256_finish(&sha256_ctx, calculated_sha256);
     mbedtls_sha256_free(&sha256_ctx);
+#else
+    size_t hash_length = 0;
+    psa_status_t status = psa_hash_compute(PSA_ALG_SHA_256,
+                                          (const uint8_t *)esp_secure_cert_addr,
+                                          integrity_tlv_offset,
+                                          calculated_sha256,
+                                          SHA256_SIZE,
+                                          &hash_length);
+    if (status != PSA_SUCCESS || hash_length != SHA256_SIZE) {
+        ESP_LOGE(TAG, "PSA SHA256 calculation failed: 0x%x", (unsigned int)status);
+        return ESP_FAIL;
+    }
+#endif
 
     // Compare stored and calculated SHA256
     if (memcmp(stored_sha256, calculated_sha256, SHA256_SIZE) != 0) {

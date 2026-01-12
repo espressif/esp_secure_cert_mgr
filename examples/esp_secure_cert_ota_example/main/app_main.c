@@ -31,6 +31,7 @@
 #include "esp_secure_cert_tlv_config.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_tlv_read.h"
+#include "esp_secure_cert_signature_verify.h"
 #include "esp_partition.h"
 
 #define ESP_SECURE_CERT_TLV_PARTITION_NAME      "esp_secure_cert"
@@ -429,23 +430,24 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
 
     ESP_LOGI(TAG, "OTA download completed successfully");
     ESP_LOGI(TAG, "Checking footer TLV in the staging partition after downloading");
+    esp_secure_cert_tlv_set_partition(staging_partition); /* Set the staging partition as the active partition for secure verification   */
     err = esp_secure_cert_tlv_footer_check();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to check footer TLV in the staging partition after downloading: %s", esp_err_to_name(err));
+        esp_secure_cert_tlv_set_partition(NULL); /* Set the original partition as the active partition for secure verification */
         return err;
     }
     ESP_LOGI(TAG, "Footer TLV checked successfully");
 
 #if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
-    esp_secure_cert_tlv_set_partition(staging_partition);
 #if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
-    err = esp_secure_cert_verify_partition_signature(NULL);
+    err = esp_secure_cert_verify_partition_signature(NULL); /* Verify the signature of the esp_secure_cert partition */
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to verify esp_secure_cert partition signature: %s", esp_err_to_name(err));
-        esp_secure_cert_tlv_set_partition(NULL);
+        esp_secure_cert_tlv_set_partition(NULL); /* Set the original partition as the active partition for secure verification */
         return err;
     }
-#endif
+#endif /* CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION */
     /* Save staging partition info to NVS for recovery*/
     ESP_LOGI(TAG, "Saving staging partition info to NVS for recovery");
     err = save_staging_info_to_nvs(staging_partition);
@@ -475,11 +477,6 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
         return err;
     }
     ESP_LOGI(TAG, "Successfully copied to primary esp_secure_cert partition");
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to check footer TLV in the primary partition after copying: %s", esp_err_to_name(err));
-        return err;
-    }
-    ESP_LOGI(TAG, "Footer TLV checked successfully");
 
     esp_secure_cert_tlv_set_partition(NULL);
     /* Check if we can read the ca cert from the primary partition*/

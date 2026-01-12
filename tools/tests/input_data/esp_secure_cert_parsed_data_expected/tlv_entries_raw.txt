@@ -173,17 +173,15 @@ Data:
 TLV Entry #7: ESP_SECURE_CERT_TLV_TYPE_INTEGRITY
 ------------------------------------------------------------
 Offset:     0x1470
-Type:       8 (ESP_SECURE_CERT_TLV_TYPE_INTEGRITY)
+Type:       9 (ESP_SECURE_CERT_TLV_TYPE_INTEGRITY)
 Subtype:    0
 Flags:      0x00
 Length:     32 bytes
 Padding:    0 bytes
 Total size: 48 bytes
-CRC32:      0x7EC0A93B (✓ VALID)
+CRC32:      0xEBB07DAE (✓ VALID)
 Data:
     Raw data: 0be6bd6613bebb26f7939b2b5a7fcd550bab9ebf5a4e77a2912b67bf1346aa99
-
-✓ End of TLV entries (magic 0xFFFF) at offset 0x14A0
 
 ================================================================================
 PARTITION SUMMARY

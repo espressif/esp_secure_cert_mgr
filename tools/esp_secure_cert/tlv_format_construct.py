@@ -326,22 +326,11 @@ class TlvPartitionBuilder:
         self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY, subtype, integrity_data, 0)
         print(f"Added integrity TLV (subtype {subtype}) with SHA256: {partition_sha256.hex()}")
 
-    def build_partition(self, output_file: str) -> None:
+    def build_partition(self, output_file: str, add_tlv_integrity: bool = False) -> None:
         """Write partition to file with proper TLV termination"""
-        # Add integrity TLV by default (before end marker)
-        self.add_integrity_tlv(0)
 
-        # Add TLV termination marker at the end
-        # This prevents the parser from reading uninitialized flash (0xFFFFFFFF)
-        end_marker = struct.pack('<I', 0xFFFF)  # 16-bit end marker as used in the parser
-
-        # Ensure we don't exceed partition size
-        if self.current_offset + len(end_marker) > PARTITION_SIZE:
-            raise ValueError(f"Cannot add end marker: partition size would exceed {PARTITION_SIZE} bytes")
-
-        # Add the end marker
-        self.partition_data[self.current_offset:self.current_offset + len(end_marker)] = end_marker
-        self.current_offset += len(end_marker)
+        if add_tlv_integrity:
+            self.add_integrity_tlv(0)
 
         with open(output_file, 'wb') as f:
             f.write(self.partition_data[:self.current_offset])
@@ -535,7 +524,7 @@ class EspSecureCert:
         self._validate_entry(entry)
         self.secure_cert_entries.append(entry)
 
-    def generate_esp_secure_cert(self, target_chip, port=None):
+    def generate_esp_secure_cert(self, target_chip, port=None, add_tlv_integrity: bool = False):
         """
         Process ESP Secure Cert CSV and generate partition.
 
@@ -694,7 +683,7 @@ class EspSecureCert:
             print(f"\nSuccessfully processed {processed_count} out of {len(self.secure_cert_entries)} entries")
 
             # Build partition
-            self.builder.build_partition(self.bin_filename)
+            self.builder.build_partition(self.bin_filename, add_tlv_integrity)
             print(f'\nPartition generated: {self.bin_filename}')
 
             # Display summary
@@ -1486,6 +1475,8 @@ class EspSecureCert:
             f.write(bin_data)
             # Append signature blocks directly after partition data
             f.write(self.builder.partition_data[:self.builder.current_offset])
+
+        EspSecureCert.append_integrity_tlv(self.signed_bin_filename)
 
         print(f"\n=== Signed partition created: {self.signed_bin_filename} ===")
         return self.signed_bin_filename
