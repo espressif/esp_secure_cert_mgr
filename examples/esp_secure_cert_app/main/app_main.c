@@ -78,11 +78,28 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         goto exit;
     }
 
+#if (MBEDTLS_VERSION_NUMBER >= 0x04000000)
+    psa_key_id_t key_id = PSA_KEY_ID_NULL;
+    psa_status_t status = PSA_ERROR_GENERIC_ERROR;
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    psa_algorithm_t alg = PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256);
+    psa_set_key_type(&attributes, PSA_KEY_TYPE_RSA_KEY_PAIR);
+    psa_set_key_bits(&attributes, ds_data->rsa_length_bits);
+    psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_SIGN_HASH);
+    psa_set_key_algorithm(&attributes, alg);
+    psa_set_key_lifetime(&attributes, PSA_KEY_LIFETIME_ESP_DS);
+    status = psa_import_key(&attributes, (const uint8_t *)ds_data, sizeof(esp_ds_data_ctx_t), &key_id);
+    if (status != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "Failed to import the DS key, returned %d", status);
+        goto exit;
+    }
+#else
     esp_err_t esp_ret = esp_ds_init_data_ctx(ds_data);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialze the DS context");
         return esp_ret;
     }
+#endif /* MBEDTLS_VERSION_NUMBER >= 0x04000000 */
 
     const size_t sig_len = 256;
     uint32_t hash[8] = {[0 ... 7] = 0xAABBCCDD};
@@ -96,16 +113,27 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
 
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
     ret = esp_ds_rsa_sign(NULL, NULL, NULL, 0, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
-#elif ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
-    ret = esp_ds_rsa_sign(NULL, NULL, NULL, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
-#else
-    ret = esp_ds_rsa_sign(NULL, MBEDTLS_MD_SHA256, (const unsigned char *) hash, sizeof(hash), sig, SIG_SIZE, &sig_len_out);
-#endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %02X", ret);
         goto exit;
     }
     esp_ds_release_ds_lock();
+#elif ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
+    ret = esp_ds_rsa_sign(NULL, NULL, NULL, MBEDTLS_MD_SHA256, 0, (const unsigned char *) hash, sig);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %02X", ret);
+        goto exit;
+    }
+    esp_ds_release_ds_lock();
+#else
+    status = psa_sign_hash(key_id, alg, (const unsigned char *) hash, sizeof(hash), sig, SIG_SIZE, &sig_len_out);
+    if (status != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %d", status);
+        goto exit;
+    }
+    psa_destroy_key(key_id);
+    key_id = PSA_KEY_ID_NULL;
+#endif
 
     ret = mbedtls_pk_verify(&crt.pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, sig_len);
     if (ret != 0) {
@@ -118,7 +146,13 @@ exit:
     free(sig);
     mbedtls_x509_crt_free(&crt);
     printf("\nFailed to verify the ciphertext\n");
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     esp_ds_release_ds_lock();
+#else
+    if (key_id != PSA_KEY_ID_NULL) {
+        psa_destroy_key(key_id);
+    }
+#endif
     return ESP_FAIL;
 }
 #else
