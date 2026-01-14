@@ -5,6 +5,7 @@ import json
 from typing import Union
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 
+
 def get_efuse_summary_json(idf_target: str, port: str) -> dict:
     """
     Executes an 'espefuse' command to obtain
@@ -175,10 +176,10 @@ def configure_efuse_key_block(idf_target: str, port: str,
 
                     if existing_hmac_key != efuse_key_read:
                         raise ValueError('The HMAC key given does not '
-                                           'match with the one burned in the '
-                                           'efuse, Please burn the key in a '
-                                           'different key block')
-                
+                                         'match with the one burned in the '
+                                         'efuse, Please burn the key in a '
+                                         'different key block')
+
                 if (efuse_purpose == 'ECDSA_KEY'):
 
                     # Convert hex value to bytes object
@@ -224,7 +225,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
 
 
 def configure_efuse_key_block_local(efuse_key_file: str, efuse_key_id: int,
-                                   efuse_purpose: str) -> bytes:
+                                    efuse_purpose: str) -> bytes:
     """
     Configures the efuse key_block locally without burning to device.
     This function generates or reads the key file for local DS context creation.
@@ -254,7 +255,7 @@ def configure_efuse_key_block_local(efuse_key_file: str, efuse_key_id: int,
         elif efuse_purpose == 'ECDSA_KEY':
             # For ECDSA, the key file should already exist from private key processing
             raise FileNotFoundError(f'ECDSA key file not found: {efuse_key_file}. '
-                                  f'The ECDSA private key should be processed first.')
+                                    f'The ECDSA private key should be processed first.')
         else:
             # Default to 32-byte key
             key_data = os.urandom(32)

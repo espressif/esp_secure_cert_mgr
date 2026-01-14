@@ -164,7 +164,7 @@ static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(const uint8_t *in_b
     return ESP_OK;
 }
 #else
-static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(const uint8_t *in_buf, uint32_t len, uint8_t *output_buf, const uint8_t *key, size_t key_len, 
+static esp_err_t esp_secure_cert_crypto_gcm_decrypt_internal(const uint8_t *in_buf, uint32_t len, uint8_t *output_buf, const uint8_t *key, size_t key_len,
                                 const uint8_t *iv, const uint8_t *aad, const uint8_t *tag, size_t tag_len)
 {
     int ret = ESP_FAIL;
