@@ -896,8 +896,7 @@ class EspSecureCert:
                     if b'PRIVATE KEY-----' in pem_header and b'RSA' not in pem_header:
                         # Re-serialize as PKCS#8 using cryptography
                         from cryptography.hazmat.primitives import serialization
-                        from cryptography.hazmat.backends import default_backend
-                        key = serialization.load_pem_private_key(key_bytes, password=None, backend=default_backend())
+                        key = serialization.load_pem_private_key(key_bytes, password=None)
                         pem = key.private_bytes(
                             encoding=serialization.Encoding.PEM,
                             format=serialization.PrivateFormat.PKCS8,
@@ -1292,7 +1291,7 @@ class EspSecureCert:
             print(f"Error generating signature with espsecure.sign_data: {e}")
             raise
 
-    def add_signature_block_using_existing_key(self, data_file_path: str, signing_key_file: list[str] | str, signing_scheme: str):
+    def add_signature_block_using_existing_key(self, data_file_path: str, signing_key_file: Union[List[str], str], signing_scheme: str):
         """Add signature block to the partition using existing key
 
         Args:
