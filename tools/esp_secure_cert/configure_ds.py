@@ -3,7 +3,6 @@ import hmac
 import os
 import struct
 import sys
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.utils import int_to_bytes
@@ -78,7 +77,7 @@ def calculate_rsa_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
 
     rr = 1 << (key_size * 2)
     rinv = rr % pub_numbers.n
-    mprime = - rsa._modinv(M, 1 << 32)
+    mprime = - pow(M, -1, 1 << 32)
     mprime &= 0xFFFFFFFF
     length = key_size // 32 - 1
 
@@ -115,8 +114,7 @@ def calculate_rsa_ds_params(privkey, priv_key_pass, hmac_key, idf_target):
     assert len(p) == expected_len
 
     cipher = Cipher(algorithms.AES(aes_key),
-                    modes.CBC(iv),
-                    backend=default_backend())
+                    modes.CBC(iv))
     encryptor = cipher.encryptor()
     c = encryptor.update(p) + encryptor.finalize()
     return c, iv, key_size

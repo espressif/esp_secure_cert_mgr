@@ -7,15 +7,15 @@ on:
 
 jobs:
   build_and_upload:
-    runs-on: ubuntu-22.04  # 22.04 is the last version with Python 3.7
+    runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v2
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.7'
+        python-version: '3.8'
 
     - name: Install dependencies
       run: |
