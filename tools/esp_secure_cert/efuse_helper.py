@@ -145,7 +145,11 @@ def configure_efuse_key_block(idf_target: str, port: str,
               f'Generating a new key and burning it in the efuse..\n')
 
         if not os.path.exists(efuse_key_file):
-            raise FileNotFoundError('Key file not present')
+            # Generate 32 random bytes using urandom and write to efuse_key_file
+            hmac_key = os.urandom(32)
+            with open(efuse_key_file, "wb") as f:
+                f.write(hmac_key)
+            print(f'INFO: Generated new 32-byte random efuse key file: {efuse_key_file}')
 
         # Burn efuse key
         efuse_burn_key(idf_target, port, efuse_key_file,
@@ -163,6 +167,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
         # If the efuse key block is not readable or it has key
         # purpose set to a different value than given efuse_purpose
         # then we cannot use it for DS operation
+
         if kb_readable is True:
             if (efuse_summary_json[key_purpose]['value'] ==
                     efuse_purpose):
@@ -170,15 +175,15 @@ def configure_efuse_key_block(idf_target: str, port: str,
                 efuse_key_read = bytes.fromhex(efuse_key_read)
 
                 # Check if the key file exists and validate against efuse content
-                if os.path.exists(efuse_key_file):
+                if efuse_key_file is not None and os.path.exists(efuse_key_file):
                     with open(efuse_key_file, 'rb') as existing_hmac_file:
                         existing_hmac_key = existing_hmac_file.read()
 
                     if existing_hmac_key != efuse_key_read:
                         raise ValueError('The HMAC key given does not '
-                                         'match with the one burned in the '
-                                         'efuse, Please burn the key in a '
-                                         'different key block')
+                                           'match with the one burned in the '
+                                           'efuse, Please burn the key in a '
+                                           'different key block')
 
                 if (efuse_purpose == 'ECDSA_KEY'):
 
@@ -202,11 +207,15 @@ def configure_efuse_key_block(idf_target: str, port: str,
                 if (efuse_purpose == 'HMAC_DOWN_DIGITAL_SIGNATURE'
                         or efuse_purpose == 'HMAC_UP'):
                     # If key file doesn't exist, create it with efuse content
-                    with open(efuse_key_file, 'wb') as hmac_key_file:
-                        hmac_key_file.write(efuse_key_read)
+                    if efuse_key_file is not None:
+                        with open(efuse_key_file, 'wb') as hmac_key_file:
+                            hmac_key_file.write(efuse_key_read)
+                    # If efuse_key_file is None, skip writing and only return the key from efuse
 
                     print('Using the same hmac key burned '
                           f'in efuse {key_blk}')
+
+                return efuse_key_read
 
             else:
                 print(f'ERROR: Provided efuse key block'
@@ -241,7 +250,7 @@ def configure_efuse_key_block_local(efuse_key_file: str, efuse_key_id: int,
     print(f'INFO: Configuring key block {efuse_key_id} locally for {efuse_purpose}')
     print('WARNING: This will not burn the key to the device eFuse. The key will be used locally only.')
 
-    if os.path.exists(efuse_key_file):
+    if efuse_key_file is not None and os.path.exists(efuse_key_file):
         print(f'INFO: Using existing key file: {efuse_key_file}')
         with open(efuse_key_file, "rb") as key_file:
             key_data = key_file.read()
@@ -262,7 +271,10 @@ def configure_efuse_key_block_local(efuse_key_file: str, efuse_key_id: int,
             print(f'INFO: Generated 32-byte key for purpose: {efuse_purpose}')
 
         # Ensure the directory exists
-        os.makedirs(os.path.dirname(efuse_key_file), exist_ok=True)
+        if efuse_key_file is not None:
+            os.makedirs(os.path.dirname(efuse_key_file), exist_ok=True)
+        else:
+            efuse_key_file = "esp_efuse_file.bin"
 
         with open(efuse_key_file, "wb") as key_file:
             key_file.write(key_data)

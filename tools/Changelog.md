@@ -1,5 +1,9 @@
 # This file contains the list of changes across different versions
 
+## 2.5.1
+- Fixed the issue, where `configure_esp_secure_cert.py` tool unable to generate DS context using already burned efuse key on device
+when port is provided.
+
 ## 2.5.0
 ### Changed
 - Minimum Python version requirement updated from 3.7 to 3.8

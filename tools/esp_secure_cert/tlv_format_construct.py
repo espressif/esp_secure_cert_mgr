@@ -573,7 +573,7 @@ class EspSecureCert:
                             print(f"  - Will generate new HMAC key file: {hmac_key_file}")
 
                         hmac_key = configure_ds.configure_efuse_for_rsa(
-                            target_chip, port, hmac_key_file, efuse_key_file,
+                            target_chip, port, efuse_key_file,
                             str(entry['key_size']), entry['data_value'],
                             None, entry['efuse_id']
                         )
@@ -729,7 +729,7 @@ class EspSecureCert:
         if not os.path.exists(flash_filename):
             print(f"ERROR: The provided flash_filename {flash_filename} does not exist")
             sys.exit(-1)
-        flash_filename = self.signed_bin_filename
+
         # Check if the port is provided
         if not port:
             print("WARNING: Port is not provided, skipping flash operation")
