@@ -26,13 +26,20 @@
 #if (MBEDTLS_VERSION_NUMBER < 0x04000000)
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
+#else
+#include "psa/crypto.h"
 #endif // MBEDTLS_VERSION_NUMBER < 0x04000000
 #include "mbedtls/error.h"
 #include "esp_idf_version.h"
 
 #if SOC_ECDSA_SUPPORTED
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
 #include "ecdsa/ecdsa_alt.h"
+#else
+#include "psa_crypto_driver_esp_ecdsa.h"
 #endif
+#endif
+
 #define TAG "esp_secure_cert_app"
 
 // Modular function to print certificate or key data in PEM or DER format
@@ -121,6 +128,12 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
 #if (MBEDTLS_VERSION_NUMBER < 0x04000000)
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context ctr_drbg;
+#else
+    psa_key_id_t priv_key_id = 0;
+    psa_key_id_t pub_key_id = 0;
+    psa_algorithm_t sign_alg = 0;
+    psa_algorithm_t verify_alg = 0;
+    psa_status_t status = PSA_ERROR_GENERIC_ERROR;
 #endif // MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_pk_context pk;
     unsigned char *sig = NULL;
@@ -163,8 +176,8 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
         goto exit;
     }
 #endif
-    if (key_type == ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY) {
 #if SOC_ECDSA_SUPPORTED
+    if (key_type == ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY) {
         ESP_LOGI(TAG, "Setting up the ECDSA key from eFuse");
         uint8_t efuse_block_id;
         esp_ret = esp_secure_cert_get_priv_key_efuse_id(&efuse_block_id);
@@ -173,6 +186,8 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
             goto exit;
         }
         ESP_LOGI(TAG, "Using key from eFuse block %d for ECDSA key", efuse_block_id);
+
+#if (MBEDTLS_VERSION_NUMBER < 0x04000000)
         esp_ecdsa_pk_conf_t pk_conf = {
             .grp_id = MBEDTLS_ECP_DP_SECP256R1,
             .efuse_block = efuse_block_id,
@@ -183,8 +198,39 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
             goto exit;
         }
         ESP_LOGI(TAG, "Successfully set ECDSA key context");
+#else
+        psa_key_attributes_t key_attr = PSA_KEY_ATTRIBUTES_INIT;
+
+#if CONFIG_MBEDTLS_ECDSA_DETERMINISTIC && SOC_ECDSA_SUPPORT_DETERMINISTIC_MODE
+        sign_alg = PSA_ALG_DETERMINISTIC_ECDSA(PSA_ALG_SHA_256);
+#else
+        sign_alg = PSA_ALG_ECDSA(PSA_ALG_SHA_256);
 #endif
-    } else {
+        // Set attributes for opaque private key
+        psa_set_key_type(&key_attr, PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1));
+        psa_set_key_bits(&key_attr, 256);
+        psa_set_key_usage_flags(&key_attr, PSA_KEY_USAGE_SIGN_HASH);
+        psa_set_key_algorithm(&key_attr, sign_alg);
+        psa_set_key_lifetime(&key_attr, PSA_KEY_LIFETIME_ESP_ECDSA_VOLATILE);
+
+        esp_ecdsa_opaque_key_t opaque_key = {
+            .curve = ESP_ECDSA_CURVE_SECP256R1,
+            .efuse_block = efuse_block_id,
+            .use_km_key = false,
+        };
+
+        // Import opaque key reference
+        status = psa_import_key(&key_attr, (uint8_t*) &opaque_key, sizeof(opaque_key), &priv_key_id);
+        psa_reset_key_attributes(&key_attr);
+        if (status != PSA_SUCCESS) {
+            ESP_LOGE(TAG, "Failed to import opaque key reference");
+            esp_ret = ESP_FAIL;
+            goto exit;
+        }
+#endif
+    } else
+#endif /* SOC_ECDSA_SUPPORTED */
+    {
 #if (MBEDTLS_VERSION_NUMBER > 0x03000000) && (MBEDTLS_VERSION_NUMBER < 0x04000000)
         ret = mbedtls_pk_parse_key(&pk, (const uint8_t *)priv_key, priv_key_len, NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
 #else
@@ -213,7 +259,43 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
 #elif (MBEDTLS_VERSION_NUMBER < 0x04000000)
     ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, SIG_SIZE, &sig_len, mbedtls_ctr_drbg_random, &ctr_drbg);
 #else
-    ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, SIG_SIZE, &sig_len);
+    if (key_type != ESP_SECURE_CERT_ECDSA_PERIPHERAL_KEY) {
+        psa_key_attributes_t priv_key_attr = PSA_KEY_ATTRIBUTES_INIT;
+        ret = mbedtls_pk_get_psa_attributes(&pk, PSA_KEY_USAGE_SIGN_HASH, &priv_key_attr);
+        if (ret != 0) {
+            ESP_LOGE(TAG, "Failed to get the psa attributes");
+            esp_ret = ESP_FAIL;
+            goto exit;
+        }
+
+        psa_key_type_t key_type = psa_get_key_type(&priv_key_attr);
+        if (PSA_KEY_TYPE_IS_RSA(key_type)) {
+            sign_alg = PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256);
+        } else if (PSA_KEY_TYPE_IS_ECC(key_type)) {
+#if CONFIG_MBEDTLS_ECDSA_DETERMINISTIC
+            sign_alg = PSA_ALG_DETERMINISTIC_ECDSA(PSA_ALG_SHA_256);
+#else
+            sign_alg = PSA_ALG_ECDSA(PSA_ALG_SHA_256);
+#endif
+        }
+
+        // Import the private key into PSA
+        status = mbedtls_pk_import_into_psa(&pk, &priv_key_attr, &priv_key_id);
+        if (status != PSA_SUCCESS) {
+            ESP_LOGE(TAG, "Failed to import key into PSA with error %d", status);
+            esp_ret = ESP_FAIL;
+            goto exit;
+        }
+        psa_reset_key_attributes(&priv_key_attr);
+    }
+
+    status = psa_sign_hash(priv_key_id, sign_alg, (const unsigned char *) hash, sizeof(hash), sig, SIG_SIZE, &sig_len);
+    if (status != PSA_SUCCESS) {
+        ret = -1;
+    } else {
+        ret = 0;
+    }
+    psa_destroy_key(priv_key_id);
 #endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to sign the data");
@@ -223,7 +305,47 @@ static esp_err_t test_priv_key_validity(unsigned char* priv_key, size_t priv_key
         ESP_LOGI(TAG, "Successfully signed the data");
     }
 
+#if (MBEDTLS_VERSION_NUMBER >= 0x04000000)
+    psa_key_attributes_t pub_key_attr = PSA_KEY_ATTRIBUTES_INIT;
+    ret = mbedtls_pk_get_psa_attributes(&crt.pk, PSA_KEY_USAGE_VERIFY_HASH, &pub_key_attr);
+    if (ret != 0) {
+        ESP_LOGE(TAG, "Failed to get the psa attributes, returned %d", ret);
+        esp_ret = ESP_FAIL;
+        goto exit;
+    }
+
+    key_type = psa_get_key_type(&pub_key_attr);
+
+    if (PSA_KEY_TYPE_IS_RSA(key_type)) {
+        verify_alg = PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256);
+    } else if (PSA_KEY_TYPE_IS_ECC(key_type)) {
+#if CONFIG_MBEDTLS_ECDSA_DETERMINISTIC
+        verify_alg = PSA_ALG_DETERMINISTIC_ECDSA(PSA_ALG_SHA_256);
+#else
+        verify_alg = PSA_ALG_ECDSA(PSA_ALG_SHA_256);
+#endif
+    }
+
+    // Import the public key into PSA
+    status = mbedtls_pk_import_into_psa(&crt.pk, &pub_key_attr, &pub_key_id);
+    psa_reset_key_attributes(&pub_key_attr);
+    if (status != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "Failed to import key into PSA with error %d", status);
+        esp_ret = ESP_FAIL;
+        goto exit;
+    }
+
+    status = psa_verify_hash(pub_key_id, verify_alg, (const unsigned char *) hash, sizeof(hash), sig, sig_len);
+    if (status != PSA_SUCCESS) {
+        ESP_LOGE(TAG, "Failed to verify the signed data with error %d", status);
+        ret = -1;
+    } else {
+        ret = 0;
+    }
+    psa_destroy_key(pub_key_id);
+#else
     ret = mbedtls_pk_verify(&crt.pk, MBEDTLS_MD_SHA256, (const unsigned char *) hash, 0, sig, sig_len);
+#endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to verify the signed data");
         esp_ret = ESP_FAIL;
@@ -241,7 +363,6 @@ exit:
     return esp_ret;
 }
 #endif
-
 void app_main()
 {
     uint32_t len = 0;
