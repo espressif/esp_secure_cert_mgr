@@ -3,6 +3,7 @@
 ## 2.5.1
 - Fixed the issue, where `configure_esp_secure_cert.py` tool unable to generate DS context using already burned efuse key on device
 when port is provided.
+- Added support for `ECDSA_KEY_P256` efuse purpose.
 
 ## 2.5.0
 ### Changed

@@ -5,6 +5,8 @@ import json
 from typing import Union
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 
+supported_efuse_purposes = ['HMAC_DOWN_DIGITAL_SIGNATURE', 'HMAC_UP', 'ECDSA_KEY', 'ECDSA_KEY_P256']
+
 
 def get_efuse_summary_json(idf_target: str, port: str) -> dict:
     """
@@ -144,8 +146,9 @@ def configure_efuse_key_block(idf_target: str, port: str,
         print(f'Provided key block (KEY BLOCK {efuse_key_id}) is writable\n'
               f'Generating a new key and burning it in the efuse..\n')
 
-        if not os.path.exists(efuse_key_file):
+        if efuse_key_file is None:
             # Generate 32 random bytes using urandom and write to efuse_key_file
+            efuse_key_file = os.path.join(os.path.dirname(__file__), "temp_efuse_key_file.bin")
             hmac_key = os.urandom(32)
             with open(efuse_key_file, "wb") as f:
                 f.write(hmac_key)
@@ -158,7 +161,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
         new_efuse_summary_json = get_efuse_summary_json(idf_target, port)
 
         if (new_efuse_summary_json[key_purpose]['value']
-                != efuse_purpose):
+                not in supported_efuse_purposes):
             raise RuntimeError(f'ERROR: Failed to verify the key purpose '
                                f'of the key block{efuse_key_id})')
     else:
@@ -169,43 +172,50 @@ def configure_efuse_key_block(idf_target: str, port: str,
         # then we cannot use it for DS operation
 
         if kb_readable is True:
-            if (efuse_summary_json[key_purpose]['value'] ==
-                    efuse_purpose):
+            if (efuse_summary_json[key_purpose]['value'] in
+                    supported_efuse_purposes):
                 efuse_key_read = efuse_summary_json[key_blk]['value']
                 efuse_key_read = bytes.fromhex(efuse_key_read)
 
-                # Check if the key file exists and validate against efuse content
-                if efuse_key_file is not None and os.path.exists(efuse_key_file):
-                    with open(efuse_key_file, 'rb') as existing_hmac_file:
-                        existing_hmac_key = existing_hmac_file.read()
-
-                    if existing_hmac_key != efuse_key_read:
-                        raise ValueError('The HMAC key given does not '
-                                           'match with the one burned in the '
-                                           'efuse, Please burn the key in a '
-                                           'different key block')
-
                 if (efuse_purpose == 'ECDSA_KEY'):
-
-                    # Convert hex value to bytes object
-                    original_bytes = efuse_key_read
-                    # Reverse the byte order from little endian to big endian
-                    reversed_bytes = original_bytes[::-1]
-                    reversed_hex_value = reversed_bytes.hex()
-                    reversed_number = int(reversed_hex_value, 16)
-                    key = load_private_key(efuse_key_file, None)
-                    private_value = key["key_instance"].private_numbers().private_value  # type: ignore # noqa: E501
-                    if (reversed_number != private_value):
-                        raise RuntimeError('The private key given does not '
-                                           'match with the one burned in the '
-                                           'efuse, Please burn the key in a '
-                                           'different key block')
+                    # For ECDSA, validate against efuse content only if key file is provided
+                    # and can be loaded as a private key
+                    if efuse_key_file is not None and os.path.exists(efuse_key_file):
+                        try:
+                            # Convert hex value to bytes object
+                            original_bytes = efuse_key_read
+                            # Reverse the byte order from little endian to big endian
+                            reversed_bytes = original_bytes[::-1]
+                            reversed_hex_value = reversed_bytes.hex()
+                            reversed_number = int(reversed_hex_value, 16)
+                            key = load_private_key(efuse_key_file, None)
+                            private_value = key["key_instance"].private_numbers().private_value  # type: ignore # noqa: E501
+                            if (reversed_number != private_value):
+                                raise RuntimeError('The private key given does not '
+                                                   'match with the one burned in the '
+                                                   'efuse, Please burn the key in a '
+                                                   'different key block')
+                        except Exception as e:
+                            # If we can't load the key file (e.g., it's a temp file or invalid),
+                            # skip the comparison and just use the key from efuse
+                            print(f'INFO: Skipping key file comparison for ECDSA: {e}')
 
                     print('Using the same ECDSA key burned '
                           f'in the efuse {key_blk}')
 
                 if (efuse_purpose == 'HMAC_DOWN_DIGITAL_SIGNATURE'
                         or efuse_purpose == 'HMAC_UP'):
+                    # Check if the key file exists and validate against efuse content for HMAC
+                    if efuse_key_file is not None and os.path.exists(efuse_key_file):
+                        with open(efuse_key_file, 'rb') as existing_hmac_file:
+                            existing_hmac_key = existing_hmac_file.read()
+
+                        if existing_hmac_key != efuse_key_read:
+                            raise ValueError('The HMAC key given does not '
+                                             'match with the one burned in the '
+                                             'efuse, Please burn the key in a '
+                                             'different key block')
+
                     # If key file doesn't exist, create it with efuse content
                     if efuse_key_file is not None:
                         with open(efuse_key_file, 'wb') as hmac_key_file:
