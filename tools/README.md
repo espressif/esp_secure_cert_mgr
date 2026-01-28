@@ -2,7 +2,7 @@
 > WARNING: This tool is to be used only for development purpose. It does not enable any kind security feature for the protection of the sensitive data in the `esp_secure_cert` partition.
 
 The script [configure_esp_secure_cert.py](https://github.com/espressif/esp_secure_cert_mgr/blob/main/tools/configure_esp_secure_cert.py) is used for configuring the ESP platform with PKI credentials into the esp_secure_cert partition which shall reside on its flash storage.
-It also configures the DS peripheral on the ESP32-S2/ESP32-S3/ESP32-C3 SoC. The steps in the script are based on technical details of certain operations in the Digital Signature calculation, which can be found in the Digital Signature Section of [ESP32-S2 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-s2_technical_reference_manual_en.pdf).
+It also configures the DS peripheral on the ESP32-S2/ESP32-S3/ESP32-C3/ESP32-C5 SoC. The steps in the script are based on technical details of certain operations in the Digital Signature calculation, which can be found in the Digital Signature Section of [ESP32-S2 TRM](https://www.espressif.com/sites/default/files/documentation/esp32-s2_technical_reference_manual_en.pdf).
 
 The script generates a partition named `esp_secure_cert` on host machine, that contains the parameters required by the DS peripheral. The `configure_esp_secure_cert.py` utility automatically flashes the partition to the ESP platform which has been connected.
 

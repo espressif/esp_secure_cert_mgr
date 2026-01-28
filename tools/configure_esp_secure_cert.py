@@ -3,9 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import argparse
 import os
-import subprocess
 import sys
-import csv
 from esp_secure_cert import nvs_format, custflash_format
 from esp_secure_cert import tlv_format
 from esp_secure_cert.tlv_format_construct import (
@@ -30,6 +28,7 @@ bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
 supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
                      'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5'}
+
 
 def cleanup(args):
     if args.keep_ds_data is False:
@@ -81,7 +80,7 @@ def main():
         choices=supported_targets,
         default='esp32c3',
         metavar='target chip',
-        help='The target chip e.g. esp32s2, s3, c3')
+        help='The target chip e.g. esp32s2, s3, c3, c5')
 
     parser.add_argument(
         '--summary',
@@ -268,7 +267,7 @@ def main():
                 'algorithm': args.priv_key_algo[0].upper() if args.priv_key_algo else '',
                 'key_size': int(args.priv_key_algo[1]) if args.priv_key_algo and len(args.priv_key_algo) > 1 else 0,
                 'efuse_id': args.efuse_key_id if hasattr(args, 'efuse_key_id') else 0,
-                'efuse_key_file': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None, # For HMAC key only, not for ECDSA key
+                'efuse_key_file': args.efuse_key_file if hasattr(args, 'efuse_key_file') else None,  # For HMAC key only, not for ECDSA key
             }
             esp_secure_cert.add_entry(entry_priv)
 
@@ -332,12 +331,15 @@ def main():
         nvs_format.generate_partition(csv_filename, bin_filename)
 
     if args.skip_flash is False:
-        flash_esp_secure_cert_partition(idf_target,
-                                        args.port,
-                                        args.sec_cert_part_offset,
-                                        bin_filename)
+        esp_secure_cert = EspSecureCert()
+        esp_secure_cert.flash_esp_secure_cert_partition(
+            idf_target,
+            args.port,
+            args.sec_cert_part_offset,
+            bin_filename)
 
     cleanup(args)
+
 
 if __name__ == '__main__':
     main()
