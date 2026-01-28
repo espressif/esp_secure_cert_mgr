@@ -152,7 +152,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
             hmac_key = os.urandom(32)
             with open(efuse_key_file, "wb") as f:
                 f.write(hmac_key)
-            print(f'INFO: Generated new 32-byte random efuse key file: {efuse_key_file}')
+            print(f'INFO: Generated new efuse key file: {efuse_key_file} with 32-byte random HMAC key')
 
         # Burn efuse key
         efuse_burn_key(idf_target, port, efuse_key_file,
