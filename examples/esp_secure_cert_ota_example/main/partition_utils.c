@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <sys/param.h>
 #include "esp_flash_partitions.h"
-#include "esp_flash_internal.h"
+#include "esp_private/esp_flash_internal.h"
 #include "esp_image_format.h"
 #include "esp_flash.h"
 #include "esp_partition.h"

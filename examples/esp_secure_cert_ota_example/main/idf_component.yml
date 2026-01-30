@@ -6,3 +6,5 @@ dependencies:
     override_path: '../../../' # three levels up, pointing the directory with the component itself
   protocol_examples_common:
     path: ${IDF_PATH}/examples/common_components/protocol_examples_common
+  espressif/esp_encrypted_img:
+    version: "^2.0.0"

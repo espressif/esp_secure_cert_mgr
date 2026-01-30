@@ -33,6 +33,12 @@
 #include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_cert_signature_verify.h"
 #include "esp_partition.h"
+#ifdef CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
+#include "esp_encrypted_img.h"
+#if defined(CONFIG_PRE_ENCRYPTED_OTA_USE_ECIES)
+#define HMAC_UP_KEY_ID 2
+#endif
+#endif
 
 #define ESP_SECURE_CERT_TLV_PARTITION_NAME      "esp_secure_cert"
 #define ESP_SECURE_CERT_CUST_FLASH_PARTITION_TYPE           0x3F
@@ -314,6 +320,35 @@ static esp_err_t check_and_recover_staging_partition(void)
     return ESP_OK;
 }
 
+#ifdef CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
+static esp_err_t _decrypt_cb(decrypt_cb_arg_t *args, void *user_ctx)
+{
+    if (args == NULL || user_ctx == NULL) {
+        ESP_LOGE(TAG, "_decrypt_cb: Invalid argument");
+        return ESP_ERR_INVALID_ARG;
+    }
+    esp_err_t err;
+    pre_enc_decrypt_arg_t pargs = {};
+    pargs.data_in = args->data_in;
+    pargs.data_in_len = args->data_in_len;
+    err = esp_encrypted_img_decrypt_data((esp_decrypt_handle_t *)user_ctx, &pargs);
+    if (err != ESP_OK && err != ESP_ERR_NOT_FINISHED) {
+        ESP_LOGE(TAG, "Decrypt callback failed %d", err);
+        free(pargs.data_out);
+        return err;
+    }
+
+    if (pargs.data_out_len > 0) {
+        args->data_out = pargs.data_out;
+        args->data_out_len = pargs.data_out_len;
+    } else {
+        args->data_out_len = 0;
+    }
+
+    return ESP_OK;
+}
+#endif /* CONFIG_ESP_HTTPS_OTA_DECRYPT_CB */
+
 /**
  * @brief Perform esp_secure_cert partition OTA update
  *
@@ -528,11 +563,64 @@ static void esp_secure_cert_ota_task(void *pvParameter)
     }
 #endif
 
+#ifdef CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
+    // Initialize decrypt configuration and handle for pre-encrypted OTA
+    esp_decrypt_cfg_t decrypt_cfg = {0};
+#if defined(CONFIG_PRE_ENCRYPTED_OTA_USE_RSA)
+#if defined(CONFIG_PRE_ENCRYPTED_RSA_USE_DS)
+    esp_ds_data_ctx_t *ds_data = esp_secure_cert_get_ds_ctx();
+    if (ds_data == NULL) {
+        ESP_LOGE(TAG, "Failed to get DS context");
+        vTaskDelete(NULL);
+        return;
+    }
+    decrypt_cfg.ds_data = ds_data;
+#else
+    extern const char rsa_private_pem_start[] asm("_binary_private_pem_start");
+    extern const char rsa_private_pem_end[] asm("_binary_private_pem_end");
+    decrypt_cfg.rsa_priv_key = rsa_private_pem_start;
+    decrypt_cfg.rsa_priv_key_len = rsa_private_pem_end - rsa_private_pem_start;
+#endif /* CONFIG_PRE_ENCRYPTED_RSA_USE_DS */
+#elif defined(CONFIG_PRE_ENCRYPTED_OTA_USE_ECIES)
+    decrypt_cfg.hmac_key_id = HMAC_UP_KEY_ID;
+#endif /* CONFIG_PRE_ENCRYPTED_OTA_USE_RSA */
+
+    esp_decrypt_handle_t decrypt_handle = esp_encrypted_img_decrypt_start(&decrypt_cfg);
+    if (!decrypt_handle) {
+        ESP_LOGE(TAG, "Failed to initialize decrypt handle for pre-encrypted OTA");
+        vTaskDelete(NULL);
+        return;
+    }
+#endif /* CONFIG_ESP_HTTPS_OTA_DECRYPT_CB */
+
     esp_https_ota_config_t ota_config = {
         .http_config = &config,
+#ifdef CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
+        .decrypt_cb = _decrypt_cb,
+        .decrypt_user_ctx = (void *)decrypt_handle,
+        .enc_img_header_size = esp_encrypted_img_get_header_size(),
+#endif
     };
 
     esp_err_t ret = esp_secure_cert_ota_update(&ota_config);
+
+#ifdef CONFIG_ESP_HTTPS_OTA_DECRYPT_CB
+    // Cleanup decrypt handle - check if data was completely received first
+    if (ret != ESP_OK) {
+        esp_encrypted_img_decrypt_abort(decrypt_handle);
+    } else {
+        // Check if all data was decrypted before calling decrypt_end
+        if (esp_encrypted_img_is_complete_data_received(decrypt_handle)) {
+            esp_err_t decrypt_end_err = esp_encrypted_img_decrypt_end(decrypt_handle);
+            if (decrypt_end_err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to finalize decrypt handle: %s", esp_err_to_name(decrypt_end_err));
+            }
+        } else {
+            ESP_LOGW(TAG, "Not all data was decrypted, aborting decrypt handle");
+            esp_encrypted_img_decrypt_abort(decrypt_handle);
+        }
+    }
+#endif
 
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "ESP Secure Cert OTA succeeded!");
