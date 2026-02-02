@@ -8,7 +8,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.utils import int_to_bytes
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 from esp_secure_cert.efuse_helper import (
-    log_efuse_summary,
     configure_efuse_key_block,
     configure_efuse_key_block_local,
 )
@@ -26,6 +25,7 @@ supported_key_size_rsa = {'esp32s2': [1024, 2048, 3072, 4096],
 supported_targets_ecdsa = ['esp32h2', 'esp32p4']
 supported_key_size_ecdsa = {'esp32h2': [256],
                             'esp32p4': [256]}
+
 
 def number_as_bytes(number, pad_bits=None):
     """
@@ -194,13 +194,8 @@ def configure_efuse_for_rsa(idf_target, port, efuse_key_file, rsa_key_size, priv
         print('WARNING: The key will NOT be burned to the device eFuse automatically.')
         hmac_key = configure_efuse_key_block_local(efuse_key_file, efuse_key_id, efuse_purpose)
 
-    hmac_key_filename = os.path.join("esp_secure_cert_data", "hmac_key.bin")
-    if hmac_key is not None:
-        with open(hmac_key_filename, "wb") as hkf:
-            hkf.write(hmac_key)
-        print(f'INFO: HMAC key saved to: {hmac_key_filename}')
-
     return hmac_key
+
 
 def configure_efuse_for_ecdsa(idf_target, port, ecdsa_key_file, esp_secure_cert_data_dir, ecdsa_key_size, priv_key, priv_key_pass, efuse_key_id):
     """

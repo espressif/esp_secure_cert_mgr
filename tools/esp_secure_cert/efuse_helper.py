@@ -4,6 +4,7 @@ import sys
 import json
 from typing import Union
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
+from esp_secure_cert.esp_secure_cert_helper import esp_secure_cert_data_dir
 
 supported_efuse_purposes = ['HMAC_DOWN_DIGITAL_SIGNATURE', 'HMAC_UP', 'ECDSA_KEY', 'ECDSA_KEY_P256']
 
@@ -146,13 +147,18 @@ def configure_efuse_key_block(idf_target: str, port: str,
         print(f'Provided key block (KEY BLOCK {efuse_key_id}) is writable\n'
               f'Generating a new key and burning it in the efuse..\n')
 
+        hmac_key = None
         if efuse_key_file is None:
             # Generate 32 random bytes using urandom and write to efuse_key_file
-            efuse_key_file = os.path.join(os.path.dirname(__file__), "temp_efuse_key_file.bin")
+            efuse_key_file = os.path.join(esp_secure_cert_data_dir, "hmac_key.bin")
             hmac_key = os.urandom(32)
             with open(efuse_key_file, "wb") as f:
                 f.write(hmac_key)
             print(f'INFO: Generated new efuse key file: {efuse_key_file} with 32-byte random HMAC key')
+        else:
+            # Write the content of efuse_key_file into hmac_key (read as bytes)
+            with open(efuse_key_file, "rb") as f:
+                hmac_key = f.read()
 
         # Burn efuse key
         efuse_burn_key(idf_target, port, efuse_key_file,
@@ -164,6 +170,8 @@ def configure_efuse_key_block(idf_target: str, port: str,
                 not in supported_efuse_purposes):
             raise RuntimeError(f'ERROR: Failed to verify the key purpose '
                                f'of the key block{efuse_key_id})')
+
+        return hmac_key
     else:
         # If the efuse key block is readable, then read the key from
         # efuse block and provide it as the return argument
@@ -220,7 +228,10 @@ def configure_efuse_key_block(idf_target: str, port: str,
                     if efuse_key_file is not None:
                         with open(efuse_key_file, 'wb') as hmac_key_file:
                             hmac_key_file.write(efuse_key_read)
-                    # If efuse_key_file is None, skip writing and only return the key from efuse
+                    else:
+                        efuse_key_file = os.path.join(esp_secure_cert_data_dir, "hmac_key.bin")
+                        with open(efuse_key_file, 'wb') as hmac_key_file:
+                            hmac_key_file.write(efuse_key_read)
 
                     print('Using the same hmac key burned '
                           f'in efuse {key_blk}')
@@ -280,11 +291,13 @@ def configure_efuse_key_block_local(efuse_key_file: str, efuse_key_id: int,
             key_data = os.urandom(32)
             print(f'INFO: Generated 32-byte key for purpose: {efuse_purpose}')
 
-        # Ensure the directory exists
-        if efuse_key_file is not None:
-            os.makedirs(os.path.dirname(efuse_key_file), exist_ok=True)
+        # If file is not provided, create in esp_secure_cert_data folder
+        if efuse_key_file is None:
+            esp_secure_cert_data_dir = "esp_secure_cert_data"
+            os.makedirs(esp_secure_cert_data_dir, exist_ok=True)
+            efuse_key_file = os.path.join(esp_secure_cert_data_dir, "hmac_key.bin")
         else:
-            efuse_key_file = "esp_efuse_file.bin"
+            os.makedirs(os.path.dirname(efuse_key_file), exist_ok=True)
 
         with open(efuse_key_file, "wb") as key_file:
             key_file.write(key_data)
