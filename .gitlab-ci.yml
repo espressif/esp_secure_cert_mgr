@@ -258,6 +258,8 @@ build_examples_app_master:
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/test_apps
+    # Ensure esptool is available (required by pytest-embedded-qemu for image creation)
+    - pip install -U esptool
     # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
     - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
     # Use version-specific requirements file if it exists, otherwise use default
@@ -287,6 +289,8 @@ qemu_test_legacy:
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/test_apps
+    # Ensure esptool is available (required by pytest-embedded-qemu for image creation)
+    - pip install -U esptool
     # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
     - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
     # Use version-specific requirements file if it exists, otherwise use default
@@ -397,6 +401,8 @@ qemu_test_examples_app_master:
     - export ROOT_PATH=$PWD
     - . $IDF_PATH/export.sh
     - cd $ROOT_PATH/examples/esp_secure_cert_app
+    # Ensure esptool is available (required by pytest-embedded-qemu for image creation)
+    - pip install -U esptool
     # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
     - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
     # Use version-specific requirements file if it exists, otherwise use default
