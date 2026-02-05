@@ -54,7 +54,7 @@ variables:
         echo "Using default requirements file: requirements.txt"
         pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
       fi
-    - idf-ci build run --target $IDF_TARGET -m "qemu"
+    - idf-build-apps build -p . --recursive --target ${IDF_TARGET} --config "sdkconfig.ci.${CONFIG}=${CONFIG}"  --build-dir build_${IDF_TARGET}_${CONFIG}
   artifacts:
     paths:
       - test_apps/build_${IDF_TARGET}_${CONFIG}
@@ -82,7 +82,7 @@ variables:
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/test_apps
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
-    - idf-build-apps build -p . --recursive --target esp32c3 --config "sdkconfig.ci.${CONFIG}=${CONFIG}"  --build-dir build_@t_@w
+    - idf-build-apps build -p . --recursive --target ${IDF_TARGET} --config "sdkconfig.ci.${CONFIG}=${CONFIG}"  --build-dir build_${IDF_TARGET}_${CONFIG}
 
 .build_v5.0:
   extends: .build_v4.4

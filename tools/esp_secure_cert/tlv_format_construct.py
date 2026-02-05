@@ -339,7 +339,7 @@ class EspSecureCert:
             os.makedirs(esp_secure_cert_data_dir)
 
         self.bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert.bin")
-        self.signed_bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert_signed_partition.bin")
+        self.signed_bin_filename = os.path.join(esp_secure_cert_data_dir, "esp_secure_cert_signed.bin")
 
     def __del__(self):
         """Destructor - cleanup when object is destroyed"""
