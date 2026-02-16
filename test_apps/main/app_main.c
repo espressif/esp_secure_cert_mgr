@@ -46,8 +46,8 @@
 #include "bignum_impl.h"
 #if (MBEDTLS_MAJOR_VERSION < 4)
 #include "mbedtls/aes.h"
-#endif // MBEDTLS_MAJOR_VERSION < 4
 #include "mbedtls/gcm.h"
+#endif // MBEDTLS_MAJOR_VERSION < 4
 #include "nvs_flash.h"
 #include "esp_secure_cert_read.h"
 #include "esp_secure_cert_config.h"

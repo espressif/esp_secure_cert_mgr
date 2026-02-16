@@ -4,8 +4,9 @@ menu "ESP Secure Cert Manager"
         bool "Enable DS peripheral support"
         default y
         depends on SOC_DIG_SIGN_SUPPORTED
+        select MBEDTLS_HARDWARE_RSA_DS_PERIPHERAL
         help
-            Enable the DS peripheral support. Not supported on targets that do not support Digital Signature peripheral
+            Enable the RSA DS peripheral support. Not supported on targets that do not support Digital Signature peripheral
 
     config ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
         bool "Enable support for legacy formats"
