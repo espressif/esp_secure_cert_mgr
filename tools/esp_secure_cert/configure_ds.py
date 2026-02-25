@@ -8,7 +8,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.utils import int_to_bytes
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 from esp_secure_cert.efuse_helper import (
-    log_efuse_summary,
     configure_efuse_key_block,
     configure_efuse_key_block_local,
 )
@@ -26,6 +25,7 @@ supported_key_size_rsa = {'esp32s2': [1024, 2048, 3072, 4096],
 supported_targets_ecdsa = ['esp32h2', 'esp32p4']
 supported_key_size_ecdsa = {'esp32h2': [256],
                             'esp32p4': [256]}
+
 
 def number_as_bytes(number, pad_bits=None):
     """
@@ -171,7 +171,7 @@ def get_ecdsa_key_bytes(privkey, priv_key_pass, key_length_bytes):
     return ecdsa_key
 
 
-def configure_efuse_for_rsa(idf_target, port, hmac_key_file, efuse_key_file, rsa_key_size, priv_key, priv_key_pass, efuse_key_id):
+def configure_efuse_for_rsa(idf_target, port, efuse_key_file, rsa_key_size, priv_key, priv_key_pass, efuse_key_id):
     """
     Configure RSA DS with dual flow support:
     1. If port is provided: Establish a serial connection with the device and configure the eFuses by checking the contents accordingly.
@@ -185,36 +185,17 @@ def configure_efuse_for_rsa(idf_target, port, hmac_key_file, efuse_key_file, rsa
     # from the efuse block (if the efuse block already contains a key).
     efuse_purpose = 'HMAC_DOWN_DIGITAL_SIGNATURE'
     hmac_key = None
-
-    # Determine which key file to use
-    if (efuse_key_file is None or not os.path.exists(efuse_key_file)):
-        if not os.path.exists(hmac_key_file):
-            hmac_key = os.urandom(32)
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(hmac_key_file), exist_ok=True)
-            with open(hmac_key_file, "wb+") as key_file:
-                key_file.write(hmac_key)
-            print(f'INFO: Generated new HMAC key and saved to: {hmac_key_file}')
-
-        efuse_key_file = hmac_key_file
-    else:
-        with open(efuse_key_file, "rb") as key_file:
-            hmac_key = key_file.read()
-        print(f'INFO: Using the eFuse key given at {efuse_key_file} as the HMAC key')
-
     # Choose flow based on port availability
     if port:
         print(f'INFO: Port provided ({port}). Using device eFuse burning flow.')
-        configure_efuse_key_block(idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
+        hmac_key = configure_efuse_key_block(idf_target, port, efuse_key_file, efuse_key_id, efuse_purpose)
     else:
         print('INFO: No port provided. Using local key configuration (no device interaction).')
         print('WARNING: The key will NOT be burned to the device eFuse automatically.')
-        configure_efuse_key_block_local(efuse_key_file, efuse_key_id, efuse_purpose)
-
-    with open(efuse_key_file, "rb") as key_file:
-        hmac_key = key_file.read()
+        hmac_key = configure_efuse_key_block_local(efuse_key_file, efuse_key_id, efuse_purpose)
 
     return hmac_key
+
 
 def configure_efuse_for_ecdsa(idf_target, port, ecdsa_key_file, esp_secure_cert_data_dir, ecdsa_key_size, priv_key, priv_key_pass, efuse_key_id):
     """
