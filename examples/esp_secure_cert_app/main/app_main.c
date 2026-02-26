@@ -87,7 +87,7 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
     psa_set_key_bits(&attributes, ds_data->rsa_length_bits);
     psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_SIGN_HASH);
     psa_set_key_algorithm(&attributes, alg);
-    psa_set_key_lifetime(&attributes, PSA_KEY_LIFETIME_ESP_DS);
+    psa_set_key_lifetime(&attributes, PSA_KEY_LIFETIME_ESP_RSA_DS);
     status = psa_import_key(&attributes, (const uint8_t *)ds_data, sizeof(esp_ds_data_ctx_t), &key_id);
     if (status != PSA_SUCCESS) {
         ESP_LOGE(TAG, "Failed to import the DS key, returned %d", status);
