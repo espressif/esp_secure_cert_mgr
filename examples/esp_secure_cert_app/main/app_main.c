@@ -20,6 +20,10 @@
 #include "esp_secure_cert_tlv_read.h"
 #include "esp_secure_cert_signature_verify.h"
 
+#ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
+#include "esp_secure_cert_write.h"
+#endif
+
 #include "mbedtls/ssl.h"
 #include "mbedtls/pk.h"
 #include "mbedtls/x509.h"
@@ -397,8 +401,11 @@ exit:
     return esp_ret;
 }
 #endif
-void app_main()
+
+static esp_err_t test_read_existing_data(void)
 {
+    ESP_LOGI(TAG, "\n==================== ESP SECURE CERT READ DEMO ====================");
+
     uint32_t len = 0;
     char *addr = NULL;
     esp_err_t esp_ret = ESP_FAIL;
@@ -491,4 +498,94 @@ void app_main()
     esp_secure_cert_list_tlv_entries();
 #endif
 
+    ESP_LOGI(TAG, "==================== ESP SECURE CERT READ DEMO END ==================");
+    return esp_ret;
+}
+
+#ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
+/**
+ * @brief Minimal write demo - shows basic usage of esp_secure_cert write API
+ *
+ * Demonstrates:
+ * - Erasing the partition
+ * - Writing a TLV entry with user data
+ * - Reading it back to verify
+ */
+static esp_err_t run_write_demo(void)
+{
+    ESP_LOGI(TAG, "=== Write Demo: Basic TLV write/read ===");
+
+    // Erase partition first
+    esp_err_t err = esp_secure_cert_erase_partition();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to erase partition: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "Partition erased");
+
+    // Write sample user data
+    const char *sample_data = "Hello from esp_secure_cert write demo!";
+    esp_secure_cert_tlv_info_t tlv_info = {
+        .type = ESP_SECURE_CERT_USER_DATA_1,
+        .subtype = ESP_SECURE_CERT_SUBTYPE_0,
+        .data = (char *)sample_data,
+        .length = strlen(sample_data) + 1,
+        .flags = 0
+    };
+
+    err = esp_secure_cert_append_tlv(&tlv_info, NULL);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write TLV: %s", esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG, "Wrote user data TLV");
+
+    // Read back and verify
+    esp_secure_cert_tlv_config_t read_cfg = {
+        .type = ESP_SECURE_CERT_USER_DATA_1,
+        .subtype = ESP_SECURE_CERT_SUBTYPE_0
+    };
+    esp_secure_cert_tlv_info_t read_info = {};
+
+    err = esp_secure_cert_get_tlv_info(&read_cfg, &read_info);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read back TLV: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "Read back: \"%s\" (len=%"PRIu32")", read_info.data, read_info.length);
+    esp_secure_cert_free_tlv_info(&read_info);
+
+    ESP_LOGI(TAG, "Write demo completed successfully");
+    return ESP_OK;
+}
+#endif /* CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO */
+
+void app_main()
+{
+    ESP_LOGI(TAG, "Starting ESP Secure Cert App");
+
+    esp_err_t result = ESP_OK;
+
+#ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
+    ESP_LOGW(TAG, "Write demo enabled - this will modify the esp_secure_cert partition!");
+    result = run_write_demo();
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "Write demo failed: %s", esp_err_to_name(result));
+    }
+#endif
+
+    // Read and display existing partition data
+    esp_err_t read_result = test_read_existing_data();
+    if (read_result != ESP_OK && result == ESP_OK) {
+        result = read_result;
+    }
+
+    ESP_LOGI(TAG, "=====================================================");
+    if (result == ESP_OK) {
+        ESP_LOGI(TAG, "ESP Secure Cert App completed successfully!");
+    } else {
+        ESP_LOGE(TAG, "ESP Secure Cert App completed with errors: %s", esp_err_to_name(result));
+    }
+    ESP_LOGI(TAG, "=====================================================");
 }
