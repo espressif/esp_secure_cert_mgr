@@ -27,4 +27,15 @@ menu "ESP Secure Cert Manager"
         help
             Enable support for secure verification for esp_secure_cert partition which relies on secure boot v2. Once enabled, the esp_secure_cert partition can be securely verified by calling esp_secure_cert_verify_partition() just after startup.
 
+    config ESP_SECURE_CERT_WRITE_ENABLE_LOGGING
+        bool "Enable verbose logging for write operations"
+        default n
+        help
+            Enable detailed logging for ESP Secure Cert write operations.
+            When disabled, only error logs are printed to reduce binary size.
+            Info, debug, and warning logs are suppressed when this option
+            is disabled, which can significantly reduce flash usage.
+            This is recommended for production builds since write operations
+            typically occur only once during device lifetime.
+
 endmenu # ESP Secure Cert Manager

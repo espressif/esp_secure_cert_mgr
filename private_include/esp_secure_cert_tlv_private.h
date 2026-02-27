@@ -28,6 +28,12 @@
 
 #define ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE  121
 
+/*
+ * The minimum alignment required for the TLV data.
+ * This is required for flash encrypted writes which need 16-byte alignment.
+ */
+#define MIN_ALIGNMENT_REQUIRED 16
+
 /**
  * Flags    8 bits
  * Used bits:
