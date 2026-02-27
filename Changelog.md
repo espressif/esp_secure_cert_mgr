@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.9.0
+* Added support to write to esp_secure_cert partition
+
 ## v2.8.1
 * Fix build issues with ESP-IDF v6.0 related to PSA opaque driver changes.
 
