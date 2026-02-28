@@ -52,10 +52,8 @@
 
 static const char *TAG = "esp_secure_cert_tlv";
 
+/* Global partition context - shared across read and write operations */
 esp_secure_cert_partition_ctx_t esp_secure_cert_partition_ctx = {0};
-
-#define MIN_ALIGNMENT_REQUIRED 16
-
 
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
