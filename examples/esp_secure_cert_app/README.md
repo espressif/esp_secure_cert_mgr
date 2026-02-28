@@ -27,12 +27,13 @@ idf.py menuconfig
 
 Navigate to: **Example Configuration** → **Enable write functionality demo**
 
-> **⚠️ Warning**: The write demo will **erase** and modify the `esp_secure_cert` partition. Only enable this on test devices or devices without production credentials.
-
 When enabled, the app will:
-1. Erase the `esp_secure_cert` partition
-2. Write a sample TLV entry with user data
-3. Read back and verify the written data
+1. Read and display existing partition data (certificates, keys)
+2. Back up the original partition contents to RAM
+3. Erase the partition, write a sample TLV entry, read back and verify
+4. Restore the original partition contents from backup
+
+Pre-provisioned data is preserved across demo runs.
 
 ### Build and Flash
 

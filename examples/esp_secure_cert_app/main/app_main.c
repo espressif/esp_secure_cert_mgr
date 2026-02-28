@@ -22,6 +22,8 @@
 
 #ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
 #include "esp_secure_cert_write.h"
+#include "esp_secure_cert_tlv_private.h"
+#include "esp_partition.h"
 #endif
 
 #include "mbedtls/ssl.h"
@@ -504,26 +506,54 @@ static esp_err_t test_read_existing_data(void)
 
 #ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
 /**
- * @brief Minimal write demo - shows basic usage of esp_secure_cert write API
+ * @brief Write demo with backup and restore
  *
- * Demonstrates:
- * - Erasing the partition
- * - Writing a TLV entry with user data
- * - Reading it back to verify
+ * Demonstrates real flash write/read cycle without destroying
+ * pre-provisioned data:
+ * 1. Back up original partition contents
+ * 2. Erase, write demo data, read back and verify
+ * 3. Restore original partition contents
  */
 static esp_err_t run_write_demo(void)
 {
     ESP_LOGI(TAG, "=== Write Demo: Basic TLV write/read ===");
 
-    // Erase partition first
-    esp_err_t err = esp_secure_cert_erase_partition();
+    /* Find the partition to get its size for backup */
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_SECURE_CERT_TLV_PARTITION_TYPE, ESP_PARTITION_SUBTYPE_ANY,
+        ESP_SECURE_CERT_TLV_PARTITION_NAME);
+    if (part == NULL) {
+        ESP_LOGE(TAG, "esp_secure_cert partition not found");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    /* Step 1: Back up original partition contents */
+    ESP_LOGI(TAG, "Backing up partition (%"PRIu32" bytes)...", part->size);
+    uint8_t *backup = malloc(part->size);
+    if (backup == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate backup buffer");
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t err = esp_partition_read(part, 0, backup, part->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read partition for backup: %s", esp_err_to_name(err));
+        free(backup);
+        return err;
+    }
+    ESP_LOGI(TAG, "Partition backed up");
+
+    /* Unmap before we modify flash */
+    esp_secure_cert_unmap_partition();
+
+    /* Step 2: Erase, write demo data, read back */
+    err = esp_secure_cert_erase_partition();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to erase partition: %s", esp_err_to_name(err));
-        return err;
+        goto restore;
     }
     ESP_LOGI(TAG, "Partition erased");
 
-    // Write sample user data
     const char *sample_data = "Hello from esp_secure_cert write demo!";
     esp_secure_cert_tlv_info_t tlv_info = {
         .type = ESP_SECURE_CERT_USER_DATA_1,
@@ -536,11 +566,11 @@ static esp_err_t run_write_demo(void)
     err = esp_secure_cert_append_tlv(&tlv_info, NULL);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to write TLV: %s", esp_err_to_name(err));
-        return err;
+        goto restore;
     }
     ESP_LOGI(TAG, "Wrote user data TLV");
 
-    // Read back and verify
+    /* Read back and verify */
     esp_secure_cert_tlv_config_t read_cfg = {
         .type = ESP_SECURE_CERT_USER_DATA_1,
         .subtype = ESP_SECURE_CERT_SUBTYPE_0
@@ -550,14 +580,38 @@ static esp_err_t run_write_demo(void)
     err = esp_secure_cert_get_tlv_info(&read_cfg, &read_info);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read back TLV: %s", esp_err_to_name(err));
-        return err;
+        goto restore;
     }
 
     ESP_LOGI(TAG, "Read back: \"%s\" (len=%"PRIu32")", read_info.data, read_info.length);
     esp_secure_cert_free_tlv_info(&read_info);
 
-    ESP_LOGI(TAG, "Write demo completed successfully");
-    return ESP_OK;
+    ESP_LOGI(TAG, "Write demo verified successfully");
+
+restore:
+    /* Step 3: Restore original partition contents */
+    ESP_LOGI(TAG, "Restoring original partition contents...");
+    esp_secure_cert_unmap_partition();
+
+    esp_err_t restore_err = esp_partition_erase_range(part, 0, part->size);
+    if (restore_err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to erase for restore: %s", esp_err_to_name(restore_err));
+        free(backup);
+        return (err != ESP_OK) ? err : restore_err;
+    }
+
+    restore_err = esp_partition_write(part, 0, backup, part->size);
+    free(backup);
+    if (restore_err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write backup data: %s", esp_err_to_name(restore_err));
+        return (err != ESP_OK) ? err : restore_err;
+    }
+
+    /* Unmap so next read gets the restored data */
+    esp_secure_cert_unmap_partition();
+    ESP_LOGI(TAG, "Original partition contents restored");
+
+    return err;
 }
 #endif /* CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO */
 
@@ -567,19 +621,23 @@ void app_main()
 
     esp_err_t result = ESP_OK;
 
-#ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
-    ESP_LOGW(TAG, "Write demo enabled - this will modify the esp_secure_cert partition!");
-    result = run_write_demo();
-    if (result != ESP_OK) {
-        ESP_LOGE(TAG, "Write demo failed: %s", esp_err_to_name(result));
-    }
-#endif
-
-    // Read and display existing partition data
+    // Read and display existing partition data first (before any writes)
     esp_err_t read_result = test_read_existing_data();
-    if (read_result != ESP_OK && result == ESP_OK) {
+    if (read_result != ESP_OK) {
         result = read_result;
     }
+
+#ifdef CONFIG_EXAMPLE_ESP_SECURE_CERT_WRITE_DEMO
+    // Run write demo after reading - temporarily erases partition, then restores
+    ESP_LOGI(TAG, "Running write demo (partition will be backed up and restored)...");
+    esp_err_t write_result = run_write_demo();
+    if (write_result != ESP_OK) {
+        ESP_LOGE(TAG, "Write demo failed: %s", esp_err_to_name(write_result));
+        if (result == ESP_OK) {
+            result = write_result;
+        }
+    }
+#endif
 
     ESP_LOGI(TAG, "=====================================================");
     if (result == ESP_OK) {
