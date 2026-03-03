@@ -408,7 +408,7 @@ static esp_err_t esp_secure_cert_append_tlv_internal(esp_secure_cert_tlv_info_t 
                                    sizeof(esp_secure_cert_tlv_footer_t) + MIN_ALIGNMENT_REQUIRED;
 
     /* Allocate TLV buffer */
-    uint8_t *output_buf = heap_caps_calloc(1, required_buf_len, MALLOC_CAP_INTERNAL);
+    uint8_t *output_buf = heap_caps_calloc(1, required_buf_len, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (output_buf == NULL) {
         return ESP_ERR_SECURE_CERT_WRITE_NO_MEMORY;
     }
@@ -709,7 +709,7 @@ static esp_err_t esp_secure_cert_encrypt_with_hmac(const esp_secure_cert_tlv_inf
 
     /* Allocate buffer for encrypted data + tag */
     *encrypted_len = tlv_info->length + HMAC_ENCRYPTION_TAG_LEN;
-    *encrypted_data = heap_caps_calloc(1, *encrypted_len, MALLOC_CAP_INTERNAL);
+    *encrypted_data = heap_caps_calloc(1, *encrypted_len, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (*encrypted_data == NULL) {
         WRITE_LOGE(TAG, "Failed to allocate encryption buffer");
         esp_ret = ESP_ERR_SECURE_CERT_WRITE_NO_MEMORY;
@@ -803,7 +803,7 @@ static esp_err_t esp_secure_cert_encrypt_with_hmac(const esp_secure_cert_tlv_inf
 
     /* Allocate buffer for encrypted data + tag */
     size_t output_len = tlv_info->length + HMAC_ENCRYPTION_TAG_LEN;
-    *encrypted_data = heap_caps_calloc(1, output_len, MALLOC_CAP_INTERNAL);
+    *encrypted_data = heap_caps_calloc(1, output_len, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (*encrypted_data == NULL) {
         WRITE_LOGE(TAG, "Failed to allocate encryption buffer");
         esp_ret = ESP_ERR_SECURE_CERT_WRITE_NO_MEMORY;
@@ -990,10 +990,10 @@ esp_err_t esp_secure_cert_derive_hmac_ecdsa_key(uint8_t *pub_key_buf, size_t *pu
     }
 
     /* Allocate buffers for key generation */
-    uint8_t *salt = heap_caps_calloc(1, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, MALLOC_CAP_INTERNAL);
-    uint8_t *hmac_key = heap_caps_calloc(1, ESP_SECURE_CERT_HMAC_KEY_SIZE, MALLOC_CAP_INTERNAL);
-    uint8_t *derived_key = heap_caps_calloc(1, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, MALLOC_CAP_INTERNAL);
-    uint8_t *hw_derived_key = heap_caps_calloc(1, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, MALLOC_CAP_INTERNAL);
+    uint8_t *salt = heap_caps_calloc(1, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint8_t *hmac_key = heap_caps_calloc(1, ESP_SECURE_CERT_HMAC_KEY_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint8_t *derived_key = heap_caps_calloc(1, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    uint8_t *hw_derived_key = heap_caps_calloc(1, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 
     if (salt == NULL || hmac_key == NULL || derived_key == NULL || hw_derived_key == NULL) {
         WRITE_LOGE(TAG, "Failed to allocate memory for key generation");
