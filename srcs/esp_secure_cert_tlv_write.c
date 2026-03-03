@@ -523,7 +523,6 @@ esp_err_t esp_secure_cert_append_tlv(esp_secure_cert_tlv_info_t *tlv_info,
     const esp_secure_cert_write_config_t *cfg = write_config;
     if (cfg == NULL) {
         esp_secure_cert_write_config_init(&default_config, ESP_SECURE_CERT_WRITE_MODE_FLASH);
-        default_config.flash.check_erase = false;
         cfg = &default_config;
     }
 
@@ -573,7 +572,6 @@ esp_err_t esp_secure_cert_append_tlv_batch(esp_secure_cert_tlv_info_t *tlv_entri
     const esp_secure_cert_write_config_t *cfg = write_config;
     if (cfg == NULL) {
         esp_secure_cert_write_config_init(&default_config, ESP_SECURE_CERT_WRITE_MODE_FLASH);
-        default_config.flash.check_erase = false;
         cfg = &default_config;
     }
 
@@ -904,7 +902,6 @@ esp_err_t esp_secure_cert_append_tlv_with_hmac_ecdsa_derivation(const uint8_t *s
     const esp_secure_cert_write_config_t *cfg = write_config;
     if (cfg == NULL) {
         esp_secure_cert_write_config_init(&default_config, ESP_SECURE_CERT_WRITE_MODE_FLASH);
-        default_config.flash.check_erase = false;
         cfg = &default_config;
     }
 
