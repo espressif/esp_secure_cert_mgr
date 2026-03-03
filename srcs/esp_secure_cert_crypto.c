@@ -70,7 +70,7 @@ int esp_pbkdf2_hmac_sha256(hmac_key_id_t hmac_key_id, const unsigned char *salt,
     counter[3] = 1;
     uint8_t *hmac_input;
     esp_err_t esp_ret = ESP_FAIL;
-    hmac_input = (uint8_t *) heap_caps_calloc(1, salt_len + sizeof(counter) + 1, MALLOC_CAP_INTERNAL);
+    hmac_input = (uint8_t *) heap_caps_calloc(1, salt_len + sizeof(counter) + 1, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (hmac_input == NULL) {
         ESP_LOGE(TAG, "Failed to allocate memory for hmac input");
         return -1;

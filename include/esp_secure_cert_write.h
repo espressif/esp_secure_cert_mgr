@@ -107,10 +107,10 @@ esp_err_t esp_secure_cert_check_flash_erased(size_t offset, size_t size, bool *i
  * the write configuration. It supports erase checking, buffer operations for host
  * generation, and maintains backward compatibility.
  *
- * When write_config is NULL, the function operates in legacy mode:
+ * When write_config is NULL, the function uses default flash mode:
  * - Writes directly to flash partition
  * - Checks if TLV of the given type and subtype already exists
- * - Does not perform erase checking
+ * - Performs erase checking (verifies flash is erased before writing)
  *
  * @note Flash encryption compatibility: When flash encryption is enabled,
  *       ensure that data alignment requirements are met.
