@@ -23,11 +23,11 @@ supported_key_size_rsa = {'esp32s2': [1024, 2048, 3072, 4096],
                           'esp32p4': [1024, 2048, 3072, 4096],
                           'esp32c5': [1024, 2048, 3072, 4096]}
 
-supported_targets_ecdsa = ['esp32h2', 'esp32p4', 'esp32c5']
+supported_targets_ecdsa = ['esp32h2', 'esp32p4', 'esp32c5', 'esp32c61']
 supported_key_size_ecdsa = {'esp32h2': [256],
                             'esp32p4': [256],
-                            'esp32c5': [256, 384]}
-
+                            'esp32c5': [256, 384],
+                            'esp32c61': [192, 256]}
 
 
 def number_as_bytes(number, pad_bits=None):
@@ -233,7 +233,9 @@ def configure_efuse_for_ecdsa(idf_target, port, ecdsa_key_file, esp_secure_cert_
 
         efuse_key_file = temp_ecdsa_key_file
 
-        if key_size_bits == 384:
+        if key_size_bits == 192:
+            efuse_purpose = 'ECDSA_KEY_P192'
+        elif key_size_bits == 384:
             efuse_purpose = 'ECDSA_KEY_P384'
         else:
             efuse_purpose = 'ECDSA_KEY'

@@ -27,7 +27,8 @@ csv_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.csv')
 bin_filename = os.path.join(esp_secure_cert_data_dir, 'esp_secure_cert.bin')
 # Targets supported by the script
 supported_targets = {'esp32', 'esp32s2', 'esp32c3', 'esp32s3',
-                     'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5'}
+                     'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5',
+                     'esp32c61'}
 
 
 def cleanup(args):

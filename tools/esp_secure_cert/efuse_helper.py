@@ -6,7 +6,7 @@ from typing import Union
 from esp_secure_cert.esp_secure_cert_helper import load_private_key
 from esp_secure_cert.esp_secure_cert_helper import esp_secure_cert_data_dir
 
-supported_efuse_purposes = ['HMAC_DOWN_DIGITAL_SIGNATURE', 'HMAC_UP', 'ECDSA_KEY', 'ECDSA_KEY_P256', 'ECDSA_KEY_P384']
+supported_efuse_purposes = ['HMAC_DOWN_DIGITAL_SIGNATURE', 'HMAC_UP', 'ECDSA_KEY', 'ECDSA_KEY_P192', 'ECDSA_KEY_P256', 'ECDSA_KEY_P384']
 
 
 def get_efuse_summary_json(idf_target: str, port: str) -> dict:
@@ -185,7 +185,7 @@ def configure_efuse_key_block(idf_target: str, port: str,
                 efuse_key_read = efuse_summary_json[key_blk]['value']
                 efuse_key_read = bytes.fromhex(efuse_key_read)
 
-                if (efuse_purpose == 'ECDSA_KEY' or efuse_purpose == 'ECDSA_KEY_P384'):
+                if efuse_purpose in ('ECDSA_KEY', 'ECDSA_KEY_P192', 'ECDSA_KEY_P384'):
                     # For ECDSA, validate against efuse content only if key file is provided
                     # and can be loaded as a private key
                     if efuse_key_file is not None and os.path.exists(efuse_key_file):
