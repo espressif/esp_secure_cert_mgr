@@ -216,7 +216,7 @@ esp_err_t esp_secure_cert_tlv_set_partition(const esp_partition_t *partition);
  *      - ESP_FAIL  Integrity TLV not found or SHA256 verification failed
  *      - ESP_ERR_NOT_FOUND Integrity TLV not present in partition
  */
-esp_err_t esp_secure_cert_tlv_footer_check(void);
+esp_err_t esp_secure_cert_verify_partition_integrity(void);
 
 #ifdef __cplusplus
 }

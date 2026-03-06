@@ -16,8 +16,6 @@ import shutil
 import subprocess
 from typing import Dict, List, Tuple, Any, Union
 import hashlib
-from dataclasses import dataclass
-from typing import Dict, List, Tuple, Any, Optional, Union
 from construct import (Struct, Int32ul, Int8ul, Int16ul, Int32sl, Bytes, this, GreedyBytes)
 import tempfile
 try:
@@ -323,7 +321,7 @@ class TlvPartitionBuilder:
         integrity_data = partition_sha256
 
         # Add integrity TLV entry
-        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY, subtype, integrity_data, 0)
+        self.add_tlv_entry(tlv_type_t.ESP_SECURE_CERT_INTEGRITY_TLV, subtype, integrity_data, 0)
         print(f"Added integrity TLV (subtype {subtype}) with SHA256: {partition_sha256.hex()}")
 
     def build_partition(self, output_file: str, add_tlv_integrity: bool = False) -> None:
@@ -1109,7 +1107,6 @@ class EspSecureCert:
 
         # Get the last TLV entry (for optimization - quick check)
         last_entry = tlv_entries[-1]
-        last_type = last_entry['header']['type']
 
         # TLV header size is 12 bytes (struct.calcsize('I6BH'))
         TLV_HEADER_SIZE = 12
@@ -1117,7 +1114,7 @@ class EspSecureCert:
         # Find the highest subtype of integrity TLV (if any exists)
         highest_integrity_subtype = -1
         for entry in tlv_entries:
-            if entry['header']['type'] == tlv_format.tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY:
+            if entry['header']['type'] == tlv_format.tlv_type_t.ESP_SECURE_CERT_INTEGRITY_TLV:
                 if entry['header']['subtype'] > highest_integrity_subtype:
                     highest_integrity_subtype = entry['header']['subtype']
 
@@ -1126,7 +1123,7 @@ class EspSecureCert:
             # Integrity TLV exists, increment from highest subtype
             next_subtype = highest_integrity_subtype + 1
             if next_subtype > 16:
-                raise ValueError(f"Cannot append integrity TLV: maximum subtype (16) reached")
+                raise ValueError("Cannot append integrity TLV: maximum subtype (16) reached")
         else:
             # No integrity TLV exists, start with subtype 0
             next_subtype = 0
@@ -1154,7 +1151,7 @@ class EspSecureCert:
             "magic": TLV_MAGIC,
             "flags": 0,
             "reserved": b'\x00\x00\x00',
-            "type": tlv_format.tlv_type_t.ESP_SECURE_CERT_TLV_TYPE_INTEGRITY.value,
+            "type": tlv_format.tlv_type_t.ESP_SECURE_CERT_INTEGRITY_TLV.value,
             "subtype": next_subtype,
             "length": len(integrity_data),
         }

@@ -126,7 +126,7 @@ static esp_err_t register_partition(size_t offset, size_t size, const char *labe
         return ESP_OK;
     }
     ESP_LOGI(TAG, "Partition <%s> already registered at offset 0x%08" PRIx32, (*p_partition)->label, (*p_partition)->address);
-    return ESP_ERR_NOT_FOUND;
+    return ESP_OK;
 }
 
 #if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
@@ -464,22 +464,22 @@ static esp_err_t esp_secure_cert_ota_update(esp_https_ota_config_t *ota_config)
     }
 
     ESP_LOGI(TAG, "OTA download completed successfully");
-    ESP_LOGI(TAG, "Checking footer TLV in the staging partition after downloading");
+    ESP_LOGI(TAG, "Verifying integrity of the staging partition after downloading");
     esp_secure_cert_tlv_set_partition(staging_partition); /* Set the staging partition as the active partition for secure verification   */
-    err = esp_secure_cert_tlv_footer_check();
+    err = esp_secure_cert_verify_partition_integrity();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to check footer TLV in the staging partition after downloading: %s", esp_err_to_name(err));
-        esp_secure_cert_tlv_set_partition(NULL); /* Set the original partition as the active partition for secure verification */
+        ESP_LOGE(TAG, "Failed to verify integrity of the staging partition after downloading: %s", esp_err_to_name(err));
+        esp_secure_cert_tlv_set_partition(NULL); /* Reset to the original partition on failure */
         return err;
     }
-    ESP_LOGI(TAG, "Footer TLV checked successfully");
+    ESP_LOGI(TAG, "Partition integrity verified successfully");
 
 #if !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA
 #if CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION
     err = esp_secure_cert_verify_partition_signature(NULL); /* Verify the signature of the esp_secure_cert partition */
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to verify esp_secure_cert partition signature: %s", esp_err_to_name(err));
-        esp_secure_cert_tlv_set_partition(NULL); /* Set the original partition as the active partition for secure verification */
+        esp_secure_cert_tlv_set_partition(NULL); /* Reset to the original partition on failure */
         return err;
     }
 #endif /* CONFIG_ESP_SECURE_CERT_SECURE_VERIFICATION */

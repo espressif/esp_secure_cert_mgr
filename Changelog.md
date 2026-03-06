@@ -1,8 +1,8 @@
 # This file contains the list of changes across different versions
 
-## v2.9.2
-* Added new TLV (`ESP_SECURE_CERT_TLV_TYPE_INTEGRITY`) to store sha256 esp-secure-cert partition.
-* Added new API, use to verify the integrity of esp-secure-cert partition using `ESP_SECURE_CERT_TLV_TYPE_INTEGRITY`.
+## v2.9.2eck
+* Added new TLV (`ESP_SECURE_CERT_INTEGRITY_TLV`) to store sha256 esp-secure-cert partition.
+* Added new API, use to verify the integrity of esp-secure-cert partition using `ESP_SECURE_CERT_INTEGRITY_TLV`.
 
 ## v2.9.1
 * Fix the heap_caps_calloc issue

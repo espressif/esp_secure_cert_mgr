@@ -4,7 +4,7 @@ This example demonstrates how to perform OTA (Over-The-Air) updates on the `esp_
 
 1. **Use Unallocated Space** - Find unallocated flash space for staging
 2. **Use Passive OTA Partition** - Use the passive OTA app partition for staging
-3. **Direct OTA** - Update directly without staging (The is not recommended as this can be risky)
+3. **Direct OTA** - Update directly without staging (This is not recommended as this can be risky)
 
 ## Overview
 
@@ -18,7 +18,7 @@ This example demonstrates three OTA methods that differ in their staging area ap
 
 To make the OTA fail-safe, user can store the staging partition information on the flash (like NVS in example case). And if the power interrupt occurs, user can read staging area information and set that partition using API `esp_secure_cert_tlv_set_partition`. This API is to set the partition from which data should be read. If `NULL` is passed to this API, it will start reading from the original partition.
 
-**NOTE - This API, before setting any partition, is unmaps the previously set partition internally. So if any esp_secure_cert API returned any pointer(s), they can be invalid after the usage of this API**
+**NOTE - This API, before setting any partition, unmaps the previously set partition internally. So if any esp_secure_cert API returned any pointer(s), they can be invalid after the usage of this API**
 
 ```c
 // Example: Set staging partition to read certificate data during recovery
@@ -117,6 +117,8 @@ This mode writes directly to the original partition without staging.
 - You have a custom recovery mechanism
 
 ## How to Use
+
+**NOTE:** This example requires an OTA server hosting the new `esp_secure_cert` partition binary. You can use any HTTP/HTTPS server (e.g., a simple Python HTTPS server) to serve the binary for the OTA update.
 
 ### 1. Set Target Chip
 

@@ -67,7 +67,6 @@ static const char *TAG = "esp_secure_cert_tlv";
 
 /* Global partition context - shared across read and write operations */
 esp_secure_cert_partition_ctx_t esp_secure_cert_partition_ctx = {0};
-static const esp_partition_t *custom_partition = NULL;
 
 #if SOC_HMAC_SUPPORTED
 static esp_err_t esp_secure_cert_hmac_based_decryption(char *in_buf, uint32_t len, char *output_buf);
@@ -101,7 +100,7 @@ esp_err_t esp_secure_cert_tlv_set_partition(const esp_partition_t *partition)
     if (esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr != NULL) {
         esp_secure_cert_unmap_partition();
     }
-    custom_partition = partition;
+    esp_secure_cert_partition_ctx.partition = partition;
     return ESP_OK;
 }
 
@@ -122,8 +121,8 @@ esp_err_t esp_secure_cert_map_partition(esp_secure_cert_partition_ctx_t **ctx)
         return ESP_OK;
     }
 
-    if (custom_partition != NULL) {
-        partition_to_use = custom_partition;
+    if (esp_secure_cert_partition_ctx.partition != NULL) {
+        partition_to_use = esp_secure_cert_partition_ctx.partition;
     } else {
         esp_partition_iterator_t it = esp_partition_find(ESP_SECURE_CERT_TLV_PARTITION_TYPE,
                                       ESP_PARTITION_SUBTYPE_ANY, ESP_SECURE_CERT_TLV_PARTITION_NAME);
@@ -857,7 +856,7 @@ esp_err_t esp_secure_cert_get_priv_key_efuse_id(uint8_t *efuse_block_id) {
 }
 #endif /* CONFIG_ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS */
 
-esp_err_t esp_secure_cert_tlv_footer_check(void)
+esp_err_t esp_secure_cert_verify_partition_integrity(void)
 {
     esp_err_t err = ESP_FAIL;
     esp_secure_cert_partition_ctx_t *esp_secure_cert_partition_ctx_ptr = NULL;
@@ -877,7 +876,7 @@ esp_err_t esp_secure_cert_tlv_footer_check(void)
 
     // Find integrity TLV entry with highest subtype
     esp_secure_cert_tlv_header_t *integrity_tlv_header = NULL;
-    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, ESP_SECURE_CERT_TLV_TYPE_INTEGRITY, ESP_SECURE_CERT_SUBTYPE_MAX, (void **)&integrity_tlv_header);
+    err = esp_secure_cert_find_tlv(esp_secure_cert_addr, ESP_SECURE_CERT_INTEGRITY_TLV, ESP_SECURE_CERT_SUBTYPE_MAX, (void **)&integrity_tlv_header);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Integrity TLV not found in partition");
         return ESP_ERR_NOT_FOUND;
@@ -928,7 +927,7 @@ esp_err_t esp_secure_cert_tlv_footer_check(void)
                                           SHA256_SIZE,
                                           &hash_length);
     if (status != PSA_SUCCESS || hash_length != SHA256_SIZE) {
-        ESP_LOGE(TAG, "PSA SHA256 calculation failed: 0x%x", (unsigned int)status);
+        ESP_LOGE(TAG, "PSA SHA256 calculation failed: %d", (int)status);
         return ESP_FAIL;
     }
 #endif

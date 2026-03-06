@@ -170,10 +170,10 @@ CRC32:      0x2AF3C61C (✓ VALID)
 Data:
     Hex data: deadbeefcafebabe1234567890abcdef
 
-TLV Entry #7: ESP_SECURE_CERT_TLV_TYPE_INTEGRITY
+TLV Entry #7: ESP_SECURE_CERT_INTEGRITY_TLV
 ------------------------------------------------------------
 Offset:     0x1470
-Type:       9 (ESP_SECURE_CERT_TLV_TYPE_INTEGRITY)
+Type:       9 (ESP_SECURE_CERT_INTEGRITY_TLV)
 Subtype:    0
 Flags:      0x00
 Length:     32 bytes
@@ -195,7 +195,7 @@ Found TLV types:
   - ESP_SECURE_CERT_PRIV_KEY_TLV: 1680 bytes
   - ESP_SECURE_CERT_USER_DATA_1_TLV: 31 bytes
   - ESP_SECURE_CERT_USER_DATA_2_TLV: 16 bytes
-  - ESP_SECURE_CERT_TLV_TYPE_INTEGRITY: 32 bytes
+  - ESP_SECURE_CERT_INTEGRITY_TLV: 32 bytes
 
 Key Configuration:
   - Software-based (Plaintext)
