@@ -135,6 +135,10 @@ def validate_ds_algorithm(ds_algo, key_size_bits, target_chip):
                   f'{ds_algo} {key_size_bits}, supported key sizes are '
                   f'{supported_key_size_rsa[target_chip]}')
             sys.exit(-1)
+        if key_size_bits == 1024:
+            print('\033[93mDeprecationWarning: RSA 1024-bit key size is deprecated due to security concerns. '
+                  'Please use 2048-bit or higher. '
+                  'Support for RSA 1024 may be removed in a future release.\033[0m')
 
     elif ds_algo == 'ECDSA':
         if target_chip not in supported_targets_ecdsa:
@@ -148,6 +152,10 @@ def validate_ds_algorithm(ds_algo, key_size_bits, target_chip):
                   f'{ds_algo} {key_size_bits}, supported key sizes are '
                   f'{supported_key_size_ecdsa[target_chip]}')
             sys.exit(-1)
+        if key_size_bits == 192:
+            print('\033[93mDeprecationWarning: ECDSA P-192 curve is deprecated due to security concerns. '
+                  'Please use P-256 or higher. '
+                  'Support for ECDSA P-192 may be removed in a future release.\033[0m')
 
     else:
         print(f'ERROR: Invalid DS algorithm {ds_algo} {key_size_bits}')
