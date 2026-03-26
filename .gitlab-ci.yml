@@ -58,7 +58,7 @@ variables:
   artifacts:
     paths:
       - test_apps/build_${IDF_TARGET}_${CONFIG}
-    expire_in: 1 hour
+    expire_in: 1 week
 
 # Build templates for different IDF versions
 .build_v4.3:
@@ -195,6 +195,7 @@ test_tools:
   before_script: *setup_env
   tags:
     - build
+  dependencies: []
   script:
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/tools
@@ -206,7 +207,7 @@ test_tools:
     reports:
       junit: tools/test-results.xml
     when: always
-    expire_in: 1 hour
+    expire_in: 1 week
 
 # Build job for examples app sanity test
 build_examples_app_master:
@@ -239,7 +240,7 @@ build_examples_app_master:
   artifacts:
     paths:
       - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}
-    expire_in: 1 hour
+    expire_in: 1 week
 
 # Base QEMU test template
 .qemu_test_base:
@@ -304,8 +305,12 @@ qemu_test_legacy:
       fi
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     - pytest --target $IDF_TARGET --app-path $ROOT_PATH/test_apps --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu --sdkconfig $CONFIG -k "test_esp_secure_cert_${TEST_NAME}_qemu"
-  dependencies:
-    - build_v5.2
+  needs:
+    - job: build_v5.2
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: legacy
 
 # QEMU test jobs for each ESP-IDF version
 qemu_test_v5.1:
@@ -315,8 +320,12 @@ qemu_test_v5.1:
     matrix:
       - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
-  dependencies:
-    - build_v5.1
+  needs:
+    - job: build_v5.1
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: tlv
 
 qemu_test_v5.2:
   extends: .qemu_test_base
@@ -325,8 +334,12 @@ qemu_test_v5.2:
     matrix:
       - IDF_TARGET: [esp32c3]
         CONFIG: [tlv]
-  dependencies:
-    - build_v5.2
+  needs:
+    - job: build_v5.2
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: tlv
 
 qemu_test_v5.3:
   extends: .qemu_test_base
@@ -335,8 +348,12 @@ qemu_test_v5.3:
     matrix:
       - IDF_TARGET: [esp32c3]
         CONFIG: [tlv, crypto, basics, write, secure_verification]
-  dependencies:
-    - build_v5.3
+  needs:
+    - job: build_v5.3
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: [tlv, crypto, basics, write, secure_verification]
 
 qemu_test_v5.4:
   extends: .qemu_test_base
@@ -345,8 +362,12 @@ qemu_test_v5.4:
     matrix:
       - IDF_TARGET: [esp32c3]
         CONFIG: [tlv, crypto, basics, write, secure_verification]
-  dependencies:
-    - build_v5.4
+  needs:
+    - job: build_v5.4
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: [tlv, crypto, basics, write, secure_verification]
 
 qemu_test_v5.5:
   extends: .qemu_test_base
@@ -357,8 +378,14 @@ qemu_test_v5.5:
         CONFIG: [tlv, crypto, basics, write, secure_verification]
       - IDF_TARGET: [esp32]
         CONFIG: [tlv, crypto, basics, write]
-  dependencies:
-    - build_v5.5
+  needs:
+    - job: build_v5.5
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: [tlv, crypto, basics, write, secure_verification]
+          - IDF_TARGET: esp32
+            CONFIG: [tlv, crypto, basics, write]
 
 qemu_test_v6.0:
   extends: .qemu_test_base
@@ -367,8 +394,12 @@ qemu_test_v6.0:
     matrix:
       - IDF_TARGET: [esp32c3]
         CONFIG: [tlv, crypto, basics, write, secure_verification]
-  dependencies:
-    - build_v6.0
+  needs:
+    - job: build_v6.0
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: [tlv, crypto, basics, write, secure_verification]
 
 qemu_test_master:
   extends: .qemu_test_base
@@ -377,8 +408,12 @@ qemu_test_master:
     matrix:
       - IDF_TARGET: [esp32c3]
         CONFIG: [tlv, crypto, basics, write, secure_verification]
-  dependencies:
-    - build_master
+  needs:
+    - job: build_master
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: [tlv, crypto, basics, write, secure_verification]
 
 # QEMU test for examples app sanity test
 qemu_test_examples_app_master:
@@ -417,5 +452,9 @@ qemu_test_examples_app_master:
     - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
     # Run the sanity test from examples app
     - pytest test_esp_secure_cert.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
-  dependencies:
-    - build_examples_app_master
+  needs:
+    - job: build_examples_app_master
+      parallel:
+        matrix:
+          - IDF_TARGET: esp32c3
+            CONFIG: default
