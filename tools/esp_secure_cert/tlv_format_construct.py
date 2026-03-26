@@ -511,7 +511,7 @@ class EspSecureCert:
         Process ESP Secure Cert CSV and generate partition.
 
         Args:
-            target_chip (str): Target ESP chip (e.g., esp32c3, esp32s3)
+            target_chip (str): Target ESP chip (e.g., esp32c3, esp32s3, esp32c5)
             port (str, optional): Serial port for device communication.
                                 If None, DS configuration will be done locally without device interaction.
         """
