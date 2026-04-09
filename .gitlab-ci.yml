@@ -259,11 +259,11 @@ build_examples_app_ota_master:
   image: espressif/idf:latest
   variables:
     IDF_TARGET: esp32c3
-    CONFIG: default
+    CONFIG: direct_ota
   parallel:
     matrix:
       - IDF_TARGET: [esp32c3]
-        CONFIG: [default]
+        CONFIG: [direct_ota, unallocated_ota, passive_ota]
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
@@ -518,7 +518,11 @@ qemu_test_examples_app_ota_master:
       - stuck_or_timeout_failure
   variables:
     IDF_TARGET: esp32c3
-    CONFIG: default
+    CONFIG: direct_ota
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [direct_ota, unallocated_ota, passive_ota]
   script:
     - export EXTRA_CFLAGS=$EXTRA_CFLAGS
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS

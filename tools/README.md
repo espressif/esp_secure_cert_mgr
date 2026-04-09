@@ -66,6 +66,8 @@ configure_esp_secure_cert.py -p /* Serial port */ --keep_ds_data_on_host --efuse
 
     Note: This is only applicable for [Development mode](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/security/flash-encryption.html#flash-enc-development-mode) of Flash Encryption.
 
+**NOTE - While generating partition, at the end of partition automatically `ESP_SECURE_CERT_INTEGRITY_TLV` TLV will be appended, and this happens only for TLV type format (irrespective of generated using CSV or cust_flash_tlv)**
+
 ### Legacy partition formats:
 
 1. Generate `esp_secure_cert` partition of type `cust_flash`:

@@ -115,8 +115,17 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 
 static esp_err_t register_partition(size_t offset, size_t size, const char *label, esp_partition_type_t type, esp_partition_subtype_t subtype, const esp_partition_t **p_partition)
 {
-    // If the partition table contains this partition, then use it, otherwise register it.
-    *p_partition = esp_partition_find_first(type, subtype, NULL);
+    // If the partition table contains this exact partition (matched by type, subtype AND label),
+    // then reuse it; otherwise register it as an external partition.
+    // Use esp_partition_find (iterator) instead of esp_partition_find_first so that we
+    // look up an exact match and don't silently pick "any" partition that happens to
+    // share the same type/subtype.
+    *p_partition = NULL;
+    esp_partition_iterator_t it = esp_partition_find(type, subtype, label);
+    if (it != NULL) {
+        *p_partition = esp_partition_get(it);
+        esp_partition_iterator_release(it);
+    }
     if ((*p_partition) == NULL) {
         esp_err_t error = esp_partition_register_external(NULL, offset, size, label, type, subtype, p_partition);
         if (error != ESP_OK) {
@@ -163,24 +172,31 @@ static esp_err_t save_staging_info_to_nvs(const esp_partition_t *staging_partiti
         return err;
     }
 
-    // Save staging partition label (for debugging)
+    // Save staging partition label
+    // Every field stored here is needed on the recovery path to rebuild the
+    // staging partition; if any write fails we cannot recover reliably, so
+    // treat all failures as fatal.
     err = nvs_set_str(nvs_handle, NVS_PARTITION_STAGING_LABEL, staging_partition->label);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to save staging label: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Failed to save staging label: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
     }
 
     // Save staging partition type
     err = nvs_set_u8(nvs_handle, NVS_PARTITION_STAGING_TYPE, staging_partition->type);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to save staging type: %s", esp_err_to_name(err));
-        // Non-critical, continue
+        ESP_LOGE(TAG, "Failed to save staging type: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
     }
 
     // Save staging partition subtype
     err = nvs_set_u8(nvs_handle, NVS_PARTITION_STAGING_SUBTYPE, staging_partition->subtype);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to save staging subtype: %s", esp_err_to_name(err));
-        // Non-critical, continue
+        ESP_LOGE(TAG, "Failed to save staging subtype: %s", esp_err_to_name(err));
+        nvs_close(nvs_handle);
+        return err;
     }
 
     err = nvs_commit(nvs_handle);
@@ -195,6 +211,7 @@ static esp_err_t save_staging_info_to_nvs(const esp_partition_t *staging_partiti
 
     return err;
 }
+#endif /* !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA */
 
 /**
  * @brief Clear staging partition info from NVS
@@ -228,13 +245,13 @@ static esp_err_t clear_staging_info_from_nvs(void)
 
     return err;
 }
-#endif /* !CONFIG_EXAMPLE_ESP_SECURE_CERT_DIRECT_OTA */
 
 /**
- * @brief Check for recovery and restore staging partition if needed
+ * @brief Check for recovery and complete pending OTA if needed
  *
  * This function checks NVS for recovery info. If found, it recreates
- * the staging partition and sets it as the active partition.
+ * the staging partition, verifies its data, copies staging→primary,
+ * and clears the recovery state.
  *
  * @return esp_err_t ESP_OK on success, or ESP_ERR_NOT_FOUND if no recovery needed
  */
@@ -310,13 +327,58 @@ static esp_err_t check_and_recover_staging_partition(void)
         return err;
     }
 
+    // Set staging as active to verify its contents
     err = esp_secure_cert_tlv_set_partition(recovered_partition);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set staging partition offset: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Failed to set staging partition: %s", esp_err_to_name(err));
         return err;
     }
 
-    ESP_LOGI(TAG, "Staging partition recovered successfully");
+    // Re-verify the integrity of the staging partition before we proceed.
+    // We are arriving here after a reboot, so the contents could have been
+    // corrupted (e.g. by a power glitch) after the initial verify-and-save.
+    // Refusing to copy corrupted data to the primary partition is critical
+    // for the fail-safe property of this OTA flow.
+    ESP_LOGI(TAG, "Verifying integrity of the staging partition before recovery copy");
+    err = esp_secure_cert_verify_partition_integrity();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Staging partition integrity check failed during recovery: %s", esp_err_to_name(err));
+        esp_secure_cert_tlv_set_partition(NULL);
+        return err;
+    }
+    ESP_LOGI(TAG, "Staging partition integrity verified, reading data before recovery copy");
+    read_custom_data();
+
+    // Find the primary esp_secure_cert partition
+    const esp_partition_t *primary_partition = esp_partition_find_first(
+        ESP_SECURE_CERT_CUST_FLASH_PARTITION_TYPE, ESP_PARTITION_SUBTYPE_ANY,
+        ESP_SECURE_CERT_TLV_PARTITION_NAME);
+    if (primary_partition == NULL) {
+        ESP_LOGE(TAG, "Primary esp_secure_cert partition not found for recovery");
+        esp_secure_cert_tlv_set_partition(NULL);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    // Copy staging → primary to complete the interrupted OTA
+    ESP_LOGI(TAG, "Copying staging partition to primary esp_secure_cert partition");
+    err = esp_partition_copy(primary_partition, 0, recovered_partition, 0, primary_partition->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to copy staging to primary partition: %s", esp_err_to_name(err));
+        esp_secure_cert_tlv_set_partition(NULL);
+        return err;
+    }
+
+    // Reset to primary partition
+    esp_secure_cert_tlv_set_partition(NULL);
+    ESP_LOGI(TAG, "Successfully copied staging data to primary partition");
+
+    // Clear recovery info from NVS
+    err = clear_staging_info_from_nvs();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to clear recovery info from NVS: %s", esp_err_to_name(err));
+    }
+
+    ESP_LOGI(TAG, "Recovery completed successfully");
     return ESP_OK;
 }
 
@@ -668,18 +730,16 @@ void app_main(void)
     err = check_and_recover_staging_partition();
     if (err == ESP_OK) {
         ESP_LOGW(TAG, "========================================");
-        ESP_LOGW(TAG, "RECOVERY MODE: Previous OTA was interrupted");
-        ESP_LOGW(TAG, "Staging partition recovered and set as active");
-        ESP_LOGW(TAG, "You can now verify data and retry copy operation");
+        ESP_LOGW(TAG, "RECOVERY: Previous OTA was interrupted");
+        ESP_LOGW(TAG, "Staging data has been copied to primary partition");
         ESP_LOGW(TAG, "========================================");
-        ESP_LOGI(TAG, "Reading CA certificate from recovered staging partition");
+        ESP_LOGI(TAG, "Verifying CA certificate in primary partition after recovery");
         read_custom_data();
-    } else if (err != ESP_ERR_NOT_FOUND) {
-        ESP_LOGE(TAG, "Failed to recover staging partition: %s", esp_err_to_name(err));
+    } else if (err == ESP_ERR_NOT_FOUND) {
+        xTaskCreate(&esp_secure_cert_ota_task, "esp_secure_cert_ota_task", 8192, NULL, 5, NULL);
     } else {
-        ESP_LOGI(TAG, "No recovery needed - checking CA certificate in original partition");
-        read_custom_data();
+        ESP_LOGE(TAG, "Error while recovering the partition");
     }
 
-    xTaskCreate(&esp_secure_cert_ota_task, "esp_secure_cert_ota_task", 8192, NULL, 5, NULL);
+    ESP_LOGI(TAG, "Returned from the app main");
 }

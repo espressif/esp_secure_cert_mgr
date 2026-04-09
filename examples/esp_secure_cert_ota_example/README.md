@@ -141,25 +141,36 @@ Select one of:
 - **Use Passive OTA Partition**
 - **Direct OTA**
 
-### 3. Generate and Flash esp_secure_cert Partition
+### 3. Generate the esp_secure_cert Partition Binary
 
-The `esp_secure_cert` partition must be generated and flashed:
+The `esp_secure_cert` partition binary must be generated using the [provisioning tool](../../tools/README.md) included in this component. This is the same binary that will be hosted on the OTA server for remote updates.
+
+**Generate the initial partition (for flashing during manufacturing):**
 
 ```bash
-# Generate using the provisioning tool
 python configure_esp_secure_cert.py \
-    --esp_secure_cert_csv your_config.csv \
-    --port /dev/ttyUSB0 \
-    --target_chip esp32c3
-
-# Or flash manually
-esptool.py --chip esp32c3 -p /dev/ttyUSB0 write_flash 0xD000 esp_secure_cert.bin
+    --ca-cert ca_cert.pem \
+    --device-cert device_cert.pem \
+    --private-key device_key.pem \
+    --target_chip esp32c3 \n
 ```
 
-See the [tools README](../../tools/README.md) for details on generating the partition.
+This is output esp_secure_cert partition binary with name `esp_secure_cert.bin`.
+Host `esp_secure_cert.bin` on your HTTPS server and configure `CONFIG_EXAMPLE_FIRMWARE_UPGRADE_URL` to point to it.
 
-### 4. Build and Flash
+**NOTE - While generating partition, at the end of partition automatically `ESP_SECURE_CERT_INTEGRITY_TLV` TLV will be appended**
 
+See the [tools README](../../tools/README.md) for full details on all provisioning tool options.
+
+### 4. Flash the Initial Partition
+
+```bash
+# Flash the initial partition during manufacturing
+esptool.py --chip esp32c3 -p /dev/ttyUSB0 write_flash 0xF000 esp_secure_cert.bin
+```
+
+### 5. Build and Flash the Application
+ 
 Build the project and flash it:
 
 ```bash

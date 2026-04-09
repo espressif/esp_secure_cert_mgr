@@ -63,6 +63,7 @@ def setting_connection(dut: Dut, env_name: str | None = None) -> Any:
 
 @pytest.mark.qemu
 @pytest.mark.parametrize('target', ['esp32c3', 'esp32'], indirect=True)
+@pytest.mark.parametrize('config', ['passive_ota', 'unallocated_ota', 'direct_ota'])
 def test_esp_secure_cert_ota(dut: Dut):
     # Get the tests directory path
     this_dir = os.path.dirname(os.path.realpath(__file__))
@@ -108,6 +109,63 @@ def test_esp_secure_cert_ota(dut: Dut):
         )
         dut.expect(
             'You can now restart to use the new certificate data', timeout=60
+        )
+    finally:
+        # Terminate the server process
+        server_process.terminate()
+        server_process.join(timeout=5)
+        if server_process.is_alive():
+            server_process.kill()
+
+
+@pytest.mark.qemu
+@pytest.mark.parametrize('target', ['esp32c3', 'esp32'], indirect=True)
+@pytest.mark.parametrize('config', ['passive_ota', 'unallocated_ota', 'direct_ota'])
+def test_esp_secure_cert_ota_corrupt(dut: Dut):
+    # Get the tests directory path
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    tests_dir = os.path.join(this_dir, 'tests')
+    ota_bin_path = os.path.join(tests_dir, 'esp_secure_cert_after_corrupt.bin')
+    certs_dir = os.path.join(this_dir, 'certs')
+    server_cert_path = os.path.join(certs_dir, 'ca_cert.pem')
+    server_key_path = os.path.join(certs_dir, 'ca_key.pem')
+    server_port = 8001
+    ota_filename = os.path.basename(ota_bin_path)
+    # Start HTTPS server in background process
+    server_process = multiprocessing.Process(
+        target=start_https_server,
+        args=(
+            tests_dir, '0.0.0.0', server_port,
+            server_cert_path, server_key_path
+        ),
+        daemon=True
+    )
+    server_process.start()
+
+    # Wait for connection and get IP address
+    try:
+        ip_address = dut.expect(
+            r'gw: (\d+\.\d+\.\d+\.\d+)[^\d]', timeout=60
+        )[1].decode()
+        print(f'Connected to AP/Ethernet with IP: {ip_address}')
+    except pexpect.exceptions.TIMEOUT:
+        raise ValueError('ENV_TEST_FAILURE: Cannot connect to AP/Ethernet')
+
+    try:
+        # Wait for the OTA task to start
+        dut.expect('Starting ESP Secure Cert OTA task', timeout=60)
+
+        # Form the OTA URL and write it to stdin
+        ota_url = f'https://{ip_address}:{server_port}/{ota_filename}'
+        print(f'Writing OTA URL to stdin: {ota_url}')
+        dut.write(ota_url + '\n')
+
+        # Continue with the rest of the expectations
+        dut.expect(
+            'Failed to verify integrity of the staging partition after downloading', timeout=60
+        )
+        dut.expect(
+            'ESP Secure Cert OTA failed', timeout=60
         )
     finally:
         # Terminate the server process

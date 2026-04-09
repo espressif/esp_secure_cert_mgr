@@ -934,7 +934,13 @@ esp_err_t esp_secure_cert_verify_partition_integrity(void)
 
     // Compare stored and calculated SHA256
     if (memcmp(stored_sha256, calculated_sha256, SHA256_SIZE) != 0) {
-        ESP_LOGE(TAG, "Integrity TLV SHA256 mismatch: stored %s, calculated %s", stored_sha256, calculated_sha256);
+        char stored_hex[SHA256_SIZE * 2 + 1];
+        char calculated_hex[SHA256_SIZE * 2 + 1];
+        for (size_t i = 0; i < SHA256_SIZE; i++) {
+            sprintf(stored_hex + i * 2, "%02x", stored_sha256[i]);
+            sprintf(calculated_hex + i * 2, "%02x", calculated_sha256[i]);
+        }
+        ESP_LOGE(TAG, "Integrity TLV SHA256 mismatch: stored %s, calculated %s", stored_hex, calculated_hex);
         return ESP_FAIL;
     }
 
