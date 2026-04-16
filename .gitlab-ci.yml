@@ -81,6 +81,17 @@ variables:
     - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
     - export ROOT_PATH=$PWD
     - cd $ROOT_PATH/test_apps
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
+    - idf-build-apps build -p . --recursive --target esp32c3 --config "sdkconfig.ci.${CONFIG}=${CONFIG}"  --build-dir build_@t_@w
     - pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
     - idf-build-apps build -p . --recursive --target ${IDF_TARGET} --config "sdkconfig.ci.${CONFIG}=${CONFIG}"  --build-dir build_${IDF_TARGET}_${CONFIG}
 
@@ -240,6 +251,39 @@ build_examples_app_master:
   artifacts:
     paths:
       - examples/esp_secure_cert_app/build_${IDF_TARGET}_${CONFIG}
+    expire_in: 1 week
+
+# Build job for examples app sanity test
+build_examples_app_ota_master:
+  extends: .build_master
+  image: espressif/idf:latest
+  variables:
+    IDF_TARGET: esp32c3
+    CONFIG: direct_ota
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [direct_ota, unallocated_ota, passive_ota]
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - cd $ROOT_PATH/examples/esp_secure_cert_ota_example
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
+    - idf-ci build run --target $IDF_TARGET -m "qemu" --paths .
+  artifacts:
+    paths:
+      - examples/esp_secure_cert_ota_example/build_${IDF_TARGET}_${CONFIG}
     expire_in: 1 week
 
 # Base QEMU test template
@@ -458,3 +502,46 @@ qemu_test_examples_app_master:
         matrix:
           - IDF_TARGET: esp32c3
             CONFIG: default
+  dependencies:
+    - build_examples_app_master
+
+qemu_test_examples_app_ota_master:
+  stage: qemu_test
+  image: espressif/idf:latest
+  tags:
+    - qemu_test
+  retry:
+    max: 2
+    when:
+      - script_failure
+      - unknown_failure
+      - stuck_or_timeout_failure
+  variables:
+    IDF_TARGET: esp32c3
+    CONFIG: direct_ota
+  parallel:
+    matrix:
+      - IDF_TARGET: [esp32c3]
+        CONFIG: [direct_ota, unallocated_ota, passive_ota]
+  script:
+    - export EXTRA_CFLAGS=$EXTRA_CFLAGS
+    - export EXTRA_CXXFLAGS=$EXTRA_CXXFLAGS
+    - export ROOT_PATH=$PWD
+    - . $IDF_PATH/export.sh
+    - cd $ROOT_PATH/examples/esp_secure_cert_ota_example
+    # Extract IDF version from image name (e.g., espressif/idf:release-v5.2 -> 5.2)
+    - export IDF_VERSION=$(echo $CI_JOB_IMAGE | sed -n 's/.*release-v\([0-9]\+\.[0-9]\+\).*/\1/p')
+    # Use version-specific requirements file if it exists, otherwise use default
+    - |
+      if [ -n "$IDF_VERSION" ] && [ -f "$ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt" ]; then
+        echo "Using version-specific requirements file: requirements.$IDF_VERSION.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.$IDF_VERSION.txt
+      else
+        echo "Using default requirements file: requirements.txt"
+        pip install -r $ROOT_PATH/test_apps/qemu_test/requirements.txt
+      fi
+    - export BUILD_DIR="build_${IDF_TARGET}_${CONFIG}"
+    # Run the sanity test from examples app
+    - pytest test_esp_secure_cert_ota.py --target $IDF_TARGET --app-path . --build-dir $BUILD_DIR --embedded-services idf,qemu -s -m qemu
+  dependencies:
+    - build_examples_app_ota_master

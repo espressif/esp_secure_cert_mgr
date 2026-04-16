@@ -188,6 +188,12 @@ def main():
         default=None,
         help='Bin filename to use')
 
+    parser.add_argument(
+        '--append-integrity',
+        dest='append_integrity',
+        metavar='[/path/to/esp_secure_cert.bin]',
+        help='Append an integrity TLV entry containing SHA256 of the entire partition (excluding integrity TLV itself) to an existing .bin file')
+
     args = parser.parse_args()
 
     idf_target = args.target_chip
@@ -204,6 +210,14 @@ def main():
 
     if args.parse_bin:
         EspSecureCert.parse_esp_secure_cert_bin(args.parse_bin)
+        return
+
+    if args.append_integrity:
+        if not os.path.exists(args.append_integrity):
+            print(f'ERROR: The provided binary file does not exist: {args.append_integrity}')
+            sys.exit(-1)
+        EspSecureCert.append_integrity_tlv(args.append_integrity)
+        print(f'Successfully appended integrity TLV to: {args.append_integrity}')
         return
 
     if (args.privkey is not None and os.path.exists(args.privkey) is False):
@@ -288,11 +302,13 @@ def main():
         if args.esp_secure_cert_csv is not None:
             esp_secure_cert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
 
-        bin_filename = esp_secure_cert.generate_esp_secure_cert(args.target_chip, args.port)
 
         if args.secure_sign:
+            bin_filename = esp_secure_cert.generate_esp_secure_cert(args.target_chip, args.port, add_tlv_integrity=False)
             # Set the secure boot scheme
             bin_filename = esp_secure_cert.add_signature_block_using_existing_key(bin_filename, args.signing_key_file, args.signing_scheme)
+
+        bin_filename = esp_secure_cert.generate_esp_secure_cert(args.target_chip, args.port, add_tlv_integrity=True)
 
         if not args.skip_flash:
             esp_secure_cert.flash_esp_secure_cert_partition(args.target_chip, args.port, args.sec_cert_part_offset, bin_filename)
