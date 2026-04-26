@@ -9,6 +9,7 @@ import os
 
 esp_secure_cert_data_dir = 'esp_secure_cert_data'
 
+
 def load_private_key(key_file_path: str,
                      password: str = None) -> Dict[str, str]:
     """
@@ -20,9 +21,8 @@ def load_private_key(key_file_path: str,
                         if it is encrypted.
     Returns:
         Dict[str, str]: A dictionary with the `"encoding"` and `"bytes"` keys.
-        The `"encoding"` key holds a value
-        of type `str` (a member of the `serialization.Encoding` enum)
-        and the `"bytes"` key holds a value of type `bytes`.
+        The `"encoding"` key holds a member of the `serialization.Encoding`
+        enum and the `"bytes"` key holds a value of type `bytes`.
 
     Raises:
         FileNotFoundError: If the private key file cannot be found or read.
@@ -43,7 +43,7 @@ def load_private_key(key_file_path: str,
                 key,
                 password=password)
 
-        result["encoding"] = serialization.Encoding.PEM.value
+        result["encoding"] = serialization.Encoding.PEM
         key_encoding = serialization.Encoding.PEM
         key_enc_alg = serialization.NoEncryption()
         priv_key_format = serialization.PrivateFormat.TraditionalOpenSSL
@@ -63,7 +63,7 @@ def load_private_key(key_file_path: str,
             key,
             password=password
         )
-        result["encoding"] = serialization.Encoding.DER.value
+        result["encoding"] = serialization.Encoding.DER
         key_encoding = serialization.Encoding.DER
         priv_key_format = serialization.PrivateFormat.TraditionalOpenSSL
         key_enc_alg = serialization.NoEncryption()
@@ -126,9 +126,8 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
 
     Returns:
         Dict[str, str]: A dictionary with the `"encoding"` and `"bytes"` keys.
-        The `"encoding"` key holds a value of
-        type `str` (a member of the `serialization.Encoding enum)
-        and the `"bytes"` key holds a value of type `bytes`.
+        The `"encoding"` key holds a member of the `serialization.Encoding`
+        enum and the `"bytes"` key holds a value of type `bytes`.
 
     Raises:
         FileNotFoundError: If the certificate file cannot be found or read.
@@ -149,7 +148,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
 
     try:
         cert = load_pem_x509_certificate(cert_data)
-        result["encoding"] = serialization.Encoding.PEM.value
+        result["encoding"] = serialization.Encoding.PEM
         cert_encoding = serialization.Encoding.PEM
         result["bytes"] = cert.public_bytes(encoding=cert_encoding)
         result["cert_instance"] = cert
@@ -159,7 +158,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
 
     try:
         cert = load_der_x509_certificate(cert_data)
-        result["encoding"] = serialization.Encoding.DER.value
+        result["encoding"] = serialization.Encoding.DER
         cert_encoding = serialization.Encoding.DER
         result["bytes"] = cert.public_bytes(encoding=cert_encoding)
         result["cert_instance"] = cert
@@ -167,6 +166,7 @@ def load_certificate(cert_file_path: str) -> Dict[str, str]:
     except ValueError:
         raise ValueError("Unsupported certificate encoding format,"
                          "Please provide PEM or DER encoded certificate")
+
 
 def get_efuse_key_file(efuse_key_spec):
     """

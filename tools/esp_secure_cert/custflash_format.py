@@ -1,4 +1,3 @@
-import sys
 import struct
 import zlib
 from esp_secure_cert.esp_secure_cert_helper import load_private_key, load_certificate
@@ -30,7 +29,7 @@ def generate_partition_ds(c, iv, hmac_key_id, key_size,
         dev_cert_data = load_certificate(device_cert)
 
         # Write dev cert at specific address
-        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM:
             dev_cert = dev_cert_data["bytes"] + b'\0'
         else:
             dev_cert = dev_cert_data["bytes"]
@@ -51,7 +50,7 @@ def generate_partition_ds(c, iv, hmac_key_id, key_size,
         if ca_cert is not None:
             ca_cert_data = load_certificate(ca_cert)
             # Write dev cert at specific address
-            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM:
                 ca_cert = ca_cert_data["bytes"] + b'\0'
             else:
                 ca_cert = ca_cert_data["bytes"]
@@ -114,7 +113,7 @@ def generate_partition_no_ds(device_cert, ca_cert,
         dev_cert_data = load_certificate(device_cert)
 
         # Write dev cert at specific address
-        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM:
             dev_cert = dev_cert_data["bytes"] + b'\0'
         else:
             dev_cert = dev_cert_data["bytes"]
@@ -135,7 +134,7 @@ def generate_partition_no_ds(device_cert, ca_cert,
         if ca_cert is not None:
             ca_cert_data = load_certificate(ca_cert)
             # Write dev cert at specific address
-            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM:
                 ca_cert = ca_cert_data["bytes"] + b'\0'
             else:
                 ca_cert = ca_cert_data["bytes"]
@@ -154,7 +153,7 @@ def generate_partition_no_ds(device_cert, ca_cert,
         private_key_data = load_private_key(priv_key, priv_key_pass)
 
         # Write private key at specific address
-        if private_key_data["encoding"] == serialization.Encoding.PEM.value:
+        if private_key_data["encoding"] == serialization.Encoding.PEM:
             private_key = private_key_data["bytes"] + b'\0'
         else:
             private_key = private_key_data["bytes"]

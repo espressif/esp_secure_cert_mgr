@@ -122,7 +122,7 @@ def generate_partition_rsa_ds(ciphertext, iv, efuse_key_id, rsa_key_len,
         dev_cert_data = load_certificate(device_cert)
 
         # Write dev cert at specific address
-        if dev_cert_data.get("encoding") == serialization.Encoding.PEM.value:
+        if dev_cert_data.get("encoding") == serialization.Encoding.PEM:
             dev_cert = dev_cert_data["bytes"] + b'\0'
         else:
             dev_cert = dev_cert_data["bytes"]
@@ -139,7 +139,7 @@ def generate_partition_rsa_ds(ciphertext, iv, efuse_key_id, rsa_key_len,
         if ca_cert is not None:
             ca_cert_data = load_certificate(ca_cert)
             # Write dev cert at specific address
-            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM:
                 ca_cert = ca_cert_data["bytes"] + b'\0'
             else:
                 ca_cert = ca_cert_data["bytes"]
@@ -198,7 +198,7 @@ def generate_partition_ecdsa(efuse_key_id, device_cert, ca_cert, op_file):
         dev_cert_data = load_certificate(device_cert)
 
         # Write dev cert at specific address
-        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM:
             dev_cert = dev_cert_data["bytes"] + b'\0'
         else:
             dev_cert = dev_cert_data["bytes"]
@@ -215,7 +215,7 @@ def generate_partition_ecdsa(efuse_key_id, device_cert, ca_cert, op_file):
         if ca_cert is not None:
             ca_cert_data = load_certificate(ca_cert)
             # Write dev cert at specific address
-            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM:
                 ca_cert = ca_cert_data["bytes"] + b'\0'
             else:
                 ca_cert = ca_cert_data["bytes"]
@@ -313,7 +313,7 @@ def generate_partition_no_ds(priv_key: tlv_priv_key_t,
         dev_cert_data = load_certificate(device_cert)
 
         # Write dev cert at specific address
-        if dev_cert_data["encoding"] == serialization.Encoding.PEM.value:
+        if dev_cert_data["encoding"] == serialization.Encoding.PEM:
             dev_cert = dev_cert_data["bytes"] + b'\0'
         else:
             dev_cert = dev_cert_data["bytes"]
@@ -330,7 +330,7 @@ def generate_partition_no_ds(priv_key: tlv_priv_key_t,
         if ca_cert is not None:
             ca_cert_data = load_certificate(ca_cert)
             # Write dev cert at specific address
-            if ca_cert_data["encoding"] == serialization.Encoding.PEM.value:
+            if ca_cert_data["encoding"] == serialization.Encoding.PEM:
                 ca_cert = ca_cert_data["bytes"] + b'\0'
             else:
                 ca_cert = ca_cert_data["bytes"]
@@ -350,7 +350,7 @@ def generate_partition_no_ds(priv_key: tlv_priv_key_t,
             private_key_data = load_private_key(priv_key.key_path,
                                                 priv_key.key_pass)
             # Write private key at specific address
-            if private_key_data["encoding"] == serialization.Encoding.PEM.value:  # type: ignore # noqa: E501
+            if private_key_data["encoding"] == serialization.Encoding.PEM:  # type: ignore # noqa: E501
                 private_key = private_key_data["bytes"] + b'\0'
             else:
                 private_key = private_key_data["bytes"]
