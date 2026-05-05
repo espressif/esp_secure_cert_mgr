@@ -153,7 +153,7 @@ class TlvPartitionBuilder:
         cert_data = load_certificate(cert_path)
 
         # Add null terminator for PEM certificates
-        if cert_data["encoding"] == serialization.Encoding.PEM.value:
+        if cert_data["encoding"] == serialization.Encoding.PEM:
             cert_path = cert_data["bytes"] + b'\0'
         else:
             cert_path = cert_data["bytes"]
@@ -166,7 +166,7 @@ class TlvPartitionBuilder:
         if key_path and os.path.exists(key_path):
             key_data = load_private_key(key_path, key_pass)
 
-            if key_data["encoding"] == serialization.Encoding.PEM.value:
+            if key_data["encoding"] == serialization.Encoding.PEM:
                 key_bytes = key_data["bytes"] + b'\0'
             else:
                 key_bytes = key_data["bytes"]
