@@ -690,14 +690,25 @@ exit:
 
 void esp_secure_cert_free_ds_ctx(esp_ds_data_ctx_t *ds_ctx)
 {
-    esp_secure_cert_get_partition_format();
-    if (current_partition_format == ESP_SECURE_CERT_PF_TLV) {
-        esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
+    if (ds_ctx == NULL) {
+        return;
     }
 
-    if (ds_ctx != NULL) {
-        free(ds_ctx->esp_ds_data);
+    esp_secure_cert_get_partition_format();
+    if (current_partition_format == ESP_SECURE_CERT_PF_TLV) {
+        /* For the TLV format esp_ds_data points directly into the
+         * memory-mapped esp_secure_cert partition and must not be
+         * passed to free(). esp_secure_cert_tlv_free_ds_ctx releases
+         * only the heap-allocated context wrapper.
+         */
+        esp_secure_cert_tlv_free_ds_ctx(ds_ctx);
+        return;
     }
+
+    /* Legacy (cust_flash / NVS) format paths heap-allocate esp_ds_data,
+     * so release both the inner buffer and the wrapper here.
+     */
+    free(ds_ctx->esp_ds_data);
     free(ds_ctx);
 }
 #endif
