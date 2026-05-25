@@ -362,7 +362,20 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
     if (ESP_SECURE_CERT_IS_TLV_ENCRYPTED(tlv_header->flags)) {
 #if SOC_HMAC_SUPPORTED
         ESP_LOGD(TAG, "TLV data is encrypted");
-        char *output_buf = (char *)heap_caps_calloc(1, sizeof(char) * (*len - HMAC_ENCRYPTION_TAG_LEN), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        /* The encrypted payload stored in the TLV is laid out as
+         * ciphertext || GCM tag, so the stored length must be at least
+         * HMAC_ENCRYPTION_TAG_LEN bytes plus one byte of ciphertext.
+         * Anything below that indicates a malformed or truncated TLV;
+         * compute the ciphertext size in a safe order to avoid the
+         * uint32_t subtraction wrapping into a huge allocation request.
+         */
+        if (*len <= HMAC_ENCRYPTION_TAG_LEN) {
+            ESP_LOGE(TAG, "Encrypted TLV length %"PRIu32" is not larger than the GCM tag length %u",
+                     *len, (unsigned)HMAC_ENCRYPTION_TAG_LEN);
+            return ESP_ERR_INVALID_SIZE;
+        }
+        const uint32_t plaintext_len = *len - HMAC_ENCRYPTION_TAG_LEN;
+        char *output_buf = (char *)heap_caps_calloc(1, sizeof(char) * plaintext_len, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if (output_buf == NULL) {
             ESP_LOGE(TAG, "Failed to allocate memory");
             return ESP_ERR_NO_MEM;
@@ -376,7 +389,7 @@ esp_err_t esp_secure_cert_tlv_get_addr(esp_secure_cert_tlv_type_t type, esp_secu
         }
         ESP_FAULT_ASSERT(err == ESP_OK);
         *buffer = output_buf;
-        *len =  *len - HMAC_ENCRYPTION_TAG_LEN;
+        *len = plaintext_len;
 #else
         return ESP_ERR_NOT_SUPPORTED;
 #endif
