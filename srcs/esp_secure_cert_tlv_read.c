@@ -709,22 +709,34 @@ esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void)
         goto exit;
     }
 
-    uint32_t len;
+    uint32_t ds_data_len = 0;
     esp_ds_data_t *esp_ds_data;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, ESP_SECURE_CERT_SUBTYPE_0, (void *) &esp_ds_data, &len);
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_DATA_TLV, ESP_SECURE_CERT_SUBTYPE_0, (void *) &esp_ds_data, &ds_data_len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading ds_data, returned %04X", esp_ret);
         goto exit;
     }
+    (void) ds_data_len; /* DS_DATA_TLV length is fixed by esp_ds_data_t layout */
 
+    uint32_t ds_ctx_len = 0;
     esp_ds_data_ctx_t *ds_data_ctx_flash;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_CONTEXT_TLV, 0, (void *) &ds_data_ctx_flash, &len);
-    memcpy(ds_data_ctx, ds_data_ctx_flash, len);
-    ds_data_ctx->esp_ds_data = esp_ds_data;
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_CONTEXT_TLV, 0, (void *) &ds_data_ctx_flash, &ds_ctx_len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Error in reading ds_context, returned %04X", esp_ret);
         goto exit;
     }
+    /* Clamp the copy length to the size of the destination structure so
+     * that an oversized DS_CONTEXT_TLV cannot overflow the heap allocation,
+     * and reject a truncated TLV that cannot describe a full ds context.
+     */
+    if (ds_ctx_len < sizeof(esp_ds_data_ctx_t)) {
+        ESP_LOGE(TAG, "DS context TLV is shorter than esp_ds_data_ctx_t (%"PRIu32" < %u)",
+                 ds_ctx_len, (unsigned)sizeof(esp_ds_data_ctx_t));
+        esp_ret = ESP_ERR_INVALID_SIZE;
+        goto exit;
+    }
+    memcpy(ds_data_ctx, ds_data_ctx_flash, sizeof(esp_ds_data_ctx_t));
+    ds_data_ctx->esp_ds_data = esp_ds_data;
     return ds_data_ctx;
 exit:
     free(ds_data_ctx);
