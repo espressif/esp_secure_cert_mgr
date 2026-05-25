@@ -686,9 +686,11 @@ static esp_err_t esp_secure_cert_gen_ecdsa_key(esp_secure_cert_tlv_subtype_t sub
 
     err = esp_secure_cert_convert_key_to_der(key_buf, ESP_SECURE_CERT_DERIVED_ECDSA_KEY_SIZE, output_buf, ESP_SECURE_CERT_ECDSA_DER_KEY_SIZE);
     if (err != ESP_OK) {
-        free(key_buf);
-        free(output_buf);
         ESP_LOGE(TAG, "Failed to convert the plaintext key to DER format");
+        free(key_buf);
+        /* output_buf is owned by the caller (esp_secure_cert_tlv_get_addr);
+         * the caller releases it on error. Do not free it here.
+         */
         return ESP_FAIL;
     }
     // Free the plaintext private key as it is no longer needed
