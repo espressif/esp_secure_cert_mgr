@@ -181,11 +181,18 @@ static uint8_t esp_secure_cert_get_padding_length(esp_secure_cert_tlv_header_t *
  *          It is ensured by design that this length shall always be a multiple of MIN_ALIGNMENT_REQUIRED
  *
  */
-static uint16_t esp_secure_cert_get_tlv_total_length(esp_secure_cert_tlv_header_t *tlv_header)
+static size_t esp_secure_cert_get_tlv_total_length(esp_secure_cert_tlv_header_t *tlv_header)
 {
-    uint16_t padding_length = esp_secure_cert_get_padding_length(tlv_header);
-    uint16_t total_length = sizeof(esp_secure_cert_tlv_header_t) + tlv_header->length + padding_length + sizeof(esp_secure_cert_tlv_footer_t);
-    return total_length;
+    /* Compute in size_t to avoid the 16-bit wrap-around that would
+     * occur when tlv_header->length is close to UINT16_MAX (for example
+     * length=0xFFF0 produces header+data+padding+footer = 65536, which
+     * truncates to zero in 16-bit arithmetic).
+     */
+    const size_t padding_length = esp_secure_cert_get_padding_length(tlv_header);
+    return sizeof(esp_secure_cert_tlv_header_t)
+           + (size_t)tlv_header->length
+           + padding_length
+           + sizeof(esp_secure_cert_tlv_footer_t);
 }
 
 /*
@@ -237,19 +244,48 @@ static bool esp_secure_cert_verify_tlv_integrity(esp_secure_cert_tlv_header_t *t
  */
 esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_cert_tlv_type_t type, uint8_t subtype, void **tlv_address)
 {
-    /* start from the begining of the partition */
-    uint16_t tlv_offset = 0;
+    /* start from the beginning of the partition */
+    size_t tlv_offset = 0;
     uint8_t latest_subtype = 0;
     esp_secure_cert_tlv_header_t *latest_tlv_header = NULL;
     bool read_latest_tlv = 0;
+
+    /* Walk only within the bounds of the mapped esp_secure_cert partition.
+     * The base address passed in must correspond to the global partition
+     * context populated by esp_secure_cert_map_partition.
+     */
+    if (esp_secure_cert_addr == NULL ||
+        esp_secure_cert_partition_ctx.partition == NULL ||
+        esp_secure_cert_addr != esp_secure_cert_partition_ctx.esp_secure_cert_mapped_addr) {
+        ESP_LOGE(TAG, "esp_secure_cert partition context is not initialised");
+        return ESP_ERR_INVALID_STATE;
+    }
+    const size_t partition_size = esp_secure_cert_partition_ctx.partition->size;
+    /* Each TLV needs at least the header plus footer; reject partitions
+     * too small to host even a single record.
+     */
+    if (partition_size < sizeof(esp_secure_cert_tlv_header_t) + sizeof(esp_secure_cert_tlv_footer_t)) {
+        ESP_LOGE(TAG, "esp_secure_cert partition (%u bytes) is too small for a TLV record", (unsigned)partition_size);
+        return ESP_ERR_INVALID_SIZE;
+    }
 
     if (subtype == ESP_SECURE_CERT_SUBTYPE_MAX) {
         read_latest_tlv = 1;
     }
 
     while (1) {
-        esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)(esp_secure_cert_addr + tlv_offset);
-        ESP_LOGD(TAG, "Reading from offset of %d from base of esp_secure_cert", tlv_offset);
+        /* Ensure there is room for at least a full header at the current
+         * offset before dereferencing tlv_header->magic. The walk is
+         * driven by attacker-controllable on-flash data, so an unbounded
+         * walk would allow an OOB read across the mmap region.
+         */
+        if (tlv_offset > partition_size - sizeof(esp_secure_cert_tlv_header_t)) {
+            ESP_LOGD(TAG, "Reached partition end (offset=%u, size=%u) without finding type %d",
+                     (unsigned)tlv_offset, (unsigned)partition_size, type);
+            return ESP_FAIL;
+        }
+        esp_secure_cert_tlv_header_t *tlv_header = (esp_secure_cert_tlv_header_t *)((const uint8_t *)esp_secure_cert_addr + tlv_offset);
+        ESP_LOGD(TAG, "Reading from offset of %u from base of esp_secure_cert", (unsigned)tlv_offset);
         if (tlv_header->magic != ESP_SECURE_CERT_TLV_MAGIC) {
             if (read_latest_tlv) {
                 if (latest_tlv_header != NULL) {
@@ -297,8 +333,19 @@ esp_err_t esp_secure_cert_find_tlv(const void *esp_secure_cert_addr, esp_secure_
                 }
             }
         }
-        // Move the offset to the start of the next tlv entry
-        tlv_offset = tlv_offset + esp_secure_cert_get_tlv_total_length(tlv_header);
+        /* Move the offset to the start of the next tlv entry.
+         * Compute the step in size_t to avoid the uint16_t arithmetic
+         * wrapping (e.g. a stored length of 0xFFF0 produces a 65536-byte
+         * step that would wrap to zero in 16-bit arithmetic and re-alias
+         * the partition base).
+         */
+        const size_t step = (size_t)esp_secure_cert_get_tlv_total_length(tlv_header);
+        if (step == 0 || step > partition_size - tlv_offset) {
+            ESP_LOGD(TAG, "Malformed TLV at offset %u: step=%u would exit partition",
+                     (unsigned)tlv_offset, (unsigned)step);
+            return ESP_FAIL;
+        }
+        tlv_offset += step;
     }
 }
 
