@@ -14,20 +14,24 @@ from esp_secure_cert.efuse_helper import (
 from esp_secure_cert.esp_secure_cert_helper import convert_der_key_to_pem
 
 supported_targets_rsa_ds = ['esp32s2', 'esp32s3', 'esp32c3',
-                            'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5']
+                            'esp32c6', 'esp32h2', 'esp32p4', 'esp32c5',
+                            'esp32s31']
 supported_key_size_rsa = {'esp32s2': [1024, 2048, 3072, 4096],
                           'esp32c3': [1024, 2048, 3072],
                           'esp32s3': [1024, 2048, 3072, 4096],
                           'esp32c6': [1024, 2048, 3072],
                           'esp32h2': [1024, 2048, 3072],
                           'esp32p4': [1024, 2048, 3072, 4096],
-                          'esp32c5': [1024, 2048, 3072, 4096]}
+                          'esp32c5': [1024, 2048, 3072, 4096],
+                          'esp32s31': [1024, 2048, 3072, 4096]}
 
-supported_targets_ecdsa = ['esp32h2', 'esp32p4', 'esp32c5', 'esp32c61']
+supported_targets_ecdsa = ['esp32h2', 'esp32p4', 'esp32c5', 'esp32c61',
+                           'esp32s31']
 supported_key_size_ecdsa = {'esp32h2': [256],
                             'esp32p4': [256],
                             'esp32c5': [256, 384],
-                            'esp32c61': [192, 256]}
+                            'esp32c61': [192, 256],
+                            'esp32s31': [256, 384]}
 
 
 def number_as_bytes(number, pad_bits=None):
