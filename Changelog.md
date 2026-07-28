@@ -1,5 +1,8 @@
 # This file contains the list of changes across different versions
 
+## v2.9.3
+* Fix heap overflow / uninitialized read in `esp_secure_cert_tlv_get_ds_ctx()` when the `DS_CONTEXT` TLV is missing or fails CRC validation.
+
 ## v2.9.2eck
 * Added new TLV (`ESP_SECURE_CERT_INTEGRITY_TLV`) to store sha256 esp-secure-cert partition.
 * Added new API, use to verify the integrity of esp-secure-cert partition using `ESP_SECURE_CERT_INTEGRITY_TLV`.

@@ -717,14 +717,15 @@ esp_ds_data_ctx_t *esp_secure_cert_tlv_get_ds_ctx(void)
         goto exit;
     }
 
-    esp_ds_data_ctx_t *ds_data_ctx_flash;
-    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_CONTEXT_TLV, 0, (void *) &ds_data_ctx_flash, &len);
-    memcpy(ds_data_ctx, ds_data_ctx_flash, len);
-    ds_data_ctx->esp_ds_data = esp_ds_data;
-    if (esp_ret != ESP_OK) {
+    esp_ds_data_ctx_t *ds_data_ctx_flash = NULL;
+    uint32_t ctx_len = 0;
+    esp_ret = esp_secure_cert_tlv_get_addr(ESP_SECURE_CERT_DS_CONTEXT_TLV, 0, (void *) &ds_data_ctx_flash, &ctx_len);
+    if (esp_ret != ESP_OK || ds_data_ctx_flash == NULL || ctx_len != sizeof(esp_ds_data_ctx_t)) {
         ESP_LOGE(TAG, "Error in reading ds_context, returned %04X", esp_ret);
         goto exit;
     }
+    memcpy(ds_data_ctx, ds_data_ctx_flash, sizeof(esp_ds_data_ctx_t));
+    ds_data_ctx->esp_ds_data = esp_ds_data;
     return ds_data_ctx;
 exit:
     free(ds_data_ctx);
