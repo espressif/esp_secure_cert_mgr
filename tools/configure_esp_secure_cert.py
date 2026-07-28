@@ -300,8 +300,13 @@ def main():
             return
 
         if args.esp_secure_cert_csv is not None:
-            esp_secure_cert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
-
+            try:
+                esp_secure_cert.parse_esp_secure_cert_csv(args.esp_secure_cert_csv)
+            except Exception as e:
+                print(f'{e}')
+                print('ERROR: Aborting without generating an esp_secure_cert '
+                      'partition. Fix the CSV and retry.')
+                sys.exit(-1)
 
         if args.secure_sign:
             bin_filename = esp_secure_cert.generate_esp_secure_cert(args.target_chip, args.port, add_tlv_integrity=False)
