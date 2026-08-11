@@ -435,7 +435,9 @@ class EspSecureCert:
             raise ValueError(f"Unsupported data_type: {data_type}")
 
         if output_file:
-            temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_key_{hash(str(data_value)) % 10000}.key')
+            os.makedirs(esp_secure_cert_data_dir, exist_ok=True)
+            digest = hashlib.sha256(output_data).hexdigest()
+            temp_file = os.path.join(esp_secure_cert_data_dir, f'temp_key_{digest}.key')
             with open(temp_file, 'wb') as f:
                 f.write(output_data)
             return temp_file
@@ -449,9 +451,9 @@ class EspSecureCert:
         for existing_entry in self.secure_cert_entries:
             if (existing_entry.get('tlv_type') == entry.get('tlv_type') and
                     existing_entry.get('tlv_subtype') == entry.get('tlv_subtype')):
-                print(f"WARNING: Duplicate entry found for type {entry.get('tlv_type')}, subtype {entry.get('tlv_subtype')}")
-                print(f"  - Existing entry: {existing_entry}")
-                print(f"  - New entry: {entry}")
+                print(f"ERROR: Duplicate entry found for type {entry.get('tlv_type')}, subtype {entry.get('tlv_subtype')}")
+                print(f"  - Existing entry data_type: {existing_entry.get('data_type')}")
+                print(f"  - New entry data_type: {entry.get('data_type')}")
                 return False
         return True
 
@@ -500,8 +502,13 @@ class EspSecureCert:
                     self.add_entry(entry)
 
                 except Exception as e:
-                    print(f"Error parsing line {line_num}: {row}, error: {e}")
-                    continue
+                    # Never continue past a bad row. Skipping it would build a
+                    # partition that is missing a TLV the caller asked for,
+                    # while still exiting successfully.
+                    raise ValueError(
+                        f"ERROR: Failed to parse line {line_num} of {csv_file} "
+                        f"(tlv_type={row.get('tlv_type')}, "
+                        f"tlv_subtype={row.get('tlv_subtype')}): {e}") from e
         return
 
     def add_entry(self, entry):
@@ -675,10 +682,20 @@ class EspSecureCert:
                             processed_count += 1
 
                 except Exception as e:
-                    print(f"Error processing entry {tlv_type}: {e}")
-                    continue
+                    # Never continue past a failed entry, see parse_esp_secure_cert_csv().
+                    raise RuntimeError(
+                        f"ERROR: Failed to process entry "
+                        f"(tlv_type={tlv_type}, tlv_subtype={tlv_subtype}): {e}") from e
 
             print(f"\nSuccessfully processed {processed_count} out of {len(self.secure_cert_entries)} entries")
+
+            # Refuse to emit a partition that does not contain every requested
+            # entry, so that a silently dropped TLV can never be flashed.
+            if processed_count != len(self.secure_cert_entries):
+                raise RuntimeError(
+                    f"ERROR: Only {processed_count} of "
+                    f"{len(self.secure_cert_entries)} entries could be processed. "
+                    "Refusing to generate an incomplete esp_secure_cert partition.")
 
             # Build partition
             self.builder.build_partition(self.bin_filename, add_tlv_integrity)

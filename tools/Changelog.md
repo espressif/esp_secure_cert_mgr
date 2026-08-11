@@ -1,5 +1,12 @@
 # This file contains the list of changes across different versions
 
+## 2.6.1
+- Fixed invalid partitions caused by temporary file name collisions, where entries with inline data
+  (`string`/`hex`/`base64`) could silently overwrite each other's staged content (GitHub issue #32).
+  Temporary files are now named using the full SHA256 digest of the entry content.
+- A CSV row or TLV entry that fails to process, including a duplicate `(tlv_type, tlv_subtype)` pair,
+  now aborts with a non-zero exit code instead of generating an incomplete partition.
+
 ## 2.6.0
 - Added support for ESP32-C5 target chip.
 - ESP32-C5 supports RSA DS with key sizes: 1024, 2048, 3072, 4096 bits.

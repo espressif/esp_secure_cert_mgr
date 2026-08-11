@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2020-2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
+import base64
 import hashlib
 import os
 import shutil
@@ -309,6 +310,152 @@ class ConfigureEspSecureCertIntegrationTest(unittest.TestCase):
                 self.assertTrue(
                     os.path.exists(generated_bin),
                     f"Binary not generated for {chip}")
+
+
+class TempFileCollisionTest(unittest.TestCase):
+    """Regression tests for the temporary file name collision (issue #32).
+
+    Entries whose data is supplied inline (string/hex/base64) are staged to a
+    temporary file during CSV parsing and only read back when the partition is
+    built. The temporary name used to be derived from
+    ``hash(data_value) % 10000``, so two entries with different content could
+    share a name; the second write silently destroyed the first entry's data and
+    the tool still exited 0.
+    """
+
+    CSV_FIELDS = ('tlv_type,tlv_subtype,data_value,data_type,'
+                  'priv_key_type,algorithm,key_size,efuse_id,efuse_key')
+
+    def setUp(self):
+        self.test_dir = os.path.dirname(os.path.abspath(__file__))
+        self.tools_dir = os.path.dirname(self.test_dir)
+        self.script_path = os.path.join(
+            self.tools_dir, 'configure_esp_secure_cert.py')
+        self.input_data_dir = os.path.join(self.test_dir, 'input_data')
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
+        os.chdir(self.temp_dir)
+
+    def tearDown(self):
+        os.chdir(self.original_cwd)
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def _cert_b64(self, filename):
+        path = os.path.join(self.input_data_dir, filename)
+        with open(path, 'rb') as f:
+            return base64.b64encode(f.read()).decode()
+
+    def _write_csv(self, name, rows):
+        path = os.path.join(self.temp_dir, name)
+        with open(path, 'w') as f:
+            f.write(self.CSV_FIELDS + '\n')
+            for tlv_type, subtype, value, data_type in rows:
+                f.write(f'{tlv_type},{subtype},{value},{data_type},,,,,\n')
+        return path
+
+    def _run_tool(self, csv_path):
+        return subprocess.run(
+            [sys.executable, self.script_path,
+             '--target_chip', 'esp32c3',
+             '--secure_cert_type', 'cust_flash_tlv',
+             '--esp_secure_cert_csv', csv_path,
+             '--skip_flash'],
+            capture_output=True, text=True, cwd=self.temp_dir)
+
+    def _new_esp_secure_cert(self):
+        sys.path.insert(0, self.tools_dir)
+        from esp_secure_cert.tlv_format_construct import EspSecureCert
+        return EspSecureCert()
+
+    def test_distinct_content_gets_distinct_temp_files(self):
+        """Different content must never share a staging file."""
+        esc = self._new_esp_secure_cert()
+        paths = {esc._parse_data_from_any_format(v, 'hex', True)
+                 for v in ('00112233', 'aabbccdd', 'deadbeef')}
+        self.assertEqual(
+            len(paths), 3,
+            'entries with different content shared a temporary file')
+
+    def test_temp_file_name_is_full_content_digest(self):
+        """Pin the naming scheme: full SHA256 of the decoded content."""
+        esc = self._new_esp_secure_cert()
+        path = esc._parse_data_from_any_format('00112233', 'hex', True)
+        expected = hashlib.sha256(bytes.fromhex('00112233')).hexdigest()
+        self.assertEqual(os.path.basename(path), f'temp_key_{expected}.key')
+        self.assertTrue(os.path.basename(path).startswith('temp_'),
+                        'name must keep the temp_ prefix so cleanup removes it')
+
+    def test_identical_content_shares_one_temp_file(self):
+        """Identical content is de-duplicated, which is safe and intended."""
+        esc = self._new_esp_secure_cert()
+        paths = {esc._parse_data_from_any_format('00112233', 'hex', True)
+                 for _ in range(3)}
+        self.assertEqual(len(paths), 1)
+
+    def test_same_content_under_distinct_ids_is_not_a_duplicate(self):
+        """Uniqueness is decided by (tlv_type, tlv_subtype) only.
+
+        The same certificate stored under different type/subtype pairs is three
+        distinct entries and all three must reach the partition, even though
+        they share one content-addressed staging file.
+        """
+        cert = self._cert_b64('cacert.pem')
+        csv_path = self._write_csv('same_content.csv', [
+            ('ESP_SECURE_CERT_DEV_CERT_TLV', 0, cert, 'base64'),
+            ('ESP_SECURE_CERT_CA_CERT_TLV', 0, cert, 'base64'),
+            ('ESP_SECURE_CERT_CA_CERT_TLV', 1, cert, 'base64'),
+        ])
+        result = self._run_tool(csv_path)
+        self.assertEqual(result.returncode, 0,
+                         f'tool failed: {result.stdout}\n{result.stderr}')
+        self.assertIn('Successfully processed 3 out of 3 entries',
+                      result.stdout)
+        for tlv_type, subtype in ((1, 0), (0, 0), (0, 1)):
+            self.assertIn(f'Added TLV entry: type={tlv_type}, '
+                          f'subtype={subtype}', result.stdout)
+
+    def test_duplicate_type_and_subtype_is_rejected(self):
+        """A real duplicate (same type AND subtype) must abort, not warn."""
+        csv_path = self._write_csv('duplicate.csv', [
+            ('ESP_SECURE_CERT_DEV_CERT_TLV', 0,
+             self._cert_b64('client.crt'), 'base64'),
+            ('ESP_SECURE_CERT_DEV_CERT_TLV', 0,
+             self._cert_b64('cacert.pem'), 'base64'),
+        ])
+        result = self._run_tool(csv_path)
+        self.assertNotEqual(result.returncode, 0,
+                            'duplicate entry must not exit successfully')
+        self.assertFalse(
+            os.path.exists(os.path.join(
+                self.temp_dir, 'esp_secure_cert_data', 'esp_secure_cert.bin')),
+            'no partition may be written when an entry is rejected')
+
+    def test_duplicate_error_does_not_leak_data_value(self):
+        """The duplicate report must not echo entry data (key material)."""
+        secret = self._cert_b64('client.crt')
+        csv_path = self._write_csv('duplicate_leak.csv', [
+            ('ESP_SECURE_CERT_DEV_CERT_TLV', 0, secret, 'base64'),
+            ('ESP_SECURE_CERT_DEV_CERT_TLV', 0, secret, 'base64'),
+        ])
+        result = self._run_tool(csv_path)
+        self.assertNotIn(secret, result.stdout + result.stderr)
+
+    def test_unprocessable_entry_aborts_without_partition(self):
+        """A dropped entry must fail the run instead of exiting 0."""
+        csv_path = self._write_csv('bad_entry.csv', [
+            ('ESP_SECURE_CERT_DEV_CERT_TLV', 0,
+             self._cert_b64('client.crt'), 'base64'),
+            ('ESP_SECURE_CERT_CA_CERT_TLV', 0,
+             '/nonexistent/does_not_exist.pem', 'file'),
+        ])
+        result = self._run_tool(csv_path)
+        self.assertNotEqual(result.returncode, 0,
+                            'a skipped entry must not exit successfully')
+        self.assertFalse(
+            os.path.exists(os.path.join(
+                self.temp_dir, 'esp_secure_cert_data', 'esp_secure_cert.bin')),
+            'an incomplete partition must never be written')
 
 
 if __name__ == '__main__':
