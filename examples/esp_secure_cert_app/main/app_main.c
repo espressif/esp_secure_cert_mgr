@@ -48,6 +48,9 @@
 
 #if CONFIG_ESP_SECURE_CERT_DS_PERIPHERAL
 #include "psa_crypto_driver_esp_rsa_ds.h"
+#if (MBEDTLS_VERSION_NUMBER >= 0x04000000) && CONFIG_MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND
+#include "secure_cert_its_backend.h"
+#endif
 #endif
 
 #define TAG "esp_secure_cert_app"
@@ -72,6 +75,28 @@ static void esp_print_cert_or_key(const char *label, const char *data, uint32_t 
 
 #define SIG_SIZE 1000
 
+#if (MBEDTLS_VERSION_NUMBER >= 0x04000000)
+/* Volatile keys are owned here (imported by this app) and must be destroyed
+ * to free their slot; persistent keys (e.g. served by the custom ITS backend)
+ * are owned by the provisioning entity and must only be purged from memory.
+ */
+static void cleanup_ds_key(psa_key_id_t key_id)
+{
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    if (psa_get_key_attributes(key_id, &attributes) != PSA_SUCCESS) {
+        return;
+    }
+    psa_key_lifetime_t lifetime = psa_get_key_lifetime(&attributes);
+    psa_reset_key_attributes(&attributes);
+
+    if (PSA_KEY_LIFETIME_IS_VOLATILE(lifetime)) {
+        psa_destroy_key(key_id);
+    } else {
+        psa_purge_key(key_id);
+    }
+}
+#endif /* MBEDTLS_VERSION_NUMBER >= 0x04000000 */
+
 static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned char *dev_cert, size_t dev_cert_len)
 {
     mbedtls_x509_crt crt;
@@ -82,6 +107,10 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         return ESP_ERR_INVALID_ARG;
     }
 
+#if (MBEDTLS_VERSION_NUMBER >= 0x04000000)
+    psa_key_id_t key_id = PSA_KEY_ID_NULL;
+#endif
+
     int ret = mbedtls_x509_crt_parse(&crt, dev_cert, dev_cert_len);
     if (ret < 0) {
         ESP_LOGE(TAG, "Parsing of device certificate failed, returned %02X", ret);
@@ -89,13 +118,24 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
     }
 
 #if (MBEDTLS_VERSION_NUMBER >= 0x04000000)
+    psa_algorithm_t alg = PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256);
+    psa_status_t status = PSA_ERROR_GENERIC_ERROR;
+
+#if CONFIG_MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND
+    /* Register the esp_secure_cert ITS backend so the DS key appears
+     * as a pre-existing persistent PSA key — no psa_import_key() needed.
+     */
+    if (secure_cert_its_backend_register() != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register secure_cert ITS backend");
+        goto exit;
+    }
+
+    key_id = SECURE_CERT_RSA_DS_KEY_ID;
+#else
     esp_rsa_ds_opaque_key_t rsa_ds_opaque_key = {0};
     rsa_ds_opaque_key.ds_data_ctx = ds_data;
 
-    psa_key_id_t key_id = PSA_KEY_ID_NULL;
-    psa_status_t status = PSA_ERROR_GENERIC_ERROR;
     psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
-    psa_algorithm_t alg = PSA_ALG_RSA_PKCS1V15_SIGN(PSA_ALG_SHA_256);
     psa_set_key_type(&attributes, PSA_KEY_TYPE_RSA_KEY_PAIR);
     psa_set_key_bits(&attributes, rsa_ds_opaque_key.ds_data_ctx->rsa_length_bits);
     psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_SIGN_HASH);
@@ -107,6 +147,7 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         ESP_LOGE(TAG, "Failed to import the DS key, returned %d", status);
         goto exit;
     }
+#endif /* CONFIG_MBEDTLS_PSA_ITS_CUSTOM_STORAGE_BACKEND */
 #else
     esp_err_t esp_ret = esp_ds_init_data_ctx(ds_data);
     if (esp_ret != ESP_OK) {
@@ -145,7 +186,7 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         ESP_LOGE(TAG, "Failed to sign the data with rsa key, returned %d", status);
         goto exit;
     }
-    psa_destroy_key(key_id);
+    cleanup_ds_key(key_id);
     key_id = PSA_KEY_ID_NULL;
 #endif
 
@@ -154,6 +195,8 @@ static esp_err_t test_ciphertext_validity(esp_ds_data_ctx_t *ds_data, unsigned c
         printf("\nFailed to verify the data\n");
         goto exit;
     }
+
+    ESP_LOGI(TAG, "Ciphertext validated succcessfully");
     free(sig);
     return ESP_OK;
 exit:
@@ -164,7 +207,7 @@ exit:
     esp_ds_release_ds_lock();
 #else
     if (key_id != PSA_KEY_ID_NULL) {
-        psa_destroy_key(key_id);
+        cleanup_ds_key(key_id);
     }
 #endif
     return ESP_FAIL;
@@ -485,9 +528,8 @@ static esp_err_t test_read_existing_data(void)
     esp_ret = test_ciphertext_validity(ds_data, (unsigned char *)addr, len);
     if (esp_ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to validate ciphertext");
-    } else {
-        ESP_LOGI(TAG, "Ciphertext validated succcessfully");
     }
+
 #endif
     if (esp_ret == ESP_OK) {
         ESP_LOGI(TAG, "Successfully obtained and verified the contents of esp_secure_cert partition");
